@@ -29,20 +29,36 @@
 namespace KlayGE
 {
 	D3D11GraphicsBuffer::D3D11GraphicsBuffer(BufferUsage usage, uint32_t access_hint, uint32_t bind_flags,
-											uint32_t size_in_byte, void const * init_data, ElementFormat fmt)
+											uint32_t size_in_byte, ElementFormat fmt)
 						: GraphicsBuffer(usage, access_hint, size_in_byte),
 							bind_flags_(bind_flags), fmt_as_shader_res_(fmt)
 	{
-		if ((access_hint_ & EAH_GPU_Unordered) && (fmt_as_shader_res_ != EF_Unknown))
+		if ((access_hint_ & EAH_GPU_Structured) && (fmt_as_shader_res_ != EF_Unknown))
 		{
+			// Structured buffer can't be vb or ib at the same time.
 			bind_flags_ = 0;
 		}
 
 		D3D11RenderEngine const & renderEngine(*checked_cast<D3D11RenderEngine const *>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance()));
 		d3d_device_ = renderEngine.D3DDevice();
 		d3d_imm_ctx_ = renderEngine.D3DDeviceImmContext();
+	}
 
-		this->CreateBuffer(init_data);
+	ID3D11RenderTargetViewPtr const & D3D11GraphicsBuffer::D3DRenderTargetView() const
+	{
+		if (buffer_ && !d3d_rt_view_)
+		{
+			D3D11_RENDER_TARGET_VIEW_DESC desc;
+			desc.Format = D3D11Mapping::MappingFormat(fmt_as_shader_res_);
+			desc.ViewDimension = D3D11_RTV_DIMENSION_BUFFER;
+			desc.Buffer.ElementOffset = 0;
+			desc.Buffer.ElementWidth = this->Size() / NumFormatBytes(fmt_as_shader_res_);
+
+			ID3D11RenderTargetView* rt_view;
+			TIF(d3d_device_->CreateRenderTargetView(buffer_.get(), &desc, &rt_view));
+			d3d_rt_view_ = MakeCOMPtr(rt_view);
+		}
+		return d3d_rt_view_;
 	}
 
 	void D3D11GraphicsBuffer::GetD3DFlags(D3D11_USAGE& usage, UINT& cpu_access_flags, UINT& bind_flags, UINT& misc_flags)
@@ -120,7 +136,7 @@ namespace KlayGE
 		}
 	}
 
-	void D3D11GraphicsBuffer::CreateBuffer(void const * init_data)
+	void D3D11GraphicsBuffer::CreateHWResource(void const * init_data)
 	{
 		D3D11_SUBRESOURCE_DATA subres_init;
 		D3D11_SUBRESOURCE_DATA* p_subres = nullptr;
@@ -193,6 +209,13 @@ namespace KlayGE
 		}
 	}
 
+	void D3D11GraphicsBuffer::DeleteHWResource()
+	{
+		d3d_sr_view_.reset();
+		d3d_ua_view_.reset();
+		buffer_.reset();
+	}
+
 	void* D3D11GraphicsBuffer::Map(BufferAccess ba)
 	{
 		BOOST_ASSERT(buffer_);
@@ -248,18 +271,35 @@ namespace KlayGE
 		D3D11GraphicsBuffer& d3d_gb = *checked_cast<D3D11GraphicsBuffer*>(&rhs);
 		if (this->Size() == rhs.Size())
 		{
-			d3d_imm_ctx_->CopyResource(d3d_gb.D3DBuffer().get(), buffer_.get());
+			d3d_imm_ctx_->CopyResource(d3d_gb.D3DBuffer(), buffer_.get());
 		}
 		else
 		{
 			D3D11_BOX box;
 			box.left = 0;
 			box.right = this->Size();
+			box.front = 0;
 			box.top = 0;
 			box.bottom = 1;
-			box.front = 0;
 			box.back = 1;
-			d3d_imm_ctx_->CopySubresourceRegion(d3d_gb.D3DBuffer().get(), 0, 0, 0, 0, buffer_.get(), 0, &box);
+			d3d_imm_ctx_->CopySubresourceRegion(d3d_gb.D3DBuffer(), 0, 0, 0, 0, buffer_.get(), 0, &box);
 		}
+	}
+
+	void D3D11GraphicsBuffer::UpdateSubresource(uint32_t offset, uint32_t size, void const * data)
+	{
+		D3D11_BOX* p = nullptr;
+		D3D11_BOX box;
+		if (!(bind_flags_ & D3D11_BIND_CONSTANT_BUFFER))
+		{
+			p = &box;
+			box.left = offset;
+			box.top = 0;
+			box.front = 0;
+			box.right = offset + size;
+			box.bottom = 1;
+			box.back = 1;
+		}
+		d3d_imm_ctx_->UpdateSubresource(buffer_.get(), 0, p, data, size, size);
 	}
 }

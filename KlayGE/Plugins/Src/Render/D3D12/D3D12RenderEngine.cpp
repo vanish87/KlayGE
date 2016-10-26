@@ -44,6 +44,8 @@
 #include <KlayGE/RenderEffect.hpp>
 #include <KlayGE/RenderSettings.hpp>
 #include <KlayGE/PostProcess.hpp>
+#include <KlayGE/Fence.hpp>
+#include <KFL/Hash.hpp>
 
 #include <KlayGE/D3D12/D3D12RenderWindow.hpp>
 #include <KlayGE/D3D12/D3D12FrameBuffer.hpp>
@@ -58,30 +60,35 @@
 
 #include <algorithm>
 #include <boost/assert.hpp>
-#include <boost/functional/hash.hpp>
 
 #include <KlayGE/D3D12/D3D12RenderEngine.hpp>
-
-#ifdef KLAYGE_PLATFORM_WINDOWS_RUNTIME
-using namespace Windows::UI::Core;
-#endif
 
 namespace KlayGE
 {
 	// 构造函数
 	/////////////////////////////////////////////////////////////////////////////////
 	D3D12RenderEngine::D3D12RenderEngine()
-		: inv_timestamp_freq_(0),
-			render_cmd_fence_val_(0), compute_cmd_fence_val_(0), copy_cmd_fence_val_(0)
+		: last_engine_type_(ET_Render), inv_timestamp_freq_(0),
+			render_cmd_fence_val_(0), compute_cmd_fence_val_(0), copy_cmd_fence_val_(0),
+			res_cmd_fence_val_(0)
 	{
 		native_shader_fourcc_ = MakeFourCC<'D', 'X', 'B', 'C'>::value;
 		native_shader_version_ = 5;
 
 		IDXGIFactory4* gi_factory;
 		TIF(D3D12InterfaceLoader::Instance().CreateDXGIFactory1(IID_IDXGIFactory4, reinterpret_cast<void**>(&gi_factory)));
-		gi_factory_ = MakeCOMPtr(gi_factory);
+		gi_factory_4_ = MakeCOMPtr(gi_factory);
+		dxgi_sub_ver_ = 4;
 
-		adapterList_.Enumerate(gi_factory_);
+		IDXGIFactory5* gi_factory5;
+		gi_factory->QueryInterface(IID_IDXGIFactory5, reinterpret_cast<void**>(&gi_factory5));
+		if (gi_factory5 != nullptr)
+		{
+			gi_factory_5_ = MakeCOMPtr(gi_factory5);
+			dxgi_sub_ver_ = 5;
+		}
+
+		adapterList_.Enumerate(gi_factory_4_);
 	}
 
 	// 析构函数
@@ -106,6 +113,16 @@ namespace KlayGE
 		RenderEngine::BeginFrame();
 	}
 
+	void D3D12RenderEngine::EndFrame()
+	{
+		RenderEngine::EndFrame();
+
+		this->ResetRenderCmd();
+		this->ResetComputeCmd();
+		this->ResetCopyCmd();
+		this->ClearPSOCache();
+	}
+
 	void D3D12RenderEngine::UpdateGPUTimestampsFrequency()
 	{
 		inv_timestamp_freq_ = 0;
@@ -119,11 +136,19 @@ namespace KlayGE
 		}
 	}
 
-	// 获取D3D接口
-	/////////////////////////////////////////////////////////////////////////////////
-	IDXGIFactory4Ptr const & D3D12RenderEngine::DXGIFactory() const
+	IDXGIFactory4* D3D12RenderEngine::DXGIFactory4() const
 	{
-		return gi_factory_;
+		return gi_factory_4_.get();
+	}
+
+	IDXGIFactory5* D3D12RenderEngine::DXGIFactory5() const
+	{
+		return gi_factory_5_.get();
+	}
+
+	uint8_t D3D12RenderEngine::DXGISubVer() const
+	{
+		return dxgi_sub_ver_;
 	}
 
 	ID3D12DevicePtr const & D3D12RenderEngine::D3DDevice() const
@@ -212,8 +237,7 @@ namespace KlayGE
 	{
 		motion_frames_ = settings.motion_frames;
 
-		D3D12RenderWindowPtr win = MakeSharedPtr<D3D12RenderWindow>(gi_factory_, this->ActiveAdapter(),
-			name, settings);
+		D3D12RenderWindowPtr win = MakeSharedPtr<D3D12RenderWindow>(this->ActiveAdapter(), name, settings);
 
 		switch (d3d_feature_level_)
 		{
@@ -221,6 +245,7 @@ namespace KlayGE
 		case D3D_FEATURE_LEVEL_12_0:
 		case D3D_FEATURE_LEVEL_11_1:
 		case D3D_FEATURE_LEVEL_11_0:
+			native_shader_platform_name_ = "d3d_11_0";
 			vs_profile_ = "vs_5_0";
 			ps_profile_ = "ps_5_0";
 			gs_profile_ = "gs_5_0";
@@ -241,40 +266,19 @@ namespace KlayGE
 		{
 			stereo_method_ = SM_None;
 
-			IDXGIFactory2* factory;
-			gi_factory_->QueryInterface(IID_IDXGIFactory2, reinterpret_cast<void**>(&factory));
-			if (factory != nullptr)
+			if (gi_factory_4_->IsWindowedStereoEnabled())
 			{
-				if (factory->IsWindowedStereoEnabled())
-				{
-					stereo_method_ = SM_DXGI;
-				}
-				factory->Release();
+				stereo_method_ = SM_DXGI;
 			}
 		}
 
 		blit_effect_ = SyncLoadRenderEffect("Copy.fxml");
 		bilinear_blit_tech_ = blit_effect_->TechniqueByName("BilinearCopy");
-
-		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-
-		blit_rl_ = rf.MakeRenderLayout();
-		blit_rl_->TopologyType(RenderLayout::TT_TriangleStrip);
-
-		float2 pos[] =
-		{
-			float2(-1, +1),
-			float2(+1, +1),
-			float2(-1, -1),
-			float2(+1, -1)
-		};
-		blit_vb_ = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(pos), &pos[0]);
-		blit_rl_->BindVertexStream(blit_vb_, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 	}
 
 	void D3D12RenderEngine::CheckConfig(RenderSettings& settings)
 	{
-		UNREF_PARAM(settings);
+		KFL_UNUSED(settings);
 	}
 
 	void D3D12RenderEngine::D3DDevice(ID3D12DevicePtr const & device, ID3D12CommandQueuePtr const & cmd_queue, D3D_FEATURE_LEVEL feature_level)
@@ -381,38 +385,34 @@ namespace KlayGE
 		dsv_heap_occupied_.assign(NUM_MAX_DEPTH_STENCIL_VIEWS, false);
 		cbv_srv_uav_heap_occupied_.assign(NUM_MAX_CBV_SRV_UAVS, false);
 
+		D3D12_SHADER_RESOURCE_VIEW_DESC null_srv_desc;
+		null_srv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		null_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		null_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		null_srv_desc.Texture2D.MipLevels = 1;
+		null_srv_desc.Texture2D.MostDetailedMip = 0;
+		null_srv_desc.Texture2D.PlaneSlice = 0;
+		null_srv_desc.Texture2D.ResourceMinLODClamp = 0;
 		null_srv_handle_ = cbv_srv_uav_desc_heap_->GetCPUDescriptorHandleForHeapStart();
 		null_srv_handle_.ptr += this->AllocCBVSRVUAV();
-		d3d_device_->CreateShaderResourceView(nullptr, &this->NullSRVDesc(), null_srv_handle_);
+		d3d_device_->CreateShaderResourceView(nullptr, &null_srv_desc, null_srv_handle_);
 
+		D3D12_UNORDERED_ACCESS_VIEW_DESC null_uav_desc;
+		null_uav_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		null_uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		null_uav_desc.Texture2D.MipSlice = 0;
+		null_uav_desc.Texture2D.PlaneSlice = 0;
 		null_uav_handle_ = cbv_srv_uav_desc_heap_->GetCPUDescriptorHandleForHeapStart();
 		null_uav_handle_.ptr += this->AllocCBVSRVUAV();
-		d3d_device_->CreateUnorderedAccessView(nullptr, nullptr, &this->NullUAVDesc(), null_uav_handle_);
+		d3d_device_->CreateUnorderedAccessView(nullptr, nullptr, &null_uav_desc, null_uav_handle_);
 
-		ID3D12Fence* fence;
-		TIF(d3d_device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_ID3D12Fence, reinterpret_cast<void**>(&fence)));
-		res_cmd_fence_ = MakeCOMPtr(fence);
-		res_cmd_fence_val_ = 1;
+		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-		res_cmd_fence_event_ = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+		res_cmd_fence_ = rf.MakeFence();
 
-		TIF(d3d_device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_ID3D12Fence, reinterpret_cast<void**>(&fence)));
-		render_cmd_fence_ = MakeCOMPtr(fence);
-		render_cmd_fence_val_ = 1;
-
-		render_cmd_fence_event_ = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
-		TIF(d3d_device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_ID3D12Fence, reinterpret_cast<void**>(&fence)));
-		compute_cmd_fence_ = MakeCOMPtr(fence);
-		compute_cmd_fence_val_ = 1;
-
-		compute_cmd_fence_event_ = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
-		TIF(d3d_device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_ID3D12Fence, reinterpret_cast<void**>(&fence)));
-		copy_cmd_fence_ = MakeCOMPtr(fence);
-		copy_cmd_fence_val_ = 1;
-
-		copy_cmd_fence_event_ = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+		render_cmd_fence_ = rf.MakeFence();
+		compute_cmd_fence_ = rf.MakeFence();
+		copy_cmd_fence_ = rf.MakeFence();
 
 		this->FillRenderDeviceCaps();
 	}
@@ -420,8 +420,12 @@ namespace KlayGE
 	void D3D12RenderEngine::ClearPSOCache()
 	{
 		cbv_srv_uav_heap_cache_.clear();
-		pso_cache_.clear();
-		buff_cache_.clear();
+
+		for (auto const & used_mark : recycle_res_after_sync_)
+		{
+			*used_mark = false;
+		}
+		recycle_res_after_sync_.clear();
 	}
 
 	void D3D12RenderEngine::CommitResCmd()
@@ -430,15 +434,8 @@ namespace KlayGE
 		ID3D12CommandList* cmd_lists[] = { d3d_res_cmd_list_.get() };
 		d3d_render_cmd_queue_->ExecuteCommandLists(sizeof(cmd_lists) / sizeof(cmd_lists[0]), cmd_lists);
 
-		uint64_t const fence_val = res_cmd_fence_val_;
-		TIF(d3d_render_cmd_queue_->Signal(res_cmd_fence_.get(), fence_val));
-		++ res_cmd_fence_val_;
-
-		if (res_cmd_fence_->GetCompletedValue() < fence_val)
-		{
-			TIF(res_cmd_fence_->SetEventOnCompletion(fence_val, res_cmd_fence_event_));
-			::WaitForSingleObjectEx(res_cmd_fence_event_, INFINITE, FALSE);
-		}
+		res_cmd_fence_val_ = res_cmd_fence_->Signal(Fence::FT_Render);
+		res_cmd_fence_->Wait(res_cmd_fence_val_);
 
 		d3d_res_cmd_allocator_->Reset();
 		d3d_res_cmd_list_->Reset(d3d_res_cmd_allocator_.get(), nullptr);
@@ -449,16 +446,6 @@ namespace KlayGE
 		TIF(d3d_render_cmd_list_->Close());
 		ID3D12CommandList* cmd_lists[] = { d3d_render_cmd_list_.get() };
 		d3d_render_cmd_queue_->ExecuteCommandLists(sizeof(cmd_lists) / sizeof(cmd_lists[0]), cmd_lists);
-
-		uint64_t const fence_val = render_cmd_fence_val_;
-		TIF(d3d_render_cmd_queue_->Signal(render_cmd_fence_.get(), fence_val));
-		++ render_cmd_fence_val_;
-
-		if (render_cmd_fence_->GetCompletedValue() < fence_val)
-		{
-			TIF(render_cmd_fence_->SetEventOnCompletion(fence_val, render_cmd_fence_event_));
-			::WaitForSingleObjectEx(render_cmd_fence_event_, INFINITE, FALSE);
-		}
 	}
 
 	void D3D12RenderEngine::CommitComputeCmd()
@@ -466,16 +453,6 @@ namespace KlayGE
 		TIF(d3d_compute_cmd_list_->Close());
 		ID3D12CommandList* cmd_lists[] = { d3d_compute_cmd_list_.get() };
 		d3d_compute_cmd_queue_->ExecuteCommandLists(sizeof(cmd_lists) / sizeof(cmd_lists[0]), cmd_lists);
-
-		uint64_t const fence_val = compute_cmd_fence_val_;
-		TIF(d3d_compute_cmd_queue_->Signal(compute_cmd_fence_.get(), fence_val));
-		++ compute_cmd_fence_val_;
-
-		if (compute_cmd_fence_->GetCompletedValue() < fence_val)
-		{
-			TIF(compute_cmd_fence_->SetEventOnCompletion(fence_val, compute_cmd_fence_event_));
-			::WaitForSingleObjectEx(compute_cmd_fence_event_, INFINITE, FALSE);
-		}
 	}
 
 	void D3D12RenderEngine::CommitCopyCmd()
@@ -483,16 +460,24 @@ namespace KlayGE
 		TIF(d3d_copy_cmd_list_->Close());
 		ID3D12CommandList* cmd_lists[] = { d3d_copy_cmd_list_.get() };
 		d3d_copy_cmd_queue_->ExecuteCommandLists(sizeof(cmd_lists) / sizeof(cmd_lists[0]), cmd_lists);
+	}
 
-		uint64_t const fence_val = copy_cmd_fence_val_;
-		TIF(d3d_copy_cmd_queue_->Signal(copy_cmd_fence_.get(), fence_val));
-		++ copy_cmd_fence_val_;
+	void D3D12RenderEngine::SyncRenderCmd()
+	{
+		render_cmd_fence_val_ = render_cmd_fence_->Signal(Fence::FT_Render);
+		render_cmd_fence_->Wait(render_cmd_fence_val_);
+	}
 
-		if (copy_cmd_fence_->GetCompletedValue() < fence_val)
-		{
-			TIF(copy_cmd_fence_->SetEventOnCompletion(fence_val, copy_cmd_fence_event_));
-			::WaitForSingleObjectEx(copy_cmd_fence_event_, INFINITE, FALSE);
-		}
+	void D3D12RenderEngine::SyncComputeCmd()
+	{
+		compute_cmd_fence_val_ = compute_cmd_fence_->Signal(Fence::FT_Compute);
+		compute_cmd_fence_->Wait(compute_cmd_fence_val_);
+	}
+
+	void D3D12RenderEngine::SyncCopyCmd()
+	{
+		copy_cmd_fence_val_ = copy_cmd_fence_->Signal(Fence::FT_Copy);
+		copy_cmd_fence_->Wait(copy_cmd_fence_val_);
 	}
 
 	void D3D12RenderEngine::ResetRenderCmd()
@@ -541,7 +526,7 @@ namespace KlayGE
 	/////////////////////////////////////////////////////////////////////////////////
 	void D3D12RenderEngine::DoBindFrameBuffer(FrameBufferPtr const & fb)
 	{
-		UNREF_PARAM(fb);
+		KFL_UNUSED(fb);
 
 		BOOST_ASSERT(d3d_device_);
 		BOOST_ASSERT(fb);
@@ -558,14 +543,12 @@ namespace KlayGE
 			std::vector<D3D12_STREAM_OUTPUT_BUFFER_VIEW> sobv(num_buffs);
 			for (uint32_t i = 0; i < num_buffs; ++ i)
 			{
-				D3D12GraphicsBuffer* d3d12_buf = checked_cast<D3D12GraphicsBuffer*>(rl->GetVertexStream(i).get());
+				D3D12GraphicsBufferPtr d3d12_buf = checked_pointer_cast<D3D12GraphicsBuffer>(rl->GetVertexStream(i));
 
-				so_buffs_[i] = d3d12_buf->D3DBuffer();
+				so_buffs_[i] = d3d12_buf;
 				sobv[i].BufferLocation = d3d12_buf->D3DBuffer()->GetGPUVirtualAddress();
 				sobv[i].SizeInBytes = d3d12_buf->Size();
 				sobv[i].BufferFilledSizeLocation = sobv[i].BufferLocation + d3d12_buf->CounterOffset();
-
-				buff_cache_.insert(d3d12_buf->D3DBuffer());
 			}
 
 			d3d_render_cmd_list_->SOSetTargets(0, static_cast<UINT>(num_buffs), &sobv[0]);
@@ -578,11 +561,12 @@ namespace KlayGE
 		}
 	}
 
-	void D3D12RenderEngine::UpdateRenderPSO(RenderTechnique const & tech, RenderPassPtr const & pass, RenderLayout const & rl)
+	void D3D12RenderEngine::UpdateRenderPSO(RenderEffect const & effect, RenderTechnique const & tech,
+		RenderPass const & pass, RenderLayout const & rl)
 	{
 		D3D12RenderLayout const & d3d12_rl = *checked_cast<D3D12RenderLayout const *>(&rl);
 
-		D3D12ShaderObjectPtr so = checked_pointer_cast<D3D12ShaderObject>(pass->GetShaderObject());
+		D3D12ShaderObjectPtr so = checked_pointer_cast<D3D12ShaderObject>(pass.GetShaderObject(effect));
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc;
 		pso_desc.pRootSignature = so->RootSignature().get();
@@ -664,10 +648,10 @@ namespace KlayGE
 		pso_desc.StreamOutput.NumStrides = static_cast<UINT>(so_strides.size());
 		pso_desc.StreamOutput.RasterizedStream = so->RasterizedStream();
 
-		pso_desc.BlendState = checked_pointer_cast<D3D12BlendStateObject>(pass->GetBlendStateObject())->D3DDesc();
+		pso_desc.BlendState = checked_pointer_cast<D3D12BlendStateObject>(pass.GetBlendStateObject())->D3DDesc();
 		pso_desc.SampleMask = sample_mask_cache_;
-		pso_desc.RasterizerState = checked_pointer_cast<D3D12RasterizerStateObject>(pass->GetRasterizerStateObject())->D3DDesc();
-		pso_desc.DepthStencilState = checked_pointer_cast<D3D12DepthStencilStateObject>(pass->GetDepthStencilStateObject())->D3DDesc();
+		pso_desc.RasterizerState = checked_pointer_cast<D3D12RasterizerStateObject>(pass.GetRasterizerStateObject())->D3DDesc();
+		pso_desc.DepthStencilState = checked_pointer_cast<D3D12DepthStencilStateObject>(pass.GetDepthStencilStateObject())->D3DDesc();
 		pso_desc.InputLayout.pInputElementDescs = d3d12_rl.InputElementDesc().empty() ? nullptr : &d3d12_rl.InputElementDesc()[0];
 		pso_desc.InputLayout.NumElements = static_cast<UINT>(d3d12_rl.InputElementDesc().size());
 		pso_desc.IBStripCutValue = (EF_R16UI == rl.IndexStreamFormat())
@@ -730,12 +714,11 @@ namespace KlayGE
 		pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
 		ID3D12PipelineStatePtr pso = this->CreateRenderPSO(pso_desc);
-		pso_cache_.push_back(pso);
 
 		d3d_render_cmd_list_->SetPipelineState(pso.get());
 		d3d_render_cmd_list_->SetGraphicsRootSignature(so->RootSignature().get());
 
-		if (pass->GetRasterizerStateObject()->GetDesc().scissor_enable)
+		if (pass.GetRasterizerStateObject()->GetDesc().scissor_enable)
 		{
 			d3d_render_cmd_list_->RSSetScissorRects(1, &scissor_rc_cache_);
 		}
@@ -768,21 +751,21 @@ namespace KlayGE
 			for (uint32_t i = 0; i < ShaderObject::ST_NumShaderTypes; ++ i)
 			{
 				ShaderObject::ShaderType st = static_cast<ShaderObject::ShaderType>(i);
-				boost::hash_combine(hash_val, st);
-				boost::hash_combine(hash_val, so->SRVs(st).size());
+				HashCombine(hash_val, st);
+				HashCombine(hash_val, so->SRVs(st).size());
 				if (!so->SRVs(st).empty())
 				{
-					boost::hash_range(hash_val, so->SRVs(st).begin(), so->SRVs(st).end());
+					HashRange(hash_val, so->SRVs(st).begin(), so->SRVs(st).end());
 				}
 			}
 			for (uint32_t i = 0; i < ShaderObject::ST_NumShaderTypes; ++ i)
 			{
 				ShaderObject::ShaderType st = static_cast<ShaderObject::ShaderType>(i);
-				boost::hash_combine(hash_val, st);
-				boost::hash_combine(hash_val, so->UAVs(st).size());
+				HashCombine(hash_val, st);
+				HashCombine(hash_val, so->UAVs(st).size());
 				if (!so->UAVs(st).empty())
 				{
-					boost::hash_range(hash_val, so->UAVs(st).begin(), so->UAVs(st).end());
+					HashRange(hash_val, so->UAVs(st).begin(), so->UAVs(st).end());
 				}
 			}
 
@@ -790,7 +773,7 @@ namespace KlayGE
 			if (iter == cbv_srv_uav_heaps_.end())
 			{
 				cbv_srv_uav_heap = this->CreateDynamicCBVSRVUAVDescriptorHeap(static_cast<uint32_t>(num_handle));
-				KLAYGE_EMPLACE(cbv_srv_uav_heaps_, hash_val, cbv_srv_uav_heap);
+				cbv_srv_uav_heaps_.emplace(hash_val, cbv_srv_uav_heap);
 			}
 			else
 			{
@@ -818,14 +801,12 @@ namespace KlayGE
 			{
 				for (uint32_t j = 0; j < so->CBuffers(st).size(); ++ j)
 				{
-					ID3D12ResourcePtr buff = checked_pointer_cast<D3D12GraphicsBuffer>(so->CBuffers(st)[j])->D3DBuffer();
+					ID3D12ResourcePtr const & buff = checked_cast<D3D12GraphicsBuffer*>(so->CBuffers(st)[j])->D3DBuffer();
 					if (buff)
 					{
 						d3d_render_cmd_list_->SetGraphicsRootConstantBufferView(root_param_index, buff->GetGPUVirtualAddress());
 
 						++ root_param_index;
-
-						buff_cache_.insert(buff);
 					}
 					else
 					{
@@ -902,9 +883,9 @@ namespace KlayGE
 		}
 	}
 
-	void D3D12RenderEngine::UpdateComputePSO(RenderPassPtr const & pass)
+	void D3D12RenderEngine::UpdateComputePSO(RenderEffect const & effect, RenderPass const & pass)
 	{
-		D3D12ShaderObjectPtr so = checked_pointer_cast<D3D12ShaderObject>(pass->GetShaderObject());
+		D3D12ShaderObjectPtr so = checked_pointer_cast<D3D12ShaderObject>(pass.GetShaderObject(effect));
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC pso_desc;
 		pso_desc.pRootSignature = so->RootSignature().get();
@@ -927,7 +908,6 @@ namespace KlayGE
 		pso_desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
 		ID3D12PipelineStatePtr pso = this->CreateComputePSO(pso_desc);
-		pso_cache_.push_back(pso);
 
 		d3d_compute_cmd_list_->SetPipelineState(pso.get());
 		d3d_compute_cmd_list_->SetComputeRootSignature(so->RootSignature().get());
@@ -942,24 +922,24 @@ namespace KlayGE
 		if (num_handle > 0)
 		{
 			size_t hash_val = 0;
-			boost::hash_combine(hash_val, st);
-			boost::hash_combine(hash_val, so->SRVs(st).size());
+			HashCombine(hash_val, st);
+			HashCombine(hash_val, so->SRVs(st).size());
 			if (!so->SRVs(st).empty())
 			{
-				boost::hash_range(hash_val, so->SRVs(st).begin(), so->SRVs(st).end());
+				HashRange(hash_val, so->SRVs(st).begin(), so->SRVs(st).end());
 			}
-			boost::hash_combine(hash_val, st);
-			boost::hash_combine(hash_val, so->UAVs(st).size());
+			HashCombine(hash_val, st);
+			HashCombine(hash_val, so->UAVs(st).size());
 			if (!so->UAVs(st).empty())
 			{
-				boost::hash_range(hash_val, so->UAVs(st).begin(), so->UAVs(st).end());
+				HashRange(hash_val, so->UAVs(st).begin(), so->UAVs(st).end());
 			}
 
 			auto iter = cbv_srv_uav_heaps_.find(hash_val);
 			if (iter == cbv_srv_uav_heaps_.end())
 			{
 				cbv_srv_uav_heap = this->CreateDynamicCBVSRVUAVDescriptorHeap(static_cast<uint32_t>(num_handle));
-				KLAYGE_EMPLACE(cbv_srv_uav_heaps_, hash_val, cbv_srv_uav_heap);
+				cbv_srv_uav_heaps_.emplace(hash_val, cbv_srv_uav_heap);
 			}
 			else
 			{
@@ -984,14 +964,12 @@ namespace KlayGE
 		{
 			for (uint32_t j = 0; j < so->CBuffers(st).size(); ++ j)
 			{
-				ID3D12ResourcePtr buff = checked_pointer_cast<D3D12GraphicsBuffer>(so->CBuffers(st)[j])->D3DBuffer();
+				ID3D12ResourcePtr const & buff = checked_cast<D3D12GraphicsBuffer*>(so->CBuffers(st)[j])->D3DBuffer();
 				if (buff)
 				{
 					d3d_compute_cmd_list_->SetComputeRootConstantBufferView(root_param_index, buff->GetGPUVirtualAddress());
 
 					++ root_param_index;
-
-					buff_cache_.insert(buff);
 				}
 				else
 				{
@@ -1057,8 +1035,13 @@ namespace KlayGE
 
 	// 渲染
 	/////////////////////////////////////////////////////////////////////////////////
-	void D3D12RenderEngine::DoRender(RenderTechnique const & tech, RenderLayout const & rl)
+	void D3D12RenderEngine::DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl)
 	{
+		if (last_engine_type_ != ET_Render)
+		{
+			this->ForceCPUGPUSync();
+		}
+
 		D3D12FrameBuffer& fb = *checked_cast<D3D12FrameBuffer*>(this->CurFrameBuffer().get());
 		fb.SetRenderTargets();
 		fb.BindBarrier();
@@ -1070,66 +1053,52 @@ namespace KlayGE
 
 		for (uint32_t i = 0; i < so_buffs_.size(); ++ i)
 		{
+			D3D12GraphicsBuffer& d3dvb = *checked_cast<D3D12GraphicsBuffer*>(so_buffs_[i].get());
+
 			D3D12_RESOURCE_BARRIER barrier;
 			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 			barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-			barrier.Transition.pResource = so_buffs_[i].get();
-			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_STREAM_OUT;
 			barrier.Transition.Subresource = 0;
-			barriers.push_back(barrier);
+			if (d3dvb.UpdateResourceBarrier(barrier, D3D12_RESOURCE_STATE_STREAM_OUT))
+			{
+				barriers.push_back(barrier);
+			}
 		}
 
 		uint32_t const num_vertex_streams = rl.NumVertexStreams();
-		uint32_t const all_num_vertex_stream = num_vertex_streams + (rl.InstanceStream() ? 1 : 0);
 
-		std::vector<ID3D12ResourcePtr> vbs(all_num_vertex_stream);
-		std::vector<UINT> strides(all_num_vertex_stream);
-		std::vector<UINT> offsets(all_num_vertex_stream);
-		std::vector<UINT> sizes(all_num_vertex_stream);
 		for (uint32_t i = 0; i < num_vertex_streams; ++ i)
 		{
 			GraphicsBufferPtr const & stream = rl.GetVertexStream(i);
 
-			D3D12GraphicsBuffer const & d3dvb = *checked_cast<D3D12GraphicsBuffer*>(stream.get());
-			vbs[i] = d3dvb.D3DBuffer();
-			strides[i] = rl.VertexSize(i);
-			offsets[i] = 0;
-			sizes[i] = d3dvb.Size();
-
+			D3D12GraphicsBuffer& d3dvb = *checked_cast<D3D12GraphicsBuffer*>(stream.get());
 			if (!(d3dvb.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 			{
 				D3D12_RESOURCE_BARRIER barrier;
 				barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 				barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-				barrier.Transition.pResource = vbs[i].get();
-				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 				barrier.Transition.Subresource = 0;
-				barriers.push_back(barrier);
+				if (d3dvb.UpdateResourceBarrier(barrier, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER))
+				{
+					barriers.push_back(barrier);
+				}
 			}
 		}
 		if (rl.InstanceStream())
 		{
-			uint32_t number = num_vertex_streams;
-			GraphicsBufferPtr stream = rl.InstanceStream();
+			GraphicsBufferPtr const & stream = rl.InstanceStream();
 
-			D3D12GraphicsBuffer const & d3dvb = *checked_cast<D3D12GraphicsBuffer*>(stream.get());
-			vbs[number] = d3dvb.D3DBuffer();
-			strides[number] = rl.InstanceSize();
-			offsets[number] = 0;
-			sizes[number] = d3dvb.Size();
-
+			D3D12GraphicsBuffer& d3dvb = *checked_cast<D3D12GraphicsBuffer*>(stream.get());
 			if (!(d3dvb.AccessHint() & (EAH_CPU_Read | EAH_CPU_Write)))
 			{
 				D3D12_RESOURCE_BARRIER barrier;
 				barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 				barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-				barrier.Transition.pResource = vbs[number].get();
-				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
 				barrier.Transition.Subresource = 0;
-				barriers.push_back(barrier);
+				if (d3dvb.UpdateResourceBarrier(barrier, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER))
+				{
+					barriers.push_back(barrier);
+				}
 			}
 		}
 
@@ -1141,11 +1110,11 @@ namespace KlayGE
 				D3D12_RESOURCE_BARRIER barrier;
 				barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 				barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-				barrier.Transition.pResource = ib.D3DBuffer().get();
-				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
 				barrier.Transition.Subresource = 0;
-				barriers.push_back(barrier);
+				if (ib.UpdateResourceBarrier(barrier, D3D12_RESOURCE_STATE_INDEX_BUFFER))
+				{
+					barriers.push_back(barrier);
+				}
 			}
 		}
 
@@ -1154,20 +1123,7 @@ namespace KlayGE
 			d3d_render_cmd_list_->ResourceBarrier(static_cast<UINT>(barriers.size()), &barriers[0]);
 		}
 
-		if (all_num_vertex_stream != 0)
-		{
-			std::vector<D3D12_VERTEX_BUFFER_VIEW> vbvs(all_num_vertex_stream);
-			for (size_t i = 0; i < vbvs.size(); ++ i)
-			{
-				vbvs[i].BufferLocation = vbs[i]->GetGPUVirtualAddress() + offsets[i];
-				vbvs[i].SizeInBytes = sizes[i];
-				vbvs[i].StrideInBytes = strides[i];
-			}
-
-			d3d_render_cmd_list_->IASetVertexBuffers(0, all_num_vertex_stream, &vbvs[0]);
-
-			buff_cache_.insert(vbs.begin(), vbs.end());
-		}
+		checked_cast<D3D12RenderLayout const *>(&rl)->Active();
 
 		uint32_t const vertex_count = static_cast<uint32_t>(rl.UseIndices() ? rl.NumIndices() : rl.NumVertices());
 
@@ -1244,19 +1200,6 @@ namespace KlayGE
 		num_primitives_just_rendered_ += num_instances * prim_count;
 		num_vertices_just_rendered_ += num_instances * vertex_count;
 
-		if (rl.UseIndices())
-		{
-			D3D12GraphicsBuffer& ib = *checked_cast<D3D12GraphicsBuffer*>(rl.GetIndexStream().get());
-
-			D3D12_INDEX_BUFFER_VIEW ibv;
-			ibv.BufferLocation = ib.D3DBuffer()->GetGPUVirtualAddress();
-			ibv.SizeInBytes = ib.Size();
-			ibv.Format = D3D12Mapping::MappingFormat(rl.IndexStreamFormat());
-			d3d_render_cmd_list_->IASetIndexBuffer(&ibv);
-
-			buff_cache_.insert(ib.D3DBuffer());
-		}
-
 		uint32_t const num_passes = tech.NumPasses();
 		GraphicsBufferPtr const & indirect_buff = rl.GetIndirectArgs();
 		if (indirect_buff)
@@ -1266,28 +1209,29 @@ namespace KlayGE
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
-					this->UpdateRenderPSO(tech, pass, rl);
+					pass.Bind(effect);
+					this->UpdateRenderPSO(effect, tech, pass, rl);
 					d3d_render_cmd_list_->ExecuteIndirect(nullptr, 0,
 						checked_cast<D3D12GraphicsBuffer const *>(indirect_buff.get())->D3DBuffer().get(),
 						rl.IndirectArgsOffset(), nullptr, 0);
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 			else
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
-					this->UpdateRenderPSO(tech, pass, rl);
+					pass.Bind(effect);
+					this->UpdateRenderPSO(effect, tech, pass, rl);
+					// TODO: ExecuteIndirect's first 2 parameters can't be right
 					d3d_render_cmd_list_->ExecuteIndirect(nullptr, 0,
 						checked_cast<D3D12GraphicsBuffer const *>(indirect_buff.get())->D3DBuffer().get(),
 						rl.IndirectArgsOffset(), nullptr, 0);
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 		}
@@ -1298,13 +1242,13 @@ namespace KlayGE
 				uint32_t const num_indices = rl.NumIndices();
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
-					this->UpdateRenderPSO(tech, pass, rl);
+					pass.Bind(effect);
+					this->UpdateRenderPSO(effect, tech, pass, rl);
 					d3d_render_cmd_list_->DrawIndexedInstanced(num_indices, num_instances, rl.StartIndexLocation(),
 						rl.StartVertexLocation(), rl.StartInstanceLocation());
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 			else
@@ -1312,79 +1256,70 @@ namespace KlayGE
 				uint32_t const num_vertices = rl.NumVertices();
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
-					this->UpdateRenderPSO(tech, pass, rl);
+					pass.Bind(effect);
+					this->UpdateRenderPSO(effect, tech, pass, rl);
 					d3d_render_cmd_list_->DrawInstanced(num_vertices, num_instances,
 						rl.StartVertexLocation(), rl.StartInstanceLocation());
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
-		}
-
-		if (!barriers.empty())
-		{
-			for (size_t i = 0; i < barriers.size(); ++ i)
-			{
-				D3D12_RESOURCE_BARRIER& barrier = barriers[i];
-				std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
-			}
-
-			d3d_render_cmd_list_->ResourceBarrier(static_cast<UINT>(barriers.size()), &barriers[0]);
 		}
 
 		num_draws_just_called_ += num_passes;
 
 		fb.UnbindBarrier();
 
-		if ((cbv_srv_uav_heap_cache_.size() > 1024) || (buff_cache_.size() > 1024))
+		last_engine_type_ = ET_Render;
+	}
+
+	void D3D12RenderEngine::DoDispatch(RenderEffect const & effect, RenderTechnique const & tech,
+		uint32_t tgx, uint32_t tgy, uint32_t tgz)
+	{
+		if (last_engine_type_ != ET_Compute)
 		{
 			this->ForceCPUGPUSync();
 		}
-	}
-
-	void D3D12RenderEngine::DoDispatch(RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz)
-	{
-		this->ForceCPUGPUSync();
 
 		uint32_t const num_passes = tech.NumPasses();
 		for (uint32_t i = 0; i < num_passes; ++ i)
 		{
-			RenderPassPtr const & pass = tech.Pass(i);
+			auto& pass = tech.Pass(i);
 
-			pass->Bind();
-			this->UpdateComputePSO(pass);
+			pass.Bind(effect);
+			this->UpdateComputePSO(effect, pass);
 			d3d_compute_cmd_list_->Dispatch(tgx, tgy, tgz);
-			pass->Unbind();
+			pass.Unbind(effect);
 		}
 
 		num_dispatches_just_called_ += num_passes;
-
-		this->ForceCPUGPUSync();
+		last_engine_type_ = ET_Compute;
 	}
 
-	void D3D12RenderEngine::DoDispatchIndirect(RenderTechnique const & tech, GraphicsBufferPtr const & buff_args,
-			uint32_t offset)
+	void D3D12RenderEngine::DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
+		GraphicsBufferPtr const & buff_args, uint32_t offset)
 	{
-		this->ForceCPUGPUSync();
+		if (last_engine_type_ != ET_Compute)
+		{
+			this->ForceCPUGPUSync();
+		}
 
 		uint32_t const num_passes = tech.NumPasses();
 		for (uint32_t i = 0; i < num_passes; ++ i)
 		{
-			RenderPassPtr const & pass = tech.Pass(i);
+			auto& pass = tech.Pass(i);
 
-			pass->Bind();
-			this->UpdateComputePSO(pass);
+			pass.Bind(effect);
+			this->UpdateComputePSO(effect, pass);
 			// TODO: ExecuteIndirect's first 2 parameters can't be right
 			d3d_compute_cmd_list_->ExecuteIndirect(nullptr, 0, checked_cast<D3D12GraphicsBuffer*>(buff_args.get())->D3DBuffer().get(),
 				offset, nullptr, 0);
-			pass->Unbind();
+			pass.Unbind(effect);
 		}
 
 		num_dispatches_just_called_ += num_passes;
-
-		this->ForceCPUGPUSync();
+		last_engine_type_ = ET_Compute;
 	}
 
 	void D3D12RenderEngine::ForceFlush()
@@ -1410,11 +1345,19 @@ namespace KlayGE
 		this->CommitRenderCmd();
 		this->CommitComputeCmd();
 		this->CommitCopyCmd();
+		this->SyncRenderCmd();
+		this->SyncComputeCmd();
+		this->SyncCopyCmd();
 		this->ResetRenderCmd();
 		this->ResetComputeCmd();
 		this->ResetCopyCmd();
 
 		this->ClearPSOCache();
+	}
+
+	TexturePtr const & D3D12RenderEngine::ScreenDepthStencilTexture() const
+	{
+		return checked_cast<D3D12RenderWindow*>(screen_frame_buffer_.get())->D3DDepthStencilBuffer();
 	}
 
 	// 设置剪除矩阵
@@ -1436,16 +1379,10 @@ namespace KlayGE
 	{
 		adapterList_.Destroy();
 
-		::CloseHandle(res_cmd_fence_event_);
 		res_cmd_fence_.reset();
-
-		::CloseHandle(render_cmd_fence_event_);
 		render_cmd_fence_.reset();
-
-		::CloseHandle(compute_cmd_fence_event_);
 		compute_cmd_fence_.reset();
 
-		::CloseHandle(copy_cmd_fence_event_);
 		copy_cmd_fence_.reset();
 
 		this->ClearPSOCache();
@@ -1454,10 +1391,8 @@ namespace KlayGE
 		graphics_psos_.clear();
 		root_signatures_.clear();
 
-		bilinear_blit_tech_.reset();
+		bilinear_blit_tech_ = nullptr;
 		blit_effect_.reset();
-		blit_vb_.reset();
-		blit_rl_.reset();
 
 		cbv_srv_uav_desc_heap_.reset();
 		dsv_desc_heap_.reset();
@@ -1476,7 +1411,8 @@ namespace KlayGE
 		d3d_copy_cmd_queue_.reset();
 		d3d_device_.reset();
 
-		gi_factory_.reset();
+		gi_factory_4_.reset();
+		gi_factory_5_.reset();
 	}
 
 	void D3D12RenderEngine::DoSuspend()
@@ -1507,12 +1443,14 @@ namespace KlayGE
 
 	bool D3D12RenderEngine::VertexFormatSupport(ElementFormat elem_fmt)
 	{
-		return vertex_format_.find(elem_fmt) != vertex_format_.end();
+		auto iter = std::lower_bound(vertex_format_.begin(), vertex_format_.end(), elem_fmt);
+		return (iter != vertex_format_.end()) && (*iter == elem_fmt);
 	}
 
 	bool D3D12RenderEngine::TextureFormatSupport(ElementFormat elem_fmt)
 	{
-		return texture_format_.find(elem_fmt) != texture_format_.end();
+		auto iter = std::lower_bound(texture_format_.begin(), texture_format_.end(), elem_fmt);
+		return (iter != texture_format_.end()) && (*iter == elem_fmt);
 	}
 
 	bool D3D12RenderEngine::RenderTargetFormatSupport(ElementFormat elem_fmt, uint32_t sample_count, uint32_t sample_quality)
@@ -1611,6 +1549,8 @@ namespace KlayGE
 		caps_.draw_indirect_support = true;
 		caps_.no_overwrite_support = true;
 		caps_.full_npot_texture_support = true;
+		caps_.render_to_texture_array_support = true;
+		caps_.load_from_buffer_support = true;
 		caps_.gs_support = true;
 		caps_.hs_support = true;
 		caps_.ds_support = true;
@@ -1713,38 +1653,38 @@ namespace KlayGE
 				fmt_support.Support2 = D3D12_FORMAT_SUPPORT2_NONE;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					vertex_format_.insert(fmts[i].first);
+					vertex_format_.push_back(fmts[i].first);
 				}
 
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURE1D;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURE2D;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURE3D;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURECUBE;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_SHADER_LOAD;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 			}
 			else
@@ -1756,33 +1696,33 @@ namespace KlayGE
 				fmt_support.Support2 = D3D12_FORMAT_SUPPORT2_NONE;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					vertex_format_.insert(fmts[i].first);
+					vertex_format_.push_back(fmts[i].first);
 				}
 
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURE1D;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURE2D;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURE3D;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_TEXTURECUBE;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 				fmt_support.Support1 = D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
 				if (SUCCEEDED(d3d_device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &fmt_support, sizeof(fmt_support))))
 				{
-					texture_format_.insert(fmts[i].first);
+					texture_format_.push_back(fmts[i].first);
 				}
 			}
 
@@ -1818,7 +1758,7 @@ namespace KlayGE
 					{
 						if (msaa_quality_levels.NumQualityLevels > 0)
 						{
-							rendertarget_format_[fmts[i].first].push_back(std::make_pair(count, msaa_quality_levels.NumQualityLevels));
+							rendertarget_format_[fmts[i].first].emplace_back(count, msaa_quality_levels.NumQualityLevels);
 							count <<= 1;
 						}
 						else
@@ -1833,6 +1773,11 @@ namespace KlayGE
 				}
 			}
 		}
+
+		std::sort(vertex_format_.begin(), vertex_format_.end());
+		vertex_format_.erase(std::unique(vertex_format_.begin(), vertex_format_.end()), vertex_format_.end());
+		std::sort(texture_format_.begin(), texture_format_.end());
+		texture_format_.erase(std::unique(texture_format_.begin(), texture_format_.end()), texture_format_.end());
 
 		caps_.vertex_format_support = std::bind<bool>(&D3D12RenderEngine::VertexFormatSupport, this,
 			std::placeholders::_1);
@@ -1906,64 +1851,6 @@ namespace KlayGE
 	{
 		viewport_cache_ = pViewports[0];
 		d3d_render_cmd_list_->RSSetViewports(NumViewports, reinterpret_cast<D3D12_VIEWPORT const *>(pViewports));
-	}
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC const & D3D12RenderEngine::NullSRVDesc() const
-	{
-		static D3D12_SHADER_RESOURCE_VIEW_DESC null_srv_desc = []()->D3D12_SHADER_RESOURCE_VIEW_DESC
-		{
-			D3D12_SHADER_RESOURCE_VIEW_DESC ret;
-			ret.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			ret.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			ret.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			ret.Texture2D.MipLevels = 1;
-			ret.Texture2D.MostDetailedMip = 0;
-			ret.Texture2D.PlaneSlice = 0;
-			ret.Texture2D.ResourceMinLODClamp = 0;
-			return ret;
-		}();
-		return null_srv_desc;
-	}
-
-	D3D12_UNORDERED_ACCESS_VIEW_DESC const & D3D12RenderEngine::NullUAVDesc() const
-	{
-		static D3D12_UNORDERED_ACCESS_VIEW_DESC null_uav_desc = []()->D3D12_UNORDERED_ACCESS_VIEW_DESC
-		{
-			D3D12_UNORDERED_ACCESS_VIEW_DESC ret;
-			ret.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			ret.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-			ret.Texture2D.MipSlice = 0;
-			ret.Texture2D.PlaneSlice = 0;
-			return ret;
-		}();
-		return null_uav_desc;
-	}
-
-	D3D12_RENDER_TARGET_VIEW_DESC const & D3D12RenderEngine::NullRTVDesc() const
-	{
-		static D3D12_RENDER_TARGET_VIEW_DESC null_rtv_desc = []()->D3D12_RENDER_TARGET_VIEW_DESC
-		{
-			D3D12_RENDER_TARGET_VIEW_DESC ret;
-			ret.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			ret.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-			ret.Texture2D.MipSlice = 0;
-			ret.Texture2D.PlaneSlice = 0;
-			return ret;
-		}();
-		return null_rtv_desc;
-	}
-
-	D3D12_DEPTH_STENCIL_VIEW_DESC const & D3D12RenderEngine::NullDSVDesc() const
-	{
-		static D3D12_DEPTH_STENCIL_VIEW_DESC null_rtv_desc = []()->D3D12_DEPTH_STENCIL_VIEW_DESC
-		{
-			D3D12_DEPTH_STENCIL_VIEW_DESC ret;
-			ret.Format = DXGI_FORMAT_D16_UNORM;
-			ret.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-			ret.Texture2D.MipSlice = 0;
-			return ret;
-		}();
-		return null_rtv_desc;
 	}
 
 	uint32_t D3D12RenderEngine::AllocRTV()
@@ -2042,9 +1929,9 @@ namespace KlayGE
 		ID3D12RootSignaturePtr ret;
 
 		size_t hash_val = 0;
-		boost::hash_range(hash_val, num.begin(), num.end());
-		boost::hash_combine(hash_val, has_vs);
-		boost::hash_combine(hash_val, has_stream_output);
+		HashRange(hash_val, num.begin(), num.end());
+		HashCombine(hash_val, has_vs);
+		HashCombine(hash_val, has_stream_output);
 		auto iter = root_signatures_.find(hash_val);
 		if (iter == root_signatures_.end())
 		{
@@ -2248,8 +2135,8 @@ namespace KlayGE
 				root_signature_desc.Flags |= D3D12_ROOT_SIGNATURE_FLAG_ALLOW_STREAM_OUTPUT;
 			}
 
-			ID3DBlob* signature;
-			ID3DBlob* error;
+			ID3DBlob* signature = nullptr;
+			ID3DBlob* error = nullptr;
 			TIF(D3D12InterfaceLoader::Instance().D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error));
 			ID3D12RootSignature* rs;
 			TIF(d3d_device_->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(),
@@ -2260,7 +2147,7 @@ namespace KlayGE
 				error->Release();
 			}
 			
-			return KLAYGE_EMPLACE(root_signatures_, hash_val, MakeCOMPtr(rs)).first->second;
+			return root_signatures_.emplace(hash_val, MakeCOMPtr(rs)).first->second;
 		}
 		else
 		{
@@ -2272,14 +2159,14 @@ namespace KlayGE
 	{
 		char const * p = reinterpret_cast<char const *>(&desc);
 		size_t hash_val = 0;
-		boost::hash_range(hash_val, p, p + sizeof(desc));
+		HashRange(hash_val, p, p + sizeof(desc));
 
 		auto iter = graphics_psos_.find(hash_val);
 		if (iter == graphics_psos_.end())
 		{
 			ID3D12PipelineState* d3d_pso;
 			TIF(d3d_device_->CreateGraphicsPipelineState(&desc, IID_ID3D12PipelineState, reinterpret_cast<void**>(&d3d_pso)));
-			return KLAYGE_EMPLACE(graphics_psos_, hash_val, MakeCOMPtr(d3d_pso)).first->second;
+			return graphics_psos_.emplace(hash_val, MakeCOMPtr(d3d_pso)).first->second;
 		}
 		else
 		{
@@ -2291,14 +2178,14 @@ namespace KlayGE
 	{
 		char const * p = reinterpret_cast<char const *>(&desc);
 		size_t hash_val = 0;
-		boost::hash_range(hash_val, p, p + sizeof(desc));
+		HashRange(hash_val, p, p + sizeof(desc));
 
 		auto iter = compute_psos_.find(hash_val);
 		if (iter == compute_psos_.end())
 		{
 			ID3D12PipelineState* d3d_pso;
 			TIF(d3d_device_->CreateComputePipelineState(&desc, IID_ID3D12PipelineState, reinterpret_cast<void**>(&d3d_pso)));
-			return KLAYGE_EMPLACE(compute_psos_, hash_val, MakeCOMPtr(d3d_pso)).first->second;
+			return compute_psos_.emplace(hash_val, MakeCOMPtr(d3d_pso)).first->second;
 		}
 		else
 		{

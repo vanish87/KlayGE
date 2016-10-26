@@ -44,8 +44,7 @@ namespace KlayGE
 		{
 		}
 
-		virtual RenderTechniquePtr const & GetRenderTechnique() const;
-		virtual RenderLayoutPtr const & GetRenderLayout() const;
+		virtual RenderLayout& GetRenderLayout() const;
 
 		virtual AABBox const & PosBound() const;
 		virtual AABBox const & TexcoordBound() const;
@@ -60,7 +59,7 @@ namespace KlayGE
 
 		RenderLayoutPtr rl_;
 
-		RenderEffectParameterPtr color_ep_;
+		RenderEffectParameter* color_ep_;
 	};
 
 	class KLAYGE_CORE_API RenderablePoint : public RenderableHelper
@@ -81,7 +80,7 @@ namespace KlayGE
 		void Init();
 
 	private:
-		RenderEffectParameterPtr v0_ep_;
+		RenderEffectParameter* v0_ep_;
 	};
 
 	class KLAYGE_CORE_API RenderableLine : public RenderableHelper
@@ -102,8 +101,8 @@ namespace KlayGE
 		void Init();
 
 	private:
-		RenderEffectParameterPtr v0_ep_;
-		RenderEffectParameterPtr v1_ep_;
+		RenderEffectParameter* v0_ep_;
+		RenderEffectParameter* v1_ep_;
 	};
 
 	class KLAYGE_CORE_API RenderableTriangle : public RenderableHelper
@@ -124,9 +123,9 @@ namespace KlayGE
 		void Init();
 
 	private:
-		RenderEffectParameterPtr v0_ep_;
-		RenderEffectParameterPtr v1_ep_;
-		RenderEffectParameterPtr v2_ep_;
+		RenderEffectParameter* v0_ep_;
+		RenderEffectParameter* v1_ep_;
+		RenderEffectParameter* v2_ep_;
 	};
 
 	class KLAYGE_CORE_API RenderableTriBox : public RenderableHelper
@@ -147,14 +146,14 @@ namespace KlayGE
 		void Init();
 
 	private:
-		RenderEffectParameterPtr v0_ep_;
-		RenderEffectParameterPtr v1_ep_;
-		RenderEffectParameterPtr v2_ep_;
-		RenderEffectParameterPtr v3_ep_;
-		RenderEffectParameterPtr v4_ep_;
-		RenderEffectParameterPtr v5_ep_;
-		RenderEffectParameterPtr v6_ep_;
-		RenderEffectParameterPtr v7_ep_;
+		RenderEffectParameter* v0_ep_;
+		RenderEffectParameter* v1_ep_;
+		RenderEffectParameter* v2_ep_;
+		RenderEffectParameter* v3_ep_;
+		RenderEffectParameter* v4_ep_;
+		RenderEffectParameter* v5_ep_;
+		RenderEffectParameter* v6_ep_;
+		RenderEffectParameter* v7_ep_;
 	};
 
 	class KLAYGE_CORE_API RenderableLineBox : public RenderableHelper
@@ -175,14 +174,14 @@ namespace KlayGE
 		void Init();
 
 	private:
-		RenderEffectParameterPtr v0_ep_;
-		RenderEffectParameterPtr v1_ep_;
-		RenderEffectParameterPtr v2_ep_;
-		RenderEffectParameterPtr v3_ep_;
-		RenderEffectParameterPtr v4_ep_;
-		RenderEffectParameterPtr v5_ep_;
-		RenderEffectParameterPtr v6_ep_;
-		RenderEffectParameterPtr v7_ep_;
+		RenderEffectParameter* v0_ep_;
+		RenderEffectParameter* v1_ep_;
+		RenderEffectParameter* v2_ep_;
+		RenderEffectParameter* v3_ep_;
+		RenderEffectParameter* v4_ep_;
+		RenderEffectParameter* v5_ep_;
+		RenderEffectParameter* v6_ep_;
+		RenderEffectParameter* v7_ep_;
 	};
 
 	class KLAYGE_CORE_API RenderablePlane : public RenderableHelper
@@ -198,17 +197,17 @@ namespace KlayGE
 	class KLAYGE_CORE_API RenderDecal : public RenderableHelper
 	{
 	public:
-		RenderDecal(TexturePtr const & normal_tex, TexturePtr const & diffuse_tex, float3 const & diffuse_clr,
-				TexturePtr const & specular_tex, float3 const & specular_level, float shininess);
+		RenderDecal(TexturePtr const & normal_tex, TexturePtr const & albedo_tex,
+			float3 const & albedo_clr, float metalness, float glossiness);
 
 		void OnRenderBegin();
 
 	private:
-		RenderEffectParameterPtr inv_mv_ep_;
-		RenderEffectParameterPtr g_buffer_rt0_tex_param_;
-		float3 diffuse_clr_;
-		float specular_level_;
-		float shininess_;
+		RenderEffectParameter* inv_mv_ep_;
+		RenderEffectParameter* g_buffer_rt0_tex_param_;
+		float3 albedo_clr_;
+		float metalness_;
+		float glossiness_;
 	};
 }
 

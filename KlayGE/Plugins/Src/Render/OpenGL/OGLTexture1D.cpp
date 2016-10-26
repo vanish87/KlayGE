@@ -39,7 +39,7 @@
 namespace KlayGE
 {
 	OGLTexture1D::OGLTexture1D(uint32_t width, uint32_t numMipMaps, uint32_t array_size, ElementFormat format,
-							uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+							uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 					: OGLTexture(TT_1D, array_size, sample_count, sample_quality, access_hint)
 	{
 		format_ = format;
@@ -62,8 +62,28 @@ namespace KlayGE
 
 		width_ = width;
 
-		pbos_.resize(array_size * num_mip_maps_);
-		this->CreateHWResource(init_data);
+		glGenBuffers(1, &pbo_);
+
+		mipmap_start_offset_.resize(num_mip_maps_ + 1);
+		mipmap_start_offset_[0] = 0;
+		for (uint32_t level = 0; level < num_mip_maps_; ++level)
+		{
+			uint32_t const w = this->Width(level);
+
+			GLsizei image_size;
+			if (IsCompressedFormat(format_))
+			{
+				uint32_t const block_size = NumFormatBytes(format_) * 4;
+				image_size = ((w + 3) / 4) * block_size;
+			}
+			else
+			{
+				uint32_t const texel_size = NumFormatBytes(format_);
+				image_size = w * texel_size;
+			}
+
+			mipmap_start_offset_[level + 1] = mipmap_start_offset_[level] + image_size;
+		}
 	}
 
 	uint32_t OGLTexture1D::Width(uint32_t level) const
@@ -107,7 +127,7 @@ namespace KlayGE
 		else
 		{
 			OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-			if (((sample_count_ > 1) || !re.HackForAMD()) && !IsCompressedFormat(format_) && (glloader_GL_ARB_texture_rg() || (4 == NumComponents(format_))))
+			if ((sample_count_ > 1) && !IsCompressedFormat(format_) && (glloader_GL_ARB_texture_rg() || (4 == NumComponents(format_))))
 			{
 				GLuint fbo_src, fbo_dst;
 				re.GetFBOForBlit(fbo_src, fbo_dst);
@@ -209,25 +229,24 @@ namespace KlayGE
 				OGLMapping::MappingFormat(gl_internalFormat, gl_format, gl_type, format_);
 
 				re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-				re.BindBuffer(GL_PIXEL_PACK_BUFFER, pbos_[array_index * num_mip_maps_ + level]);
+				re.BindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
 
 				re.BindTexture(0, target_type_, texture_);
 				if (IsCompressedFormat(format_))
 				{
 					glGetCompressedTexImage(target_type_, level, nullptr);
-					p = static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
 				}
 				else
 				{
 					glGetTexImage(target_type_, level, gl_format, gl_type, nullptr);
-					p = static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
 				}
+				p = static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
 			}
 			break;
 
 		case TMA_Write_Only:
 			re.BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-			re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos_[array_index * num_mip_maps_ + level]);
+			re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
 			p = static_cast<uint8_t*>(glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
 			break;
 
@@ -237,6 +256,7 @@ namespace KlayGE
 			break;
 		}
 
+		p += array_index * mipmap_start_offset_.back() + mipmap_start_offset_[level];
 		if (IsCompressedFormat(format_))
 		{
 			uint32_t const block_size = NumFormatBytes(format_) * 4;
@@ -255,7 +275,7 @@ namespace KlayGE
 		{
 		case TMA_Read_Only:
 			re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-			re.BindBuffer(GL_PIXEL_PACK_BUFFER, pbos_[array_index * num_mip_maps_ + level]);
+			re.BindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
 			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
 			break;
 
@@ -269,30 +289,28 @@ namespace KlayGE
 
 				uint32_t const w = this->Width(level);
 
-				GLsizei image_size = 0;
-				if (IsCompressedFormat(format_))
-				{
-					uint32_t const block_size = NumFormatBytes(format_) * 4;
-					image_size = ((w + 3) / 4) * block_size;
-				}
-
 				re.BindTexture(0, target_type_, texture_);
 
 				re.BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-				re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos_[array_index * num_mip_maps_ + level]);
+				re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
 				glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 
+				GLvoid* offset = reinterpret_cast<GLvoid*>(
+					static_cast<GLintptr>(array_index * mipmap_start_offset_.back() + mipmap_start_offset_[level]));
 				if (IsCompressedFormat(format_))
 				{
+					uint32_t const block_size = NumFormatBytes(format_) * 4;
+					GLsizei const image_size = ((w + 3) / 4) * block_size;
+
 					if (array_size_ > 1)
 					{
 						glCompressedTexSubImage2D(target_type_, level, 0, array_index,
-							w, 1, gl_format, image_size, nullptr);
+							w, 1, gl_format, image_size, offset);
 					}
 					else
 					{
 						glCompressedTexSubImage1D(target_type_, level, 0,
-							w, gl_format, image_size, nullptr);
+							w, gl_format, image_size, offset);
 					}
 				}
 				else
@@ -300,11 +318,11 @@ namespace KlayGE
 					if (array_size_ > 1)
 					{
 						glTexSubImage2D(target_type_, level, 0, array_index, w, 1,
-							gl_format, gl_type, nullptr);
+							gl_format, gl_type, offset);
 					}
 					else
 					{
-						glTexSubImage1D(target_type_, level, 0, w, gl_format, gl_type, nullptr);
+						glTexSubImage1D(target_type_, level, 0, w, gl_format, gl_type, offset);
 					}
 				}
 			}
@@ -318,49 +336,45 @@ namespace KlayGE
 
 	void OGLTexture1D::CreateHWResource(ElementInitData const * init_data)
 	{
-		uint32_t texel_size = NumFormatBytes(format_);
-
 		GLint glinternalFormat;
 		GLenum glformat;
 		GLenum gltype;
 		OGLMapping::MappingFormat(glinternalFormat, glformat, gltype, format_);
 
-		glGenBuffers(static_cast<GLsizei>(pbos_.size()), &pbos_[0]);
-
 		if (sample_count_ <= 1)
 		{
-			glGenTextures(1, &texture_);
 			glBindTexture(target_type_, texture_);
-			glTexParameteri(target_type_, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTexParameteri(target_type_, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 			glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL, num_mip_maps_ - 1);
 
 			OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
+			glBufferData(GL_PIXEL_UNPACK_BUFFER, mipmap_start_offset_.back() * array_size_, nullptr, GL_STREAM_COPY);
+			re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
 			for (uint32_t array_index = 0; array_index < array_size_; ++ array_index)
 			{
 				for (uint32_t level = 0; level < num_mip_maps_; ++ level)
 				{
 					uint32_t const w = this->Width(level);
 
-					re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, pbos_[array_index * num_mip_maps_ + level]);
 					if (IsCompressedFormat(format_))
 					{
 						uint32_t const block_size = NumFormatBytes(format_) * 4;
 						GLsizei const image_size = ((w + 3) / 4) * block_size;
-
-						glBufferData(GL_PIXEL_UNPACK_BUFFER, image_size, nullptr, GL_STREAM_DRAW);
-						re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 						if (array_size_ > 1)
 						{
 							if (0 == array_index)
 							{
 								glCompressedTexImage2D(target_type_, level, glinternalFormat,
-									w, array_size_, 0, image_size, nullptr);
+									w, array_size_, 0, image_size * array_size_, nullptr);
 							}
 
-							glCompressedTexSubImage2D(target_type_, level, 0, array_index, w, 1,
-								glformat, image_size, (nullptr == init_data) ? nullptr : init_data[array_index * num_mip_maps_ + level].data);
+							if (init_data != nullptr)
+							{
+								glCompressedTexSubImage2D(target_type_, level, 0, array_index, w, 1,
+									glformat, image_size, init_data[array_index * num_mip_maps_ + level].data);
+							}
 						}
 						else
 						{
@@ -370,11 +384,6 @@ namespace KlayGE
 					}
 					else
 					{
-						GLsizei const image_size = w * texel_size;
-
-						glBufferData(GL_PIXEL_UNPACK_BUFFER, image_size, nullptr, GL_STREAM_DRAW);
-						re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
 						if (array_size_ > 1)
 						{
 							if (0 == array_index)
@@ -382,8 +391,11 @@ namespace KlayGE
 								glTexImage2D(target_type_, level, glinternalFormat, w, array_size_, 0, glformat, gltype, nullptr);
 							}
 
-							glTexSubImage2D(target_type_, level, 0, array_index, w, 1,
-								glformat, gltype, (nullptr == init_data) ? nullptr : init_data[array_index * num_mip_maps_ + level].data);
+							if (init_data != nullptr)
+							{
+								glTexSubImage2D(target_type_, level, 0, array_index, w, 1,
+									glformat, gltype, init_data[array_index * num_mip_maps_ + level].data);
+							}
 						}
 						else
 						{
@@ -396,9 +408,55 @@ namespace KlayGE
 		}
 		else
 		{
-			glGenRenderbuffers(1, &texture_);
 			glBindRenderbuffer(GL_RENDERBUFFER, texture_);
 			glRenderbufferStorageMultisample(GL_RENDERBUFFER, sample_count_, glinternalFormat, width_, 1);
+		}
+
+		hw_res_ready_ = true;
+	}
+
+	void OGLTexture1D::UpdateSubresource1D(uint32_t array_index, uint32_t level,
+		uint32_t x_offset, uint32_t width,
+		void const * data)
+	{
+		OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+
+		GLint gl_internalFormat;
+		GLenum gl_format;
+		GLenum gl_type;
+		OGLMapping::MappingFormat(gl_internalFormat, gl_format, gl_type, format_);
+
+		re.BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+		re.BindTexture(0, target_type_, texture_);
+
+		if (IsCompressedFormat(format_))
+		{
+			uint32_t const block_size = NumFormatBytes(format_) * 4;
+			GLsizei const image_size = ((width + 3) / 4) * block_size;
+
+			if (array_size_ > 1)
+			{
+				glCompressedTexSubImage2D(target_type_, level, x_offset, array_index,
+					width, 1, gl_format, image_size, data);
+			}
+			else
+			{
+				glCompressedTexSubImage1D(target_type_, level, x_offset,
+					width, gl_format, image_size, data);
+			}
+		}
+		else
+		{
+			if (array_size_ > 1)
+			{
+				glTexSubImage2D(target_type_, level, x_offset, array_index, width, 1,
+					gl_format, gl_type, data);
+			}
+			else
+			{
+				glTexSubImage1D(target_type_, level, x_offset, width,
+					gl_format, gl_type, data);
+			}
 		}
 	}
 }

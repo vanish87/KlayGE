@@ -50,11 +50,9 @@
 #include <KFL/Util.hpp>
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/PostProcess.hpp>
+#include <KFL/Hash.hpp>
 
 #include <glloader/glloader.h>
-#ifdef Bool
-#undef Bool		// for boost::foreach
-#endif
 
 #include <algorithm>
 #include <cstring>
@@ -177,8 +175,8 @@ namespace
 	void GLLOADER_APIENTRY DebugOutputProc(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
 			GLchar const * message, void const * user_param)
 	{
-		UNREF_PARAM(length);
-		UNREF_PARAM(user_param);
+		KFL_UNUSED(length);
+		KFL_UNUSED(user_param);
 
 		std::string dbg = std::string("OpenGL debug output: source: ") + DebugSourceString(source) + "; "
 			+ "type: " + DebugTypeString(type) + "; "
@@ -246,6 +244,43 @@ namespace KlayGE
 
 		FrameBufferPtr win = MakeSharedPtr<OGLRenderWindow>(name, settings);
 
+		if (glloader_GL_VERSION_4_5())
+		{
+			native_shader_platform_name_ = "gl_4_5";
+		}
+		else if (glloader_GL_VERSION_4_4())
+		{
+			native_shader_platform_name_ = "gl_4_4";
+		}
+		else if (glloader_GL_VERSION_4_3())
+		{
+			native_shader_platform_name_ = "gl_4_3";
+		}
+		else if (glloader_GL_VERSION_4_2())
+		{
+			native_shader_platform_name_ = "gl_4_2";
+		}
+		else if (glloader_GL_VERSION_4_1())
+		{
+			native_shader_platform_name_ = "gl_4_1";
+		}
+		else if (glloader_GL_VERSION_4_0())
+		{
+			native_shader_platform_name_ = "gl_4_0";
+		}
+		else if (glloader_GL_VERSION_3_3())
+		{
+			native_shader_platform_name_ = "gl_3_3";
+		}
+		else if (glloader_GL_VERSION_3_2())
+		{
+			native_shader_platform_name_ = "gl_3_2";
+		}
+		else //if (glloader_GL_VERSION_3_1())
+		{
+			native_shader_platform_name_ = "gl_3_1";
+		}
+
 		this->FillRenderDeviceCaps();
 		this->InitRenderStates();
 
@@ -311,11 +346,8 @@ namespace KlayGE
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glEnable(GL_POLYGON_OFFSET_POINT);
 		glEnable(GL_POLYGON_OFFSET_LINE);
-		if (glloader_GL_VERSION_3_1())
-		{
-			glEnable(GL_PRIMITIVE_RESTART);
-			glPrimitiveRestartIndex(restart_index_);
-		}
+		glEnable(GL_PRIMITIVE_RESTART);
+		glPrimitiveRestartIndex(restart_index_);
 
 		active_tex_unit_ = GL_TEXTURE0;
 		glActiveTexture(active_tex_unit_);
@@ -325,10 +357,7 @@ namespace KlayGE
 		binded_buffers_.clear();
 
 		fb_srgb_cache_ = false;
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_framebuffer_sRGB() || glloader_GL_EXT_framebuffer_sRGB())
-		{
-			glDisable(GL_FRAMEBUFFER_SRGB);
-		}
+		glDisable(GL_FRAMEBUFFER_SRGB);
 	}
 
 	void OGLRenderEngine::ActiveTexture(GLenum tex_unit)
@@ -532,13 +561,13 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformi_cache_, cur_program_, (std::map<GLint, int4>())).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		auto iter_v = iter_p->second.find(location);
 		if (iter_v == iter_p->second.end())
 		{
 			dirty = true;
-			KLAYGE_EMPLACE(iter_p->second, location, int4(value, 0, 0, 0));
+			iter_p->second.emplace(location, int4(value, 0, 0, 0));
 		}
 		else
 		{
@@ -567,13 +596,13 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformf_cache_, cur_program_, (std::map<GLint, float4>())).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		auto iter_v = iter_p->second.find(location);
 		if (iter_v == iter_p->second.end())
 		{
 			dirty = true;
-			KLAYGE_EMPLACE(iter_p->second, location, float4(value, 0, 0, 0));
+			iter_p->second.emplace(location, float4(value, 0, 0, 0));
 		}
 		else
 		{
@@ -597,7 +626,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformi_cache_, cur_program_, (std::map<GLint, int4>())).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -605,7 +634,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location, int4(value[i], 0, 0, 0));
+				iter_p->second.emplace(location, int4(value[i], 0, 0, 0));
 			}
 			else
 			{
@@ -635,7 +664,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformf_cache_, cur_program_, (std::map<GLint, float4>())).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -643,7 +672,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location, float4(value[i], 0, 0, 0));
+				iter_p->second.emplace(location, float4(value[i], 0, 0, 0));
 			}
 			else
 			{
@@ -668,7 +697,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformi_cache_, cur_program_, (std::map<GLint, int4>())).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -676,7 +705,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location, int4(value[i * 2 + 0], value[i * 2 + 1], 0, 0));
+				iter_p->second.emplace(location, int4(value[i * 2 + 0], value[i * 2 + 1], 0, 0));
 			}
 			else
 			{
@@ -707,7 +736,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformf_cache_, cur_program_, (std::map<GLint, float4>())).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -715,7 +744,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location, float4(value[i * 2 + 0], value[i * 2 + 1], 0, 0));
+				iter_p->second.emplace(location, float4(value[i * 2 + 0], value[i * 2 + 1], 0, 0));
 			}
 			else
 			{
@@ -741,7 +770,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformi_cache_, cur_program_, (std::map<GLint, int4>())).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -749,7 +778,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location, int4(value[i * 3 + 0], value[i * 3 + 1], value[i * 3 + 2], 0));
+				iter_p->second.emplace(location, int4(value[i * 3 + 0], value[i * 3 + 1], value[i * 3 + 2], 0));
 			}
 			else
 			{
@@ -782,7 +811,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformf_cache_, cur_program_, (std::map<GLint, float4>())).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -790,7 +819,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location, float4(value[i * 3 + 0], value[i * 3 + 1], value[i * 3 + 2], 0));
+				iter_p->second.emplace(location, float4(value[i * 3 + 0], value[i * 3 + 1], value[i * 3 + 2], 0));
 			}
 			else
 			{
@@ -818,7 +847,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformi_cache_, cur_program_, (std::map<GLint, int4>())).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -826,7 +855,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location,
+				iter_p->second.emplace(location,
 					int4(value[i * 4 + 0], value[i * 4 + 1], value[i * 4 + 2], value[i * 4 + 3]));
 			}
 			else
@@ -861,7 +890,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformf_cache_, cur_program_, (std::map<GLint, float4>())).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -869,7 +898,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location,
+				iter_p->second.emplace(location,
 					float4(value[i * 4 + 0], value[i * 4 + 1], value[i * 4 + 2], value[i * 4 + 3]));
 			}
 			else
@@ -899,7 +928,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = KLAYGE_EMPLACE(uniformf_cache_, cur_program_, (std::map<GLint, float4>())).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count * 4; ++ i)
 		{
@@ -907,7 +936,7 @@ namespace KlayGE
 			if (iter_v == iter_p->second.end())
 			{
 				dirty = true;
-				KLAYGE_EMPLACE(iter_p->second, location,
+				iter_p->second.emplace(location,
 					float4(value[i * 4 + 0], value[i * 4 + 1], value[i * 4 + 2], value[i * 4 + 3]));
 			}
 			else
@@ -934,16 +963,13 @@ namespace KlayGE
 	{
 		if (fb_srgb_cache_ != srgb)
 		{
-			if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_framebuffer_sRGB() || glloader_GL_EXT_framebuffer_sRGB())
+			if (srgb)
 			{
-				if (srgb)
-				{
-					glEnable(GL_FRAMEBUFFER_SRGB);
-				}
-				else
-				{
-					glDisable(GL_FRAMEBUFFER_SRGB);
-				}
+				glEnable(GL_FRAMEBUFFER_SRGB);
+			}
+			else
+			{
+				glDisable(GL_FRAMEBUFFER_SRGB);
 			}
 
 			fb_srgb_cache_ = srgb;
@@ -1026,69 +1052,26 @@ namespace KlayGE
 				break;
 			}
 
-			so_vars_.resize(0);
+			so_buffs_.resize(so_rl_->NumVertexStreams());
 			for (uint32_t i = 0; i < so_rl_->NumVertexStreams(); ++ i)
 			{
-				so_buffs_.push_back(checked_pointer_cast<OGLGraphicsBuffer>(so_rl_->GetVertexStream(i))->GLvbo());
-
-				vertex_element const & ve = so_rl_->VertexStreamFormat(i)[0];
-				switch (ve.usage)
-				{
-				case VEU_Position:
-					so_vars_.push_back("gl_Position");
-					break;
-
-				case VEU_Normal:
-					so_vars_.push_back("gl_Normal");
-					break;
-
-				case VEU_Diffuse:
-					so_vars_.push_back("gl_FrontColor");
-					break;
-
-				case VEU_Specular:
-					so_vars_.push_back("gl_FrontSecondaryColor");
-					break;
-
-				case VEU_BlendWeight:
-					so_vars_.push_back("_BLENDWEIGHT");
-					break;
-					
-				case VEU_BlendIndex:
-					so_vars_.push_back("_BLENDINDEX");
-					break;
-
-				case VEU_TextureCoord:
-					so_vars_.push_back("glTexCoord["
-						+ boost::lexical_cast<std::string>(static_cast<int>(ve.usage_index)) + "]");
-					break;
-
-				case VEU_Tangent:
-					so_vars_.push_back("_TANGENT");
-					break;
-					
-				case VEU_Binormal:
-					so_vars_.push_back("_BINORMAL");
-					break;
-				}
+				so_buffs_[i] = checked_pointer_cast<OGLGraphicsBuffer>(so_rl_->GetVertexStream(i))->GLvbo();
 			}
-
-			so_vars_ptrs_.resize(so_vars_.size());
-			for (size_t i = 0; i < so_rl_->NumVertexStreams(); ++ i)
-			{
-				so_vars_ptrs_[i] = so_vars_[i].c_str();
-			}
+		}
+		else
+		{
+			so_buffs_.clear();
 		}
 	}
 
 	// ‰÷»æ
 	/////////////////////////////////////////////////////////////////////////////////
-	void OGLRenderEngine::DoRender(RenderTechnique const & tech, RenderLayout const & rl)
+	void OGLRenderEngine::DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl)
 	{
 		uint32_t const num_instances = rl.NumInstances();
 		BOOST_ASSERT(num_instances != 0);
 
-		OGLShaderObjectPtr cur_shader = checked_pointer_cast<OGLShaderObject>(tech.Pass(0)->GetShaderObject());
+		OGLShaderObjectPtr cur_shader = checked_pointer_cast<OGLShaderObject>(tech.Pass(0).GetShaderObject(effect));
 		checked_cast<OGLRenderLayout const *>(&rl)->Active(cur_shader);
 
 		uint32_t const vertex_count = rl.UseIndices() ? rl.NumIndices() : rl.NumVertices();
@@ -1110,10 +1093,7 @@ namespace KlayGE
 
 				if (restart_index_ != 0xFFFF)
 				{
-					if (glloader_GL_VERSION_3_1())
-					{
-						glPrimitiveRestartIndex(0xFFFF);
-					}
+					glPrimitiveRestartIndex(0xFFFF);
 					restart_index_ = 0xFFFF;
 				}
 			}
@@ -1124,10 +1104,7 @@ namespace KlayGE
 
 				if (restart_index_ != 0xFFFFFFFF)
 				{
-					if (glloader_GL_VERSION_3_1())
-					{
-						glPrimitiveRestartIndex(0xFFFFFFFF);
-					}
+					glPrimitiveRestartIndex(0xFFFFFFFF);
 					restart_index_ = 0xFFFFFFFF;
 				}
 			}
@@ -1137,136 +1114,128 @@ namespace KlayGE
 		GraphicsBufferPtr const & buff_args = rl.GetIndirectArgs();
 		if ((glloader_GL_VERSION_4_0() || glloader_GL_ARB_draw_indirect()) && buff_args)
 		{
-			if (so_rl_)
-			{
-				glBeginTransformFeedback(so_primitive_mode_);
-			}
-
 			this->BindBuffer(GL_DRAW_INDIRECT_BUFFER, checked_pointer_cast<OGLGraphicsBuffer>(buff_args)->GLvbo());
 			GLvoid* args_offset = reinterpret_cast<GLvoid*>(static_cast<GLintptr>(rl.IndirectArgsOffset()));
 			if (rl.UseIndices())
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
 						}
+
+						glBeginTransformFeedback(so_primitive_mode_);
 					}
 
 					glDrawElementsIndirect(mode, index_type, args_offset);
-					pass->Unbind();
+
+					if (so_rl_)
+					{
+						glEndTransformFeedback();
+					}
+
+					pass.Unbind(effect);
 				}
 			}
 			else
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
 						}
+
+						glBeginTransformFeedback(so_primitive_mode_);
 					}
 
 					glDrawArraysIndirect(mode, args_offset);
-					pass->Unbind();
-				}
-			}
 
-			if (so_rl_)
-			{
-				glEndTransformFeedback();
+					if (so_rl_)
+					{
+						glEndTransformFeedback();
+					}
+
+					pass.Unbind(effect);
+				}
 			}
 
 			num_draws_just_called_ += num_passes;
 		}
 		else if ((glloader_GL_VERSION_3_3() || glloader_GL_ARB_instanced_arrays()) && (rl.NumInstances() > 1))
 		{
-			if (so_rl_)
-			{
-				glBeginTransformFeedback(so_primitive_mode_);
-			}
-
 			if (rl.UseIndices())
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
 						}
+
+						glBeginTransformFeedback(so_primitive_mode_);
 					}
 
-					if (glloader_GL_VERSION_3_3())
+					glDrawElementsInstanced(mode, static_cast<GLsizei>(rl.NumIndices()), index_type, index_offset, num_instances);
+
+					if (so_rl_)
 					{
-						glDrawElementsInstanced(mode, static_cast<GLsizei>(rl.NumIndices()),
-							index_type, index_offset, num_instances);
+						glEndTransformFeedback();
 					}
-					else
-					{
-						glDrawElementsInstancedARB(mode, static_cast<GLsizei>(rl.NumIndices()),
-							index_type, index_offset, num_instances);
-					}
-					pass->Unbind();
+
+					pass.Unbind(effect);
 				}
 			}
 			else
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
 						}
+
+						glBeginTransformFeedback(so_primitive_mode_);
 					}
 
-					if (glloader_GL_VERSION_3_3())
+					glDrawArraysInstanced(mode, rl.StartVertexLocation(), static_cast<GLsizei>(rl.NumVertices()), num_instances);
+
+					if (so_rl_)
 					{
-						glDrawArraysInstanced(mode, rl.StartVertexLocation(), static_cast<GLsizei>(rl.NumVertices()), num_instances);
+						glEndTransformFeedback();
 					}
-					else
-					{
-						glDrawArraysInstancedARB(mode, rl.StartVertexLocation(), static_cast<GLsizei>(rl.NumVertices()), num_instances);
-					}
-					pass->Unbind();
+
+					pass.Unbind(effect);
 				}
-			}
-
-			if (so_rl_)
-			{
-				glEndTransformFeedback();
 			}
 
 			num_draws_just_called_ += num_passes;
@@ -1348,87 +1317,102 @@ namespace KlayGE
 					}
 				}
 
-				if (so_rl_)
-				{
-					glBeginTransformFeedback(so_primitive_mode_);
-				}
-
 				if (rl.UseIndices())
 				{
 					for (uint32_t i = 0; i < num_passes; ++ i)
 					{
-						RenderPassPtr const & pass = tech.Pass(i);
+						auto& pass = tech.Pass(i);
 
-						pass->Bind();
+						pass.Bind(effect);
 
 						if (so_rl_)
 						{
-							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-							glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
 							for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 							{
 								glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
 							}
+
+							glBeginTransformFeedback(so_primitive_mode_);
 						}
 
-						glDrawElements(mode, static_cast<GLsizei>(rl.NumIndices()),
-							index_type, index_offset);
-						pass->Unbind();
+						glDrawElements(mode, static_cast<GLsizei>(rl.NumIndices()), index_type, index_offset);
+
+						if (so_rl_)
+						{
+							glEndTransformFeedback();
+						}
+
+						pass.Unbind(effect);
 					}
 				}
 				else
 				{
 					for (uint32_t i = 0; i < num_passes; ++ i)
 					{
-						RenderPassPtr const & pass = tech.Pass(i);
+						auto& pass = tech.Pass(i);
 
-						pass->Bind();
+						pass.Bind(effect);
 
 						if (so_rl_)
 						{
-							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-							glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
 							for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 							{
 								glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
 							}
+
+							glBeginTransformFeedback(so_primitive_mode_);
 						}
 
 						glDrawArrays(mode, rl.StartVertexLocation(), static_cast<GLsizei>(rl.NumVertices()));
-						pass->Unbind();
-					}
-				}
 
-				if (so_rl_)
-				{
-					glEndTransformFeedback();
+						if (so_rl_)
+						{
+							glEndTransformFeedback();
+						}
+
+						pass.Unbind(effect);
+					}
 				}
 			}
 
 			num_draws_just_called_ += num_instances * num_passes;
 		}
-
-		checked_cast<OGLRenderLayout const *>(&rl)->Deactive(cur_shader);
 	}
 
-	void OGLRenderEngine::DoDispatch(RenderTechnique const & /*tech*/, uint32_t /*tgx*/, uint32_t /*tgy*/, uint32_t /*tgz*/)
+	void OGLRenderEngine::DoDispatch(RenderEffect const & effect, RenderTechnique const & tech,
+		uint32_t tgx, uint32_t tgy, uint32_t tgz)
 	{
 		BOOST_ASSERT(false);
+
+		KFL_UNUSED(effect);
+		KFL_UNUSED(tech);
+		KFL_UNUSED(tgx);
+		KFL_UNUSED(tgy);
+		KFL_UNUSED(tgz);
 	}
 
-	void OGLRenderEngine::DoDispatchIndirect(RenderTechnique const & tech,
+	void OGLRenderEngine::DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
 			GraphicsBufferPtr const & buff_args, uint32_t offset)
 	{
 		BOOST_ASSERT(false);
 
-		UNREF_PARAM(tech);
-		UNREF_PARAM(buff_args);
-		UNREF_PARAM(offset);
+		KFL_UNUSED(effect);
+		KFL_UNUSED(tech);
+		KFL_UNUSED(buff_args);
+		KFL_UNUSED(offset);
 	}
 
 	void OGLRenderEngine::ForceFlush()
 	{
 		glFlush();
+	}
+
+	TexturePtr const & OGLRenderEngine::ScreenDepthStencilTexture() const
+	{
+		static TexturePtr ret;
+		return ret;
 	}
 
 	// …Ë÷√ºÙ≥˝æÿ’Û
@@ -1518,6 +1502,8 @@ namespace KlayGE
 
 		so_rl_.reset();
 
+		glloader_uninit();
+
 #if defined KLAYGE_PLATFORM_WINDOWS
 		::FreeLibrary(mod_opengl32_);
 #endif
@@ -1550,17 +1536,20 @@ namespace KlayGE
 
 	bool OGLRenderEngine::VertexFormatSupport(ElementFormat elem_fmt)
 	{
-		return vertex_format_.find(elem_fmt) != vertex_format_.end();
+		auto iter = std::lower_bound(vertex_format_.begin(), vertex_format_.end(), elem_fmt);
+		return (iter != vertex_format_.end()) && (*iter == elem_fmt);
 	}
 
 	bool OGLRenderEngine::TextureFormatSupport(ElementFormat elem_fmt)
 	{
-		return texture_format_.find(elem_fmt) != texture_format_.end();
+		auto iter = std::lower_bound(texture_format_.begin(), texture_format_.end(), elem_fmt);
+		return (iter != texture_format_.end()) && (*iter == elem_fmt);
 	}
 
 	bool OGLRenderEngine::RenderTargetFormatSupport(ElementFormat elem_fmt, uint32_t sample_count, uint32_t /*sample_quality*/)
 	{
-		return (rendertarget_format_.find(elem_fmt) != rendertarget_format_.end()) && (sample_count <= max_samples_);
+		auto iter = std::lower_bound(rendertarget_format_.begin(), rendertarget_format_.end(), elem_fmt);
+		return (iter != rendertarget_format_.end()) && (*iter == elem_fmt) && (sample_count <= max_samples_);
 	}
 
 	// ÃÓ≥‰…Ë±∏ƒ‹¡¶
@@ -1569,15 +1558,8 @@ namespace KlayGE
 	{
 		GLint temp;
 
-		if (glloader_GL_VERSION_2_0() || glloader_GL_ARB_vertex_shader())
-		{
-			glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &temp);
-			caps_.max_vertex_texture_units = static_cast<uint8_t>(temp);
-		}
-		else
-		{
-			caps_.max_vertex_texture_units = 0;
-		}
+		glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &temp);
+		caps_.max_vertex_texture_units = static_cast<uint8_t>(temp);
 
 		if (glloader_GL_VERSION_4_0() || glloader_GL_ARB_gpu_shader5())
 		{
@@ -1585,35 +1567,20 @@ namespace KlayGE
 		}
 		else
 		{
-			if (glloader_GL_VERSION_2_0()
-				|| (glloader_GL_ARB_vertex_shader() && glloader_GL_ARB_fragment_shader()))
+			if (caps_.max_vertex_texture_units != 0)
 			{
-				if (caps_.max_vertex_texture_units != 0)
+				if (glloader_GL_EXT_gpu_shader4())
 				{
-					if (glloader_GL_EXT_gpu_shader4())
-					{
-						caps_.max_shader_model = ShaderModel(4, 0);
-					}
-					else
-					{
-						caps_.max_shader_model = ShaderModel(3, 0);
-					}
+					caps_.max_shader_model = ShaderModel(4, 0);
 				}
 				else
 				{
-					caps_.max_shader_model = ShaderModel(2, 0);
+					caps_.max_shader_model = ShaderModel(3, 0);
 				}
 			}
 			else
 			{
-				if (glloader_GL_ARB_vertex_program() && glloader_GL_ARB_fragment_program())
-				{
-					caps_.max_shader_model = ShaderModel(1, 0);
-				}
-				else
-				{
-					caps_.max_shader_model = ShaderModel(0, 0);
-				}
+				caps_.max_shader_model = ShaderModel(2, 0);
 			}
 		}
 
@@ -1625,16 +1592,8 @@ namespace KlayGE
 		glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &temp);
 		caps_.max_texture_cube_size = temp;
 
-		/*if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_texture_array())
-		{
-			glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS_EXT, &temp);
-			caps_.max_texture_array_length = temp;
-		}
-		else
-		{
-			caps_.max_texture_array_length = 1;
-		}*/
-		caps_.max_texture_array_length = 1;
+		glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS_EXT, &temp);
+		caps_.max_texture_array_length = temp;
 
 		glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &temp);
 		caps_.max_pixel_texture_units = static_cast<uint8_t>(temp);
@@ -1659,15 +1618,9 @@ namespace KlayGE
 			caps_.max_texture_anisotropy = 1;
 		}
 
-		if (glloader_GL_VERSION_2_0() || glloader_GL_ARB_draw_buffers())
-		{
-			glGetIntegerv(GL_MAX_DRAW_BUFFERS, &temp);
-			caps_.max_simultaneous_rts = static_cast<uint8_t>(temp);
-		}
-		else
-		{
-			caps_.max_simultaneous_rts = 1;
-		}
+		glGetIntegerv(GL_MAX_DRAW_BUFFERS, &temp);
+		caps_.max_simultaneous_rts = static_cast<uint8_t>(temp);
+
 		caps_.max_simultaneous_uavs = 0;
 
 		glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &temp);
@@ -1676,17 +1629,10 @@ namespace KlayGE
 		caps_.is_tbdr = false;
 
 		caps_.hw_instancing_support = true;
-		caps_.instance_id_support = glloader_GL_VERSION_3_1() || glloader_GL_ARB_draw_instanced();
-		caps_.stream_output_support = false;
+		caps_.instance_id_support = true;
+		caps_.stream_output_support = true;
 		caps_.alpha_to_coverage_support = true;
-		if (glloader_GL_VERSION_3_1() || glloader_GL_NV_primitive_restart())
-		{
-			caps_.primitive_restart_support = true;
-		}
-		else
-		{
-			caps_.primitive_restart_support = false;
-		}
+		caps_.primitive_restart_support = true;
 		caps_.multithread_rendering_support = false;
 		caps_.multithread_res_creating_support = false;
 		caps_.mrt_independent_bit_depths_support = false;
@@ -1701,14 +1647,7 @@ namespace KlayGE
 			caps_.shader_texture_lod_support = true;
 		}
 		caps_.logic_op_support = true;
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_draw_buffers2())
-		{
-			caps_.independent_blend_support = true;
-		}
-		else
-		{
-			caps_.independent_blend_support = false;
-		}
+		caps_.independent_blend_support = true;
 		if (glloader_GL_VERSION_4_0() || glloader_GL_ARB_draw_indirect())
 		{
 			caps_.draw_indirect_support = true;
@@ -1719,6 +1658,16 @@ namespace KlayGE
 		}
 		caps_.no_overwrite_support = false;
 		caps_.full_npot_texture_support = true;
+		if ((caps_.max_texture_array_length > 1)
+			&& (glloader_GL_VERSION_3_2() || glloader_GL_ARB_geometry_shader4() || glloader_GL_EXT_geometry_shader4()))
+		{
+			caps_.render_to_texture_array_support = true;
+		}
+		else
+		{
+			caps_.render_to_texture_array_support = false;
+		}
+		caps_.load_from_buffer_support = true;
 
 		if (glloader_GL_VERSION_3_2() || glloader_GL_ARB_geometry_shader4() || glloader_GL_EXT_geometry_shader4())
 		{
@@ -1769,246 +1718,213 @@ namespace KlayGE
 			hack_for_intel_ = false;
 		}
 
-		vertex_format_.insert(EF_A8);
-		vertex_format_.insert(EF_R8);
-		vertex_format_.insert(EF_GR8);
-		vertex_format_.insert(EF_BGR8);
-		vertex_format_.insert(EF_ARGB8);
-		vertex_format_.insert(EF_ABGR8);
-		vertex_format_.insert(EF_R8UI);
-		vertex_format_.insert(EF_GR8UI);
-		vertex_format_.insert(EF_BGR8UI);
-		vertex_format_.insert(EF_ABGR8UI);
-		vertex_format_.insert(EF_SIGNED_R8);
-		vertex_format_.insert(EF_SIGNED_GR8);
-		vertex_format_.insert(EF_SIGNED_BGR8);
-		vertex_format_.insert(EF_SIGNED_ABGR8);
-		vertex_format_.insert(EF_R8I);
-		vertex_format_.insert(EF_GR8I);
-		vertex_format_.insert(EF_BGR8I);
-		vertex_format_.insert(EF_ABGR8I);
-		vertex_format_.insert(EF_A2BGR10);
-		vertex_format_.insert(EF_R16);
-		vertex_format_.insert(EF_GR16);
-		vertex_format_.insert(EF_BGR16);
-		vertex_format_.insert(EF_ABGR16);
-		vertex_format_.insert(EF_R16UI);
-		vertex_format_.insert(EF_GR16UI);
-		vertex_format_.insert(EF_BGR16UI);
-		vertex_format_.insert(EF_ABGR16UI);
-		vertex_format_.insert(EF_SIGNED_R16);
-		vertex_format_.insert(EF_SIGNED_GR16);
-		vertex_format_.insert(EF_SIGNED_BGR16);
-		vertex_format_.insert(EF_SIGNED_ABGR16);
-		vertex_format_.insert(EF_R16I);
-		vertex_format_.insert(EF_GR16I);
-		vertex_format_.insert(EF_BGR16I);
-		vertex_format_.insert(EF_ABGR16I);
-		vertex_format_.insert(EF_R32UI);
-		vertex_format_.insert(EF_GR32UI);
-		vertex_format_.insert(EF_BGR32UI);
-		vertex_format_.insert(EF_ABGR32UI);
-		vertex_format_.insert(EF_R32I);
-		vertex_format_.insert(EF_GR32I);
-		vertex_format_.insert(EF_BGR32I);
-		vertex_format_.insert(EF_ABGR32I);
-		vertex_format_.insert(EF_R32F);
-		vertex_format_.insert(EF_GR32F);
-		vertex_format_.insert(EF_BGR32F);
-		vertex_format_.insert(EF_ABGR32F);
+		vertex_format_.push_back(EF_A8);
+		vertex_format_.push_back(EF_R8);
+		vertex_format_.push_back(EF_GR8);
+		vertex_format_.push_back(EF_BGR8);
+		vertex_format_.push_back(EF_ARGB8);
+		vertex_format_.push_back(EF_ABGR8);
+		vertex_format_.push_back(EF_R8UI);
+		vertex_format_.push_back(EF_GR8UI);
+		vertex_format_.push_back(EF_BGR8UI);
+		vertex_format_.push_back(EF_ABGR8UI);
+		vertex_format_.push_back(EF_SIGNED_R8);
+		vertex_format_.push_back(EF_SIGNED_GR8);
+		vertex_format_.push_back(EF_SIGNED_BGR8);
+		vertex_format_.push_back(EF_SIGNED_ABGR8);
+		vertex_format_.push_back(EF_R8I);
+		vertex_format_.push_back(EF_GR8I);
+		vertex_format_.push_back(EF_BGR8I);
+		vertex_format_.push_back(EF_ABGR8I);
+		vertex_format_.push_back(EF_A2BGR10);
+		vertex_format_.push_back(EF_R16);
+		vertex_format_.push_back(EF_GR16);
+		vertex_format_.push_back(EF_BGR16);
+		vertex_format_.push_back(EF_ABGR16);
+		vertex_format_.push_back(EF_R16UI);
+		vertex_format_.push_back(EF_GR16UI);
+		vertex_format_.push_back(EF_BGR16UI);
+		vertex_format_.push_back(EF_ABGR16UI);
+		vertex_format_.push_back(EF_SIGNED_R16);
+		vertex_format_.push_back(EF_SIGNED_GR16);
+		vertex_format_.push_back(EF_SIGNED_BGR16);
+		vertex_format_.push_back(EF_SIGNED_ABGR16);
+		vertex_format_.push_back(EF_R16I);
+		vertex_format_.push_back(EF_GR16I);
+		vertex_format_.push_back(EF_BGR16I);
+		vertex_format_.push_back(EF_ABGR16I);
+		vertex_format_.push_back(EF_R32UI);
+		vertex_format_.push_back(EF_GR32UI);
+		vertex_format_.push_back(EF_BGR32UI);
+		vertex_format_.push_back(EF_ABGR32UI);
+		vertex_format_.push_back(EF_R32I);
+		vertex_format_.push_back(EF_GR32I);
+		vertex_format_.push_back(EF_BGR32I);
+		vertex_format_.push_back(EF_ABGR32I);
+		vertex_format_.push_back(EF_R32F);
+		vertex_format_.push_back(EF_GR32F);
+		vertex_format_.push_back(EF_BGR32F);
+		vertex_format_.push_back(EF_ABGR32F);
 		if (glloader_GL_VERSION_3_3() || glloader_GL_ARB_vertex_type_2_10_10_10_rev())
 		{
-			vertex_format_.insert(EF_SIGNED_A2BGR10);
+			vertex_format_.push_back(EF_SIGNED_A2BGR10);
 		}
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_rg())
-		{
-			vertex_format_.insert(EF_R16F);
-			vertex_format_.insert(EF_GR16F);
-			vertex_format_.insert(EF_BGR16F);
-			vertex_format_.insert(EF_ABGR16F);
-		}
+		vertex_format_.push_back(EF_R16F);
+		vertex_format_.push_back(EF_GR16F);
+		vertex_format_.push_back(EF_BGR16F);
+		vertex_format_.push_back(EF_ABGR16F);
 		if (glloader_GL_VERSION_4_4() || glloader_GL_ARB_vertex_type_10f_11f_11f_rev())
 		{
-			vertex_format_.insert(EF_B10G11R11F);
+			vertex_format_.push_back(EF_B10G11R11F);
 		}
 		
-		texture_format_.insert(EF_A8);
-		texture_format_.insert(EF_ARGB4);
-		texture_format_.insert(EF_R8);
-		texture_format_.insert(EF_SIGNED_R8);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_rg())
-		{
-			texture_format_.insert(EF_GR8);
-			texture_format_.insert(EF_SIGNED_GR8);
-			texture_format_.insert(EF_GR16);
-			texture_format_.insert(EF_SIGNED_GR16);
-		}
-		texture_format_.insert(EF_BGR8);
-		if (glloader_GL_VERSION_3_1() || glloader_GL_EXT_texture_snorm())
-		{
-			texture_format_.insert(EF_SIGNED_BGR8);
-			texture_format_.insert(EF_SIGNED_ABGR8);
-		}
-		texture_format_.insert(EF_ARGB8);
-		texture_format_.insert(EF_ABGR8);
-		texture_format_.insert(EF_A2BGR10);
-		texture_format_.insert(EF_SIGNED_A2BGR10);
-		texture_format_.insert(EF_R16);
-		texture_format_.insert(EF_SIGNED_R16);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_texture_integer())
-		{
-			texture_format_.insert(EF_R8UI);
-			texture_format_.insert(EF_R8I);
-			texture_format_.insert(EF_GR8UI);
-			texture_format_.insert(EF_GR8I);
-			texture_format_.insert(EF_BGR8UI);
-			texture_format_.insert(EF_BGR8I);
-			texture_format_.insert(EF_ABGR8UI);
-			texture_format_.insert(EF_ABGR8I);
-			texture_format_.insert(EF_R16UI);
-			texture_format_.insert(EF_R16I);
-			texture_format_.insert(EF_GR16UI);
-			texture_format_.insert(EF_GR16I);
-			texture_format_.insert(EF_BGR16UI);
-			texture_format_.insert(EF_BGR16I);
-			texture_format_.insert(EF_ABGR16UI);
-			texture_format_.insert(EF_ABGR16I);
-			texture_format_.insert(EF_R32UI);
-			texture_format_.insert(EF_R32I);
-			texture_format_.insert(EF_GR32UI);
-			texture_format_.insert(EF_GR32I);
-			texture_format_.insert(EF_BGR32UI);
-			texture_format_.insert(EF_BGR32I);
-			texture_format_.insert(EF_ABGR32UI);
-			texture_format_.insert(EF_ABGR32I);
-		}
-		texture_format_.insert(EF_BGR16);
-		texture_format_.insert(EF_SIGNED_BGR16);
-		texture_format_.insert(EF_ABGR16);
-		texture_format_.insert(EF_SIGNED_ABGR16);
-		texture_format_.insert(EF_R16F);
-		texture_format_.insert(EF_GR16F);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_packed_float())
-		{
-			texture_format_.insert(EF_B10G11R11F);
-		}
-		texture_format_.insert(EF_BGR16F);
-		texture_format_.insert(EF_ABGR16F);
-		texture_format_.insert(EF_R32F);
-		texture_format_.insert(EF_GR32F);
-		texture_format_.insert(EF_BGR32F);
-		texture_format_.insert(EF_ABGR32F);
+		texture_format_.push_back(EF_A8);
+		texture_format_.push_back(EF_ARGB4);
+		texture_format_.push_back(EF_R8);
+		texture_format_.push_back(EF_SIGNED_R8);
+		texture_format_.push_back(EF_GR8);
+		texture_format_.push_back(EF_SIGNED_GR8);
+		texture_format_.push_back(EF_GR16);
+		texture_format_.push_back(EF_SIGNED_GR16);
+		texture_format_.push_back(EF_BGR8);
+		texture_format_.push_back(EF_SIGNED_BGR8);
+		texture_format_.push_back(EF_SIGNED_ABGR8);
+		texture_format_.push_back(EF_ARGB8);
+		texture_format_.push_back(EF_ABGR8);
+		texture_format_.push_back(EF_A2BGR10);
+		texture_format_.push_back(EF_SIGNED_A2BGR10);
+		texture_format_.push_back(EF_R16);
+		texture_format_.push_back(EF_SIGNED_R16);
+		texture_format_.push_back(EF_R8UI);
+		texture_format_.push_back(EF_R8I);
+		texture_format_.push_back(EF_GR8UI);
+		texture_format_.push_back(EF_GR8I);
+		texture_format_.push_back(EF_BGR8UI);
+		texture_format_.push_back(EF_BGR8I);
+		texture_format_.push_back(EF_ABGR8UI);
+		texture_format_.push_back(EF_ABGR8I);
+		texture_format_.push_back(EF_R16UI);
+		texture_format_.push_back(EF_R16I);
+		texture_format_.push_back(EF_GR16UI);
+		texture_format_.push_back(EF_GR16I);
+		texture_format_.push_back(EF_BGR16UI);
+		texture_format_.push_back(EF_BGR16I);
+		texture_format_.push_back(EF_ABGR16UI);
+		texture_format_.push_back(EF_ABGR16I);
+		texture_format_.push_back(EF_R32UI);
+		texture_format_.push_back(EF_R32I);
+		texture_format_.push_back(EF_GR32UI);
+		texture_format_.push_back(EF_GR32I);
+		texture_format_.push_back(EF_BGR32UI);
+		texture_format_.push_back(EF_BGR32I);
+		texture_format_.push_back(EF_ABGR32UI);
+		texture_format_.push_back(EF_ABGR32I);
+		texture_format_.push_back(EF_BGR16);
+		texture_format_.push_back(EF_SIGNED_BGR16);
+		texture_format_.push_back(EF_ABGR16);
+		texture_format_.push_back(EF_SIGNED_ABGR16);
+		texture_format_.push_back(EF_R16F);
+		texture_format_.push_back(EF_GR16F);
+		texture_format_.push_back(EF_B10G11R11F);
+		texture_format_.push_back(EF_BGR16F);
+		texture_format_.push_back(EF_ABGR16F);
+		texture_format_.push_back(EF_R32F);
+		texture_format_.push_back(EF_GR32F);
+		texture_format_.push_back(EF_BGR32F);
+		texture_format_.push_back(EF_ABGR32F);
 		if (glloader_GL_EXT_texture_compression_s3tc())
 		{
-			texture_format_.insert(EF_BC1);
-			texture_format_.insert(EF_BC2);
-			texture_format_.insert(EF_BC3);
+			texture_format_.push_back(EF_BC1);
+			texture_format_.push_back(EF_BC2);
+			texture_format_.push_back(EF_BC3);
 		}
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_compression_rgtc())
-		{
-			texture_format_.insert(EF_BC4);
-			texture_format_.insert(EF_BC5);
-			texture_format_.insert(EF_SIGNED_BC4);
-			texture_format_.insert(EF_SIGNED_BC5);
-		}
+		texture_format_.push_back(EF_BC4);
+		texture_format_.push_back(EF_BC5);
+		texture_format_.push_back(EF_SIGNED_BC4);
+		texture_format_.push_back(EF_SIGNED_BC5);
 		if (glloader_GL_ARB_texture_compression_bptc())
 		{
-			texture_format_.insert(EF_BC6);
-			texture_format_.insert(EF_BC7);
+			texture_format_.push_back(EF_BC6);
+			texture_format_.push_back(EF_BC7);
 		}
-		texture_format_.insert(EF_D16);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_packed_depth_stencil())
-		{
-			texture_format_.insert(EF_D24S8);
-		}
-		texture_format_.insert(EF_D32F);
-		texture_format_.insert(EF_ARGB8_SRGB);
-		texture_format_.insert(EF_ABGR8_SRGB);
+		texture_format_.push_back(EF_D16);
+		texture_format_.push_back(EF_D24S8);
+		texture_format_.push_back(EF_D32F);
+		texture_format_.push_back(EF_ARGB8_SRGB);
+		texture_format_.push_back(EF_ABGR8_SRGB);
 		if (glloader_GL_EXT_texture_compression_s3tc())
 		{
-			texture_format_.insert(EF_BC1_SRGB);
-			texture_format_.insert(EF_BC2_SRGB);
-			texture_format_.insert(EF_BC3_SRGB);
+			texture_format_.push_back(EF_BC1_SRGB);
+			texture_format_.push_back(EF_BC2_SRGB);
+			texture_format_.push_back(EF_BC3_SRGB);
 		}
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_compression_rgtc())
+		texture_format_.push_back(EF_BC4_SRGB);
+		texture_format_.push_back(EF_BC5_SRGB);
+		if (glloader_GL_VERSION_4_3() || glloader_GL_ARB_ES3_compatibility())
 		{
-			texture_format_.insert(EF_BC4_SRGB);
-			texture_format_.insert(EF_BC5_SRGB);
+			texture_format_.push_back(EF_ETC1);
+			texture_format_.push_back(EF_ETC2_R11);
+			texture_format_.push_back(EF_SIGNED_ETC2_R11);
+			texture_format_.push_back(EF_ETC2_GR11);
+			texture_format_.push_back(EF_SIGNED_ETC2_GR11);
+			texture_format_.push_back(EF_ETC2_BGR8);
+			texture_format_.push_back(EF_ETC2_BGR8_SRGB);
+			texture_format_.push_back(EF_ETC2_A1BGR8);
+			texture_format_.push_back(EF_ETC2_A1BGR8_SRGB);
+			texture_format_.push_back(EF_ETC2_ABGR8);
+			texture_format_.push_back(EF_ETC2_ABGR8_SRGB);
 		}
 
 		GLint max_samples;
 		glGetIntegerv(GL_MAX_SAMPLES_EXT, &max_samples);
 		max_samples_ = static_cast<uint32_t>(max_samples);
 
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_rg())
-		{
-			rendertarget_format_.insert(EF_R8);
-			rendertarget_format_.insert(EF_GR8);
-		}
-		rendertarget_format_.insert(EF_ARGB8);
-		rendertarget_format_.insert(EF_ABGR8);
-		if (glloader_GL_VERSION_3_1() || glloader_GL_EXT_texture_snorm())
-		{
-			rendertarget_format_.insert(EF_SIGNED_ABGR8);
-		}
-		rendertarget_format_.insert(EF_A2BGR10);
-		rendertarget_format_.insert(EF_SIGNED_A2BGR10);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_rg())
-		{
-			rendertarget_format_.insert(EF_ABGR8UI);
-			rendertarget_format_.insert(EF_ABGR8I);
-			rendertarget_format_.insert(EF_R16);
-			rendertarget_format_.insert(EF_SIGNED_R16);
-			rendertarget_format_.insert(EF_GR16);
-			rendertarget_format_.insert(EF_SIGNED_GR16);
-		}
-		rendertarget_format_.insert(EF_ABGR16);
-		rendertarget_format_.insert(EF_SIGNED_ABGR16);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_texture_integer())
-		{
-			rendertarget_format_.insert(EF_R16UI);
-			rendertarget_format_.insert(EF_R16I);
-			rendertarget_format_.insert(EF_GR16UI);
-			rendertarget_format_.insert(EF_GR16I);
-			rendertarget_format_.insert(EF_ABGR16UI);
-			rendertarget_format_.insert(EF_ABGR16I);
-			rendertarget_format_.insert(EF_R32UI);
-			rendertarget_format_.insert(EF_R32I);
-			rendertarget_format_.insert(EF_GR32UI);
-			rendertarget_format_.insert(EF_GR32I);
-			rendertarget_format_.insert(EF_ABGR32UI);
-			rendertarget_format_.insert(EF_ABGR32I);
-		}
-		if (glloader_GL_VERSION_3_0() || (glloader_GL_ARB_half_float_pixel() && glloader_GL_ARB_texture_rg()))
-		{
-			rendertarget_format_.insert(EF_R16F);
-			rendertarget_format_.insert(EF_GR16F);
-			rendertarget_format_.insert(EF_R32F);
-			rendertarget_format_.insert(EF_GR32F);
-		}
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_half_float_pixel())
-		{
-			rendertarget_format_.insert(EF_ABGR16F);
-		}
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_packed_float())
-		{
-			rendertarget_format_.insert(EF_B10G11R11F);
-		}
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_texture_float())
-		{
-			rendertarget_format_.insert(EF_ABGR32F);
-		}
-		rendertarget_format_.insert(EF_D16);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_packed_depth_stencil())
-		{
-			rendertarget_format_.insert(EF_D24S8);
-		}
-		rendertarget_format_.insert(EF_D32F);
-		if (glloader_GL_VERSION_3_0() || glloader_GL_ARB_framebuffer_sRGB() || glloader_GL_EXT_framebuffer_sRGB())
-		{
-			rendertarget_format_.insert(EF_ARGB8_SRGB);
-			rendertarget_format_.insert(EF_ABGR8_SRGB);
-		}
+		rendertarget_format_.push_back(EF_R8);
+		rendertarget_format_.push_back(EF_GR8);
+		rendertarget_format_.push_back(EF_ARGB8);
+		rendertarget_format_.push_back(EF_ABGR8);
+		rendertarget_format_.push_back(EF_SIGNED_ABGR8);
+		rendertarget_format_.push_back(EF_A2BGR10);
+		rendertarget_format_.push_back(EF_SIGNED_A2BGR10);
+		rendertarget_format_.push_back(EF_ABGR8UI);
+		rendertarget_format_.push_back(EF_ABGR8I);
+		rendertarget_format_.push_back(EF_R16);
+		rendertarget_format_.push_back(EF_SIGNED_R16);
+		rendertarget_format_.push_back(EF_GR16);
+		rendertarget_format_.push_back(EF_SIGNED_GR16);
+		rendertarget_format_.push_back(EF_ABGR16);
+		rendertarget_format_.push_back(EF_SIGNED_ABGR16);
+		rendertarget_format_.push_back(EF_R16UI);
+		rendertarget_format_.push_back(EF_R16I);
+		rendertarget_format_.push_back(EF_GR16UI);
+		rendertarget_format_.push_back(EF_GR16I);
+		rendertarget_format_.push_back(EF_ABGR16UI);
+		rendertarget_format_.push_back(EF_ABGR16I);
+		rendertarget_format_.push_back(EF_R32UI);
+		rendertarget_format_.push_back(EF_R32I);
+		rendertarget_format_.push_back(EF_GR32UI);
+		rendertarget_format_.push_back(EF_GR32I);
+		rendertarget_format_.push_back(EF_ABGR32UI);
+		rendertarget_format_.push_back(EF_ABGR32I);
+		rendertarget_format_.push_back(EF_R16F);
+		rendertarget_format_.push_back(EF_GR16F);
+		rendertarget_format_.push_back(EF_R32F);
+		rendertarget_format_.push_back(EF_GR32F);
+		rendertarget_format_.push_back(EF_ABGR16F);
+		rendertarget_format_.push_back(EF_B10G11R11F);
+		rendertarget_format_.push_back(EF_ABGR32F);
+		rendertarget_format_.push_back(EF_D16);
+		rendertarget_format_.push_back(EF_D24S8);
+		rendertarget_format_.push_back(EF_D32F);
+		rendertarget_format_.push_back(EF_ARGB8_SRGB);
+		rendertarget_format_.push_back(EF_ABGR8_SRGB);
+
+		std::sort(vertex_format_.begin(), vertex_format_.end());
+		vertex_format_.erase(std::unique(vertex_format_.begin(), vertex_format_.end()), vertex_format_.end());
+		std::sort(texture_format_.begin(), texture_format_.end());
+		texture_format_.erase(std::unique(texture_format_.begin(), texture_format_.end()), texture_format_.end());
+		std::sort(rendertarget_format_.begin(), rendertarget_format_.end());
+		rendertarget_format_.erase(std::unique(rendertarget_format_.begin(), rendertarget_format_.end()), rendertarget_format_.end());
 
 		caps_.vertex_format_support = std::bind<bool>(&OGLRenderEngine::VertexFormatSupport, this,
 			std::placeholders::_1);

@@ -212,6 +212,9 @@ typedef struct _HIDP_VALUE_CAPS
 #include <Sensors.h>
 #endif
 
+#elif defined KLAYGE_PLATFORM_WINDOWS_RUNTIME
+#include <windows.devices.geolocation.h>
+#include <windows.devices.sensors.h>
 #elif defined KLAYGE_PLATFORM_ANDROID
 #include <android/sensor.h>
 #endif
@@ -257,20 +260,19 @@ namespace KlayGE
 	private:
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		boost::signals2::connection on_raw_input_;
-#elif defined KLAYGE_PLATFORM_ANDROID
+		boost::signals2::connection on_touch_;
+#elif defined(KLAYGE_PLATFORM_WINDOWS_RUNTIME) || defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_DARWIN)
 		boost::signals2::connection on_key_down_;
 		boost::signals2::connection on_key_up_;
+#if defined KLAYGE_PLATFORM_ANDROID
 		boost::signals2::connection on_mouse_down_;
 		boost::signals2::connection on_mouse_up_;
 		boost::signals2::connection on_mouse_move_;
 		boost::signals2::connection on_mouse_wheel_;
 		boost::signals2::connection on_joystick_axis_;
 		boost::signals2::connection on_joystick_buttons_;
-#elif defined KLAYGE_PLATFORM_DARWIN
-		boost::signals2::connection on_key_down_;
-		boost::signals2::connection on_key_up_;
 #endif
-		boost::signals2::connection on_touch_;
+#endif
 		boost::signals2::connection on_pointer_down_;
 		boost::signals2::connection on_pointer_up_;
 		boost::signals2::connection on_pointer_update_;
@@ -306,33 +308,30 @@ namespace KlayGE
 #endif
 
 	private:
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
 
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		void OnRawInput(Window const & wnd, HRAWINPUT ri);
 #if (_WIN32_WINNT >= _WIN32_WINNT_WIN7)
 		void OnTouch(Window const & wnd, HTOUCHINPUT hti, uint32_t num_inputs);
 #endif
-#endif
-		void OnPointerDown(int2 const & pt, uint32_t id);
-		void OnPointerUp(int2 const & pt, uint32_t id);
-		void OnPointerUpdate(int2 const & pt, uint32_t id, bool down);
-		void OnPointerWheel(int2 const & pt, uint32_t id, int32_t wheel_delta);
-
-#if defined KLAYGE_PLATFORM_ANDROID
+#elif defined(KLAYGE_PLATFORM_WINDOWS_RUNTIME) || defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_DARWIN)
 		void OnKeyDown(uint32_t key);
 		void OnKeyUp(uint32_t key);
+#if defined KLAYGE_PLATFORM_ANDROID
 		void OnMouseDown(int2 const & pt, uint32_t buttons);
 		void OnMouseUp(int2 const & pt, uint32_t buttons);
 		void OnMouseMove(int2 const & pt);
 		void OnMouseWheel(int2 const & pt, int32_t wheel_delta);
 		void OnJoystickAxis(uint32_t axis, int32_t value);
 		void OnJoystickButtons(uint32_t buttons);
-#elif defined KLAYGE_PLATFORM_DARWIN
-		void OnKeyDown(uint32_t key);
-		void OnKeyUp(uint32_t key);
 #endif
+#endif
+		void OnPointerDown(int2 const & pt, uint32_t id);
+		void OnPointerUp(int2 const & pt, uint32_t id);
+		void OnPointerUpdate(int2 const & pt, uint32_t id, bool down);
+		void OnPointerWheel(int2 const & pt, uint32_t id, int32_t wheel_delta);
 	};
 
 	class MsgInputKeyboard : public InputKeyboard
@@ -340,16 +339,16 @@ namespace KlayGE
 	public:
 		MsgInputKeyboard();
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		void OnRawInput(RAWINPUT const & ri);
-#elif (defined KLAYGE_PLATFORM_ANDROID) || (defined KLAYGE_PLATFORM_DARWIN)
+#elif defined(KLAYGE_PLATFORM_WINDOWS_RUNTIME) || defined(KLAYGE_PLATFORM_ANDROID) || defined(KLAYGE_PLATFORM_DARWIN)
 		void OnKeyDown(uint32_t key);
 		void OnKeyUp(uint32_t key);
 #endif
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 
 	private:
 		std::array<bool, 256> keys_state_;
@@ -364,7 +363,7 @@ namespace KlayGE
 		MsgInputMouse();
 #endif
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		void OnRawInput(RAWINPUT const & ri);
 #elif defined KLAYGE_PLATFORM_ANDROID
@@ -375,7 +374,7 @@ namespace KlayGE
 #endif
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 
 	private:
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
@@ -398,7 +397,7 @@ namespace KlayGE
 		MsgInputJoystick();
 #endif
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		void OnRawInput(RAWINPUT const & ri);
 #elif defined KLAYGE_PLATFORM_ANDROID
@@ -407,7 +406,7 @@ namespace KlayGE
 #endif
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 
 	private:
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
@@ -426,12 +425,12 @@ namespace KlayGE
 		MsgInputOVR();
 		virtual ~MsgInputOVR();
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 
-		virtual void OnMessage(OVR::Message const & msg) KLAYGE_OVERRIDE;
+		virtual void OnMessage(OVR::Message const & msg) override;
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 
 	private:
 		OVR::Ptr<OVR::DeviceManager> manager_;
@@ -449,7 +448,7 @@ namespace KlayGE
 	public:
 		MsgInputTouch();
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 #if (defined KLAYGE_PLATFORM_WINDOWS_DESKTOP) && (_WIN32_WINNT >= _WIN32_WINNT_WIN7)
 		void OnTouch(Window const & wnd, HTOUCHINPUT hti, uint32_t num_inputs);
 #endif
@@ -459,7 +458,7 @@ namespace KlayGE
 		void OnPointerWheel(int2 const & pt, uint32_t id, int32_t wheel_delta);
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 		int2 AdjustPoint(int2 const & pt) const;
 
 		Timer timer_;
@@ -475,14 +474,14 @@ namespace KlayGE
 		MsgInputSensor();
 		virtual ~MsgInputSensor();
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 
 		void OnLocationChanged(REFIID report_type, ILocationReport* location_report);
 		void OnMotionDataUpdated(ISensor* sensor, ISensorDataReport* data_report);
 		void OnOrientationDataUpdated(ISensor* sensor, ISensorDataReport* data_report);
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 
 	private:
 		std::shared_ptr<ILocation> locator_;
@@ -493,52 +492,48 @@ namespace KlayGE
 		std::vector<std::shared_ptr<ISensorEvents>> orientation_sensor_events_;
 	};
 #elif defined KLAYGE_PLATFORM_WINDOWS_RUNTIME
-	ref class MetroMsgInputSensorEvent;
-
 	class MsgInputSensor : public InputSensor
 	{
 	public:
 		MsgInputSensor();
 		virtual ~MsgInputSensor();
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 
-		void OnPositionChanged(Windows::Devices::Geolocation::Geolocator^ sender,
-			Windows::Devices::Geolocation::PositionChangedEventArgs^ e);
-		void OnAccelerometeReadingChanged(Windows::Devices::Sensors::Accelerometer^ sender,
-			Windows::Devices::Sensors::AccelerometerReadingChangedEventArgs^ e);
-		void OnGyrometerReadingChanged(Windows::Devices::Sensors::Gyrometer^ sender,
-			Windows::Devices::Sensors::GyrometerReadingChangedEventArgs^ e);
-		void OnInclinometerReadingChanged(Windows::Devices::Sensors::Inclinometer^ sender,
-			Windows::Devices::Sensors::InclinometerReadingChangedEventArgs^ e);
-		void OnCompassReadingChanged(Windows::Devices::Sensors::Compass^ sender,
-			Windows::Devices::Sensors::CompassReadingChangedEventArgs^ e);
-		void OnOrientationSensorReadingChanged(Windows::Devices::Sensors::OrientationSensor^ sender,
-			Windows::Devices::Sensors::OrientationSensorReadingChangedEventArgs^ e);
-
-	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		HRESULT OnPositionChanged(ABI::Windows::Devices::Geolocation::IGeolocator* sender,
+			ABI::Windows::Devices::Geolocation::IPositionChangedEventArgs* e);
+		HRESULT OnAccelerometeReadingChanged(ABI::Windows::Devices::Sensors::IAccelerometer* sender,
+			ABI::Windows::Devices::Sensors::IAccelerometerReadingChangedEventArgs* e);
+		HRESULT OnGyrometerReadingChanged(ABI::Windows::Devices::Sensors::IGyrometer* sender,
+			ABI::Windows::Devices::Sensors::IGyrometerReadingChangedEventArgs* e);
+		HRESULT OnInclinometerReadingChanged(ABI::Windows::Devices::Sensors::IInclinometer* sender,
+			ABI::Windows::Devices::Sensors::IInclinometerReadingChangedEventArgs* e);
+		HRESULT OnCompassReadingChanged(ABI::Windows::Devices::Sensors::ICompass* sender,
+			ABI::Windows::Devices::Sensors::ICompassReadingChangedEventArgs* e);
+		HRESULT OnOrientationSensorReadingChanged(ABI::Windows::Devices::Sensors::IOrientationSensor* sender,
+			ABI::Windows::Devices::Sensors::IOrientationSensorReadingChangedEventArgs* e);
 
 	private:
-		MetroMsgInputSensorEvent^ sensor_event_;
+		virtual void UpdateInputs() override;
 
-		Windows::Devices::Geolocation::Geolocator^ locator_;
-		Windows::Foundation::EventRegistrationToken position_token_;
+	private:
+		std::shared_ptr<ABI::Windows::Devices::Geolocation::IGeolocator> locator_;
+		EventRegistrationToken position_token_;
 
-		Windows::Devices::Sensors::Accelerometer^ accelerometer_;
-		Windows::Foundation::EventRegistrationToken accelerometer_reading_token_;
+		std::shared_ptr<ABI::Windows::Devices::Sensors::IAccelerometer> accelerometer_;
+		EventRegistrationToken accelerometer_reading_token_;
 
-		Windows::Devices::Sensors::Gyrometer^ gyrometer_;
-		Windows::Foundation::EventRegistrationToken gyrometer_reading_token_;
+		std::shared_ptr<ABI::Windows::Devices::Sensors::IGyrometer> gyrometer_;
+		EventRegistrationToken gyrometer_reading_token_;
 
-		Windows::Devices::Sensors::Inclinometer^ inclinometer_;
-		Windows::Foundation::EventRegistrationToken inclinometer_reading_token_;
+		std::shared_ptr<ABI::Windows::Devices::Sensors::IInclinometer> inclinometer_;
+		EventRegistrationToken inclinometer_reading_token_;
 
-		Windows::Devices::Sensors::Compass^ compass_;
-		Windows::Foundation::EventRegistrationToken compass_reading_token_;
+		std::shared_ptr<ABI::Windows::Devices::Sensors::ICompass> compass_;
+		::EventRegistrationToken compass_reading_token_;
 
-		Windows::Devices::Sensors::OrientationSensor^ orientation_;
-		Windows::Foundation::EventRegistrationToken orientation_reading_token_;
+		std::shared_ptr<ABI::Windows::Devices::Sensors::IOrientationSensor> orientation_;
+		EventRegistrationToken orientation_reading_token_;
 	};
 #elif defined KLAYGE_PLATFORM_ANDROID
 	class MsgInputSensor : public InputSensor
@@ -547,10 +542,10 @@ namespace KlayGE
 		MsgInputSensor();
 		virtual ~MsgInputSensor();
 
-		virtual std::wstring const & Name() const KLAYGE_OVERRIDE;
+		virtual std::wstring const & Name() const override;
 
 	private:
-		virtual void UpdateInputs() KLAYGE_OVERRIDE;
+		virtual void UpdateInputs() override;
 
 		static int SensorCallback(int fd, int events, void* data);
 

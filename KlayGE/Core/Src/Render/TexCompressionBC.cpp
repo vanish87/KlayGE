@@ -948,7 +948,7 @@ namespace KlayGE
 			}
 		}
 
-		this->EncodeBC1Internal(bc1, argb, alpha, method);
+		this->EncodeBC1Internal(bc1, &tmp_argb[0], alpha, method);
 	}
 
 	void TexCompressionBC1::DecodeBlock(void* output, void const * input)
@@ -1553,7 +1553,7 @@ namespace KlayGE
 		BOOST_ASSERT(output);
 		BOOST_ASSERT(input);
 
-		UNREF_PARAM(method);
+		KFL_UNUSED(method);
 
 		BC4Block& bc4 = *static_cast<BC4Block*>(output);
 		uint8_t const * r = static_cast<uint8_t const *>(input);
@@ -1666,8 +1666,8 @@ namespace KlayGE
 		BC5Block& bc5 = *static_cast<BC5Block*>(output);
 		uint16_t const * gr = static_cast<uint16_t const *>(input);
 
-		std::array<uint8_t, 16> r;
-		std::array<uint8_t, 16> g;
+		std::array<uint8_t, 16> r = { { 0 } };
+		std::array<uint8_t, 16> g = { { 0 } };
 		for (size_t i = 0; i < r.size(); ++ i)
 		{
 			r[i] = gr[i] & 0xFF;
@@ -1963,9 +1963,9 @@ namespace KlayGE
 
 	void TexCompressionBC6U::EncodeBlock(void* output, void const * input, TexCompressionMethod method)
 	{
-		UNREF_PARAM(output);
-		UNREF_PARAM(input);
-		UNREF_PARAM(method);
+		KFL_UNUSED(output);
+		KFL_UNUSED(input);
+		KFL_UNUSED(method);
 
 		// TODO
 	}
@@ -2217,9 +2217,9 @@ namespace KlayGE
 
 	void TexCompressionBC6S::EncodeBlock(void* output, void const * input, TexCompressionMethod method)
 	{
-		UNREF_PARAM(output);
-		UNREF_PARAM(input);
-		UNREF_PARAM(method);
+		KFL_UNUSED(output);
+		KFL_UNUSED(input);
+		KFL_UNUSED(method);
 
 		// TODO
 	}

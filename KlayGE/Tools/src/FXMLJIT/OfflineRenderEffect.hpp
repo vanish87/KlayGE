@@ -164,7 +164,6 @@ namespace KlayGE
 			virtual RenderVariable& operator=(float4x4 const & value);
 			virtual RenderVariable& operator=(TexturePtr const & value);
 			virtual RenderVariable& operator=(TextureSubresource const & value);
-			virtual RenderVariable& operator=(std::function<TexturePtr()> const & value);
 			virtual RenderVariable& operator=(SamplerStateDesc const & value);
 			virtual RenderVariable& operator=(GraphicsBufferPtr const & value);
 			virtual RenderVariable& operator=(std::string const & value);
@@ -252,7 +251,7 @@ namespace KlayGE
 				}
 			}
 
-			virtual RenderVariable& operator=(T const & value) KLAYGE_OVERRIDE
+			virtual RenderVariable& operator=(T const & value) override
 			{
 				if (in_cbuff_)
 				{
@@ -269,7 +268,7 @@ namespace KlayGE
 				return *this;
 			}
 
-			virtual void Value(T& val) const KLAYGE_OVERRIDE
+			virtual void Value(T& val) const override
 			{
 				if (in_cbuff_)
 				{
@@ -282,7 +281,7 @@ namespace KlayGE
 			}
 
 			virtual void BindToCBuffer(RenderEffectConstantBuffer* cbuff, uint32_t offset,
-				uint32_t stride) KLAYGE_OVERRIDE
+				uint32_t stride) override
 			{
 				if (!in_cbuff_)
 				{
@@ -297,21 +296,21 @@ namespace KlayGE
 				}
 			}
 
-			virtual void RebindToCBuffer(RenderEffectConstantBuffer* cbuff) KLAYGE_OVERRIDE
+			virtual void RebindToCBuffer(RenderEffectConstantBuffer* cbuff) override
 			{
 				BOOST_ASSERT(in_cbuff_);
 				data_.cbuff_desc.cbuff = cbuff;
 			}
 
-			virtual bool InCBuffer() const KLAYGE_OVERRIDE
+			virtual bool InCBuffer() const override
 			{
 				return in_cbuff_;
 			}
-			virtual uint32_t CBufferOffset() const KLAYGE_OVERRIDE
+			virtual uint32_t CBufferOffset() const override
 			{
 				return data_.cbuff_desc.offset;
 			}
-			virtual uint32_t Stride() const KLAYGE_OVERRIDE
+			virtual uint32_t Stride() const override
 			{
 				return data_.cbuff_desc.stride;
 			}
@@ -358,8 +357,8 @@ namespace KlayGE
 		class RenderVariableFloat4x4 : public RenderVariableConcrete<float4x4>
 		{
 		public:
-			virtual RenderVariable& operator=(float4x4 const & value) KLAYGE_OVERRIDE;
-			virtual void Value(float4x4& val) const KLAYGE_OVERRIDE;
+			virtual RenderVariable& operator=(float4x4 const & value) override;
+			virtual void Value(float4x4& val) const override;
 		};
 
 		template <typename T>
@@ -371,7 +370,7 @@ namespace KlayGE
 			{
 			}
 
-			virtual RenderVariable& operator=(std::vector<T> const & value) KLAYGE_OVERRIDE
+			virtual RenderVariable& operator=(std::vector<T> const & value) override
 			{
 				if (this->in_cbuff_)
 				{
@@ -390,7 +389,7 @@ namespace KlayGE
 				return *this;
 			}
 
-			virtual void Value(std::vector<T>& val) const KLAYGE_OVERRIDE
+			virtual void Value(std::vector<T>& val) const override
 			{
 				if (this->in_cbuff_)
 				{
@@ -420,8 +419,8 @@ namespace KlayGE
 			{
 			}
 
-			virtual RenderVariable& operator=(std::vector<float4x4> const & value) KLAYGE_OVERRIDE;
-			virtual void Value(std::vector<float4x4>& val) const KLAYGE_OVERRIDE;
+			virtual RenderVariable& operator=(std::vector<float4x4> const & value) override;
+			virtual void Value(std::vector<float4x4>& val) const override;
 
 		private:
 			uint32_t size_;
@@ -432,7 +431,6 @@ namespace KlayGE
 		public:
 			virtual RenderVariable& operator=(TexturePtr const & value);
 			virtual RenderVariable& operator=(TextureSubresource const & value);
-			virtual RenderVariable& operator=(std::function<TexturePtr()> const & value);
 			virtual RenderVariable& operator=(std::string const & value);
 
 			virtual void Value(TexturePtr& val) const;
@@ -440,7 +438,6 @@ namespace KlayGE
 			virtual void Value(std::string& val) const;
 
 		protected:
-			std::function<TexturePtr()> tl_;
 			mutable TextureSubresource val_;
 			std::string elem_type_;
 		};
@@ -535,10 +532,10 @@ namespace KlayGE
 			std::shared_ptr<RenderVariable> var_;
 		};
 
-		class RenderShaderFunc
+		class RenderShaderFragment
 		{
 		public:
-			RenderShaderFunc()
+			RenderShaderFragment()
 				: type_(), ver_(0, 0)
 			{
 			}
@@ -589,15 +586,6 @@ namespace KlayGE
 				return caps_;
 			}
 
-			void PrototypeEffect(RenderEffectPtr const & prototype_effect)
-			{
-				prototype_effect_ = prototype_effect;
-			}
-			RenderEffectPtr const & PrototypeEffect() const
-			{
-				return prototype_effect_;
-			}
-
 			uint32_t NumParameters() const
 			{
 				return static_cast<uint32_t>(params_.size());
@@ -632,14 +620,14 @@ namespace KlayGE
 				return techniques_[n];
 			}
 
-			uint32_t NumShaders() const
+			uint32_t NumShaderFragments() const
 			{
-				return shaders_ ? static_cast<uint32_t>(shaders_->size()) : 0;
+				return shader_frags_ ? static_cast<uint32_t>(shader_frags_->size()) : 0;
 			}
-			RenderShaderFunc const & ShaderByIndex(uint32_t n) const
+			RenderShaderFragment const & ShaderFragmentByIndex(uint32_t n) const
 			{
-				BOOST_ASSERT(n < this->NumShaders());
-				return (*shaders_)[n];
+				BOOST_ASSERT(n < this->NumShaderFragments());
+				return (*shader_frags_)[n];
 			}
 
 			uint32_t AddShaderDesc(ShaderDesc const & sd);
@@ -658,6 +646,9 @@ namespace KlayGE
 
 			std::string const & TypeName(uint32_t code) const;
 
+			void GenHLSLShaderText();
+			std::string const & HLSLShaderText() const;
+
 		private:
 			void RecursiveIncludeNode(XMLNodePtr const & root, std::vector<std::string>& include_names) const;
 			void InsertIncludeNodes(XMLDocument& target_doc, XMLNodePtr const & target_root,
@@ -672,9 +663,8 @@ namespace KlayGE
 			std::vector<RenderTechniquePtr> techniques_;
 
 			std::shared_ptr<std::vector<std::pair<std::pair<std::string, std::string>, bool>>> macros_;
-			std::shared_ptr<std::vector<RenderShaderFunc>> shaders_;
-
-			RenderEffectPtr prototype_effect_;
+			std::shared_ptr<std::vector<RenderShaderFragment>> shader_frags_;
+			std::shared_ptr<std::string> hlsl_shader_;
 
 			std::shared_ptr<std::vector<ShaderDesc>> shader_descs_;
 

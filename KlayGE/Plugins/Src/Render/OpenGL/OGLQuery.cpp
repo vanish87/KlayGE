@@ -99,17 +99,7 @@ namespace KlayGE
 		OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		if (!re.HackForAMD())
 		{
-			if (glloader_GL_VERSION_3_0())
-			{
-				glBeginConditionalRender(query_, GL_QUERY_WAIT);
-			}
-			else
-			{
-				if (glloader_GL_NV_conditional_render())
-				{
-					glBeginConditionalRenderNV(query_, GL_QUERY_WAIT_NV);
-				}
-			}
+			glBeginConditionalRender(query_, GL_QUERY_WAIT);
 		}
 	}
 
@@ -118,17 +108,7 @@ namespace KlayGE
 		OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		if (!re.HackForAMD())
 		{
-			if (glloader_GL_VERSION_3_0())
-			{
-				glEndConditionalRender();
-			}
-			else
-			{
-				if (glloader_GL_NV_conditional_render())
-				{
-					glEndConditionalRenderNV();
-				}
-			}
+			glEndConditionalRender();
 		}
 	}
 
@@ -177,5 +157,56 @@ namespace KlayGE
 		GLuint64 ret;
 		glGetQueryObjectui64v(query_, GL_QUERY_RESULT, &ret);
 		return static_cast<uint64_t>(ret) * 1e-9;
+	}
+
+
+	OGLSOStatisticsQuery::OGLSOStatisticsQuery()
+	{
+		glGenQueries(1, &primitive_written_query_);
+		glGenQueries(1, &primitive_generated_query_);
+	}
+
+	OGLSOStatisticsQuery::~OGLSOStatisticsQuery()
+	{
+		glDeleteQueries(1, &primitive_written_query_);
+		glDeleteQueries(1, &primitive_generated_query_);
+	}
+
+	void OGLSOStatisticsQuery::Begin()
+	{
+		glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, primitive_written_query_);
+		glBeginQuery(GL_PRIMITIVES_GENERATED, primitive_generated_query_);
+	}
+
+	void OGLSOStatisticsQuery::End()
+	{
+		glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+		glEndQuery(GL_PRIMITIVES_GENERATED);
+	}
+
+	uint64_t OGLSOStatisticsQuery::NumPrimitivesWritten()
+	{
+		GLuint available = 0;
+		while (!available)
+		{
+			glGetQueryObjectuiv(primitive_written_query_, GL_QUERY_RESULT_AVAILABLE, &available);
+		}
+
+		GLuint64 ret;
+		glGetQueryObjectui64v(primitive_written_query_, GL_QUERY_RESULT, &ret);
+		return ret;
+	}
+
+	uint64_t OGLSOStatisticsQuery::PrimitivesGenerated()
+	{
+		GLuint available = 0;
+		while (!available)
+		{
+			glGetQueryObjectuiv(primitive_generated_query_, GL_QUERY_RESULT_AVAILABLE, &available);
+		}
+
+		GLuint64 ret;
+		glGetQueryObjectui64v(primitive_generated_query_, GL_QUERY_RESULT, &ret);
+		return ret;
 	}
 }

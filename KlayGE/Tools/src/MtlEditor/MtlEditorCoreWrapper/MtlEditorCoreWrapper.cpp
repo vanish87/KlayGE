@@ -5,7 +5,6 @@
 #pragma warning(disable: 4793) // boost::signals2::detail::do_postconstruct/do_predestruct can't have /clr
 #endif
 #include "../MtlEditorCore/MtlEditorCore.hpp"
-#include "../MtlEditorCore/Commands.hpp"
 #ifdef KLAYGE_COMPILER_MSVC
 #pragma warning(pop)
 #endif
@@ -13,6 +12,7 @@
 #include "MtlEditorCoreWrapper.hpp"
 
 using namespace System;
+using namespace System::Runtime::InteropServices;
 
 namespace KlayGE
 {
@@ -23,66 +23,6 @@ namespace KlayGE
 		std::string std_str = char_str;
 		Marshal::FreeHGlobal(IntPtr(static_cast<void*>(const_cast<char*>(char_str))));
 		return std_str;
-	}
-
-	String^ StdToString(std::string const & str)
-	{
-		return gcnew String(str.c_str());
-	}
-
-	String^ WStdToString(std::wstring const & str)
-	{
-		return gcnew String(str.c_str());
-	}
-
-	float LinearToSRGB(float linear)
-	{
-		if (linear < 0.0031308f)
-		{
-			return 12.92f * linear;
-		}
-		else
-		{
-			const float ALPHA = 0.055f;
-			return (1 + ALPHA) * pow(linear, 1 / 2.4f) - ALPHA;
-		}
-	}
-
-	float SRGBToLinear(float srgb)
-	{
-		if (srgb < 0.04045f)
-		{
-			return srgb / 12.92f;
-		}
-		else
-		{
-			const float ALPHA = 0.055f;
-			return pow((srgb + ALPHA) / (1 + ALPHA), 2.4f);
-		}
-	}
-
-	Windows::Media::Color FloatPtrToColor(float const * clr)
-	{
-		float temp[3];
-		for (int i = 0; i < 3; ++ i)
-		{
-			temp[i] = LinearToSRGB(clr[i]);
-		}
-		return Windows::Media::Color::FromArgb(255,
-			static_cast<uint8_t>(Math::Max(Math::Min(static_cast<int>(temp[0] * 255 + 0.5f), 255), 0)),
-			static_cast<uint8_t>(Math::Max(Math::Min(static_cast<int>(temp[1] * 255 + 0.5f), 255), 0)),
-			static_cast<uint8_t>(Math::Max(Math::Min(static_cast<int>(temp[2] * 255 + 0.5f), 255), 0)));
-	}
-
-	void ColorToFloatPtr(Windows::Media::Color clr, float output[3])
-	{
-		output[0] = clr.R / 255.0f;
-		output[1] = clr.G / 255.0f;
-		output[2] = clr.B / 255.0f;
-		for (int i = 0; i < 3; ++i)
-		{
-			output[i] = SRGBToLinear(output[i]);
-		}
 	}
 
 
@@ -100,7 +40,6 @@ namespace KlayGE
 
 	MtlEditorCoreWrapper::~MtlEditorCoreWrapper()
 	{
-		core_->Destroy();
 		delete core_;
 	}
 
@@ -114,9 +53,9 @@ namespace KlayGE
 		core_->Resize(width, height);
 	}
 
-	void MtlEditorCoreWrapper::OpenModel(String^ name)
+	bool MtlEditorCoreWrapper::OpenModel(String^ name)
 	{
-		core_->OpenModel(StringToStd(name));
+		return core_->OpenModel(StringToStd(name));
 	}
 
 	void MtlEditorCoreWrapper::SaveModel(String^ name)
@@ -124,9 +63,49 @@ namespace KlayGE
 		core_->SaveAsModel(StringToStd(name));
 	}
 
+	System::String^ MtlEditorCoreWrapper::SkyboxName()
+	{
+		return gcnew String(core_->SkyboxName());
+	}
+
+	void MtlEditorCoreWrapper::SkyboxName(String^ name)
+	{
+		core_->SkyboxName(StringToStd(name));
+	}
+
+	void MtlEditorCoreWrapper::DisplaySSVO(bool ssvo)
+	{
+		core_->DisplaySSVO(ssvo);
+	}
+
+	void MtlEditorCoreWrapper::DisplayHDR(bool hdr)
+	{
+		core_->DisplayHDR(hdr);
+	}
+
+	void MtlEditorCoreWrapper::DisplayAA(bool aa)
+	{
+		core_->DisplayAA(aa);
+	}
+
+	void MtlEditorCoreWrapper::DisplayGamma(bool gamma)
+	{
+		core_->DisplayGamma(gamma);
+	}
+
+	void MtlEditorCoreWrapper::DisplayColorGrading(bool cg)
+	{
+		core_->DisplayColorGrading(cg);
+	}
+
 	unsigned int MtlEditorCoreWrapper::NumFrames()
 	{
 		return core_->NumFrames();
+	}
+
+	float MtlEditorCoreWrapper::CurrFrame()
+	{
+		return core_->CurrFrame();
 	}
 
 	void MtlEditorCoreWrapper::CurrFrame(float frame)
@@ -144,9 +123,24 @@ namespace KlayGE
 		core_->SkinningOn(on ? true : false);
 	}
 
+	void MtlEditorCoreWrapper::LightOn(int on)
+	{
+		core_->LightOn(on ? true : false);
+	}
+
 	void MtlEditorCoreWrapper::FPSCameraOn(int on)
 	{
 		core_->FPSCameraOn(on ? true : false);
+	}
+
+	void MtlEditorCoreWrapper::LineModeOn(int on)
+	{
+		core_->LineModeOn(on ? true : false);
+	}
+
+	void MtlEditorCoreWrapper::ImposterModeOn(int on)
+	{
+		core_->ImposterModeOn(on ? true : false);
 	}
 
 	void MtlEditorCoreWrapper::Visualize(int index)
@@ -181,7 +175,22 @@ namespace KlayGE
 
 	String^ MtlEditorCoreWrapper::MeshName(uint32_t index)
 	{
-		return WStdToString(core_->MeshName(index));
+		return gcnew String(core_->MeshName(index));
+	}
+
+	uint32_t MtlEditorCoreWrapper::NumVertexStreams(uint32_t mesh_id)
+	{
+		return core_->NumVertexStreams(mesh_id);
+	}
+
+	uint32_t MtlEditorCoreWrapper::NumVertexStreamUsages(uint32_t mesh_id, uint32_t stream_index)
+	{
+		return core_->NumVertexStreamUsages(mesh_id, stream_index);
+	}
+
+	uint32_t MtlEditorCoreWrapper::VertexStreamUsage(uint32_t mesh_id, uint32_t stream_index, uint32_t usage_index)
+	{
+		return core_->VertexStreamUsage(mesh_id, stream_index, usage_index);
 	}
 
 	uint32_t MtlEditorCoreWrapper::MaterialID(uint32_t mesh_id)
@@ -189,29 +198,38 @@ namespace KlayGE
 		return core_->MaterialID(mesh_id);
 	}
 
-	Windows::Media::Color MtlEditorCoreWrapper::AmbientMaterial(uint32_t mtl_id)
+	uint32_t MtlEditorCoreWrapper::NumMaterials()
 	{
-		return FloatPtrToColor(&core_->AmbientMaterial(mtl_id).x());
+		return core_->NumMaterials();
 	}
 
-	Windows::Media::Color MtlEditorCoreWrapper::DiffuseMaterial(uint32_t mtl_id)
+	System::String^ MtlEditorCoreWrapper::MaterialName(uint32_t mtl_id)
 	{
-		return FloatPtrToColor(&core_->DiffuseMaterial(mtl_id).x());
+		return gcnew String(core_->MaterialName(mtl_id));
 	}
 
-	Windows::Media::Color MtlEditorCoreWrapper::SpecularMaterial(uint32_t mtl_id)
+	array<float>^ MtlEditorCoreWrapper::AlbedoMaterial(uint32_t mtl_id)
 	{
-		return FloatPtrToColor(&core_->SpecularMaterial(mtl_id).x());
+		auto const & clr = core_->AlbedoMaterial(mtl_id);
+		array<float>^ ret = { clr.x(), clr.y(), clr.z() };
+		return ret;
 	}
 
-	float MtlEditorCoreWrapper::ShininessMaterial(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::MetalnessMaterial(uint32_t mtl_id)
 	{
-		return core_->ShininessMaterial(mtl_id);
+		return core_->MetalnessMaterial(mtl_id);
 	}
 
-	Windows::Media::Color MtlEditorCoreWrapper::EmitMaterial(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::GlossinessMaterial(uint32_t mtl_id)
 	{
-		return FloatPtrToColor(&core_->EmitMaterial(mtl_id).x());
+		return core_->GlossinessMaterial(mtl_id);
+	}
+
+	array<float>^ MtlEditorCoreWrapper::EmissiveMaterial(uint32_t mtl_id)
+	{
+		auto const & clr = core_->EmissiveMaterial(mtl_id);
+		array<float>^ ret = { clr.x(), clr.y(), clr.z() };
+		return ret;
 	}
 
 	float MtlEditorCoreWrapper::OpacityMaterial(uint32_t mtl_id)
@@ -219,127 +237,170 @@ namespace KlayGE
 		return core_->OpacityMaterial(mtl_id);
 	}
 
-	String^ MtlEditorCoreWrapper::DiffuseTexture(uint32_t mtl_id)
+	String^ MtlEditorCoreWrapper::Texture(uint32_t mtl_id, TextureSlot slot)
 	{
-		return StdToString(core_->DiffuseTexture(mtl_id));
+		return gcnew String(core_->Texture(mtl_id, static_cast<uint32_t>(slot)));
 	}
 
-	String^MtlEditorCoreWrapper::SpecularTexture(uint32_t mtl_id)
+	uint32_t MtlEditorCoreWrapper::DetailMode(uint32_t mtl_id)
 	{
-		return StdToString(core_->SpecularTexture(mtl_id));
+		return core_->DetailMode(mtl_id);
 	}
 
-	String^ MtlEditorCoreWrapper::ShininessTexture(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::HeightOffset(uint32_t mtl_id)
 	{
-		return StdToString(core_->ShininessTexture(mtl_id));
+		return core_->HeightOffset(mtl_id);
 	}
 
-	String^ MtlEditorCoreWrapper::NormalTexture(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::HeightScale(uint32_t mtl_id)
 	{
-		return StdToString(core_->NormalTexture(mtl_id));
+		return core_->HeightScale(mtl_id);
 	}
 
-	String^ MtlEditorCoreWrapper::HeightTexture(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::EdgeTessHint(uint32_t mtl_id)
 	{
-		return StdToString(core_->HeightTexture(mtl_id));
+		return core_->EdgeTessHint(mtl_id);
 	}
 
-	String^ MtlEditorCoreWrapper::EmitTexture(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::InsideTessHint(uint32_t mtl_id)
 	{
-		return StdToString(core_->EmitTexture(mtl_id));
+		return core_->InsideTessHint(mtl_id);
 	}
 
-	String^ MtlEditorCoreWrapper::OpacityTexture(uint32_t mtl_id)
+	float MtlEditorCoreWrapper::MinTess(uint32_t mtl_id)
 	{
-		return StdToString(core_->OpacityTexture(mtl_id));
+		return core_->MinTess(mtl_id);
 	}
 
-	uint32_t MtlEditorCoreWrapper::NumHistroyCmds()
+	float MtlEditorCoreWrapper::MaxTess(uint32_t mtl_id)
 	{
-		return core_->NumHistroyCmds();
+		return core_->MaxTess(mtl_id);
 	}
 
-	System::String^ MtlEditorCoreWrapper::HistroyCmdName(uint32_t index)
+	bool MtlEditorCoreWrapper::TransparentMaterial(uint32_t mtl_id)
 	{
-		return StdToString(core_->HistroyCmdName(index));
+		return core_->TransparentMaterial(mtl_id);
 	}
 
-	uint32_t MtlEditorCoreWrapper::EndCmdIndex()
+	float MtlEditorCoreWrapper::AlphaTestMaterial(uint32_t mtl_id)
 	{
-		return core_->NumHistroyCmds();
+		return core_->AlphaTestMaterial(mtl_id);
 	}
 
-	void MtlEditorCoreWrapper::AmbientMaterial(uint32_t mtl_id, System::Windows::Media::Color value)
+	bool MtlEditorCoreWrapper::SSSMaterial(uint32_t mtl_id)
 	{
-		float clr[3];
-		ColorToFloatPtr(value, clr);
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetAmbientMaterial(core_, mtl_id, clr)));
+		return core_->SSSMaterial(mtl_id);
 	}
 
-	void MtlEditorCoreWrapper::DiffuseMaterial(uint32_t mtl_id, System::Windows::Media::Color value)
+	void MtlEditorCoreWrapper::MaterialID(uint32_t mesh_id, uint32_t mtl_id)
 	{
-		float clr[3];
-		ColorToFloatPtr(value, clr);
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetDiffuseMaterial(core_, mtl_id, clr)));
+		core_->MaterialID(mesh_id, mtl_id);
 	}
 
-	void MtlEditorCoreWrapper::SpecularMaterial(uint32_t mtl_id, System::Windows::Media::Color value)
+	void MtlEditorCoreWrapper::MaterialName(uint32_t mtl_id, System::String^ name)
 	{
-		float clr[3];
-		ColorToFloatPtr(value, clr);
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetSpecularMaterial(core_, mtl_id, clr)));
+		core_->MaterialName(mtl_id, StringToStd(name));
 	}
 
-	void MtlEditorCoreWrapper::ShininessMaterial(uint32_t mtl_id, float value)
+	void MtlEditorCoreWrapper::AlbedoMaterial(uint32_t mtl_id, array<float>^ value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetShininessMaterial(core_, mtl_id, value)));
+		float r = value[0];
+		float g = value[1];
+		float b = value[2];
+		core_->AlbedoMaterial(mtl_id, float3(r, g, b));
 	}
 
-	void MtlEditorCoreWrapper::EmitMaterial(uint32_t mtl_id, System::Windows::Media::Color value)
+	void MtlEditorCoreWrapper::MetalnessMaterial(uint32_t mtl_id, float value)
 	{
-		float clr[3];
-		ColorToFloatPtr(value, clr);
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetEmitMaterial(core_, mtl_id, clr)));
+		core_->MetalnessMaterial(mtl_id, value);
+	}
+
+	void MtlEditorCoreWrapper::GlossinessMaterial(uint32_t mtl_id, float value)
+	{
+		core_->GlossinessMaterial(mtl_id, value);
+	}
+
+	void MtlEditorCoreWrapper::EmissiveMaterial(uint32_t mtl_id, array<float>^ value)
+	{
+		float r = value[0];
+		float g = value[1];
+		float b = value[2];
+		core_->EmissiveMaterial(mtl_id, float3(r, g, b));
 	}
 
 	void MtlEditorCoreWrapper::OpacityMaterial(uint32_t mtl_id, float value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetOpacityMaterial(core_, mtl_id, value)));
+		core_->OpacityMaterial(mtl_id, value);
 	}
 
-	void MtlEditorCoreWrapper::DiffuseTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::Texture(uint32_t mtl_id, TextureSlot slot, String^ name)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetDiffuseTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->Texture(mtl_id, static_cast<uint32_t>(slot), StringToStd(name));
 	}
 
-	void MtlEditorCoreWrapper::SpecularTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::DetailMode(uint32_t mtl_id, uint32_t value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetSpecularTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->DetailMode(mtl_id, value);
 	}
 
-	void MtlEditorCoreWrapper::ShininessTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::HeightOffset(uint32_t mtl_id, float value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetShininessTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->HeightOffset(mtl_id, value);
 	}
 
-	void MtlEditorCoreWrapper::NormalTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::HeightScale(uint32_t mtl_id, float value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetNormalTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->HeightScale(mtl_id, value);
 	}
 
-	void MtlEditorCoreWrapper::HeightTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::EdgeTessHint(uint32_t mtl_id, float value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetHeightTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->EdgeTessHint(mtl_id, value);
 	}
 
-	void MtlEditorCoreWrapper::EmitTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::InsideTessHint(uint32_t mtl_id, float value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetEmitTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->InsideTessHint(mtl_id, value);
 	}
 
-	void MtlEditorCoreWrapper::OpacityTexture(uint32_t mtl_id, String^ name)
+	void MtlEditorCoreWrapper::MinTess(uint32_t mtl_id, float value)
 	{
-		core_->ExecuteCommand(MtlEditorCommandPtr(new MtlEditorCommandSetOpacityTexture(core_, mtl_id, StringToStd(name).c_str())));
+		core_->MinTess(mtl_id, value);
+	}
+
+	void MtlEditorCoreWrapper::MaxTess(uint32_t mtl_id, float value)
+	{
+		core_->MaxTess(mtl_id, value);
+	}
+
+	void MtlEditorCoreWrapper::TransparentMaterial(uint32_t mtl_id, bool value)
+	{
+		core_->TransparentMaterial(mtl_id, value);
+	}
+
+	void MtlEditorCoreWrapper::AlphaTestMaterial(uint32_t mtl_id, float value)
+	{
+		core_->AlphaTestMaterial(mtl_id, value);
+	}
+
+	void MtlEditorCoreWrapper::SSSMaterial(uint32_t mtl_id, bool value)
+	{
+		core_->SSSMaterial(mtl_id, value);
+	}
+
+	uint32_t MtlEditorCoreWrapper::CopyMaterial(uint32_t mtl_id)
+	{
+		return core_->CopyMaterial(mtl_id);
+	}
+
+	uint32_t MtlEditorCoreWrapper::ImportMaterial(System::String^ name)
+	{
+		return core_->ImportMaterial(StringToStd(name));
+	}
+
+	void MtlEditorCoreWrapper::ExportMaterial(uint32_t mtl_id, String^ name)
+	{
+		core_->ExportMaterial(mtl_id, StringToStd(name));
 	}
 
 	uint32_t MtlEditorCoreWrapper::SelectedMesh()
@@ -349,21 +410,14 @@ namespace KlayGE
 
 	void MtlEditorCoreWrapper::SelectMesh(uint32_t mesh_id)
 	{
-		return core_->SelectMesh(mesh_id);
+		core_->SelectMesh(mesh_id);
 	}
 
-	void MtlEditorCoreWrapper::Undo()
+	void MtlEditorCoreWrapper::UpdateSelectEntityCallback(UpdateSelectEntityDelegate^ callback)
 	{
-		core_->Undo();
-	}
+		update_select_entity_delegate_ = callback;
 
-	void MtlEditorCoreWrapper::Redo()
-	{
-		core_->Redo();
-	}
-
-	void MtlEditorCoreWrapper::ClearHistroy()
-	{
-		core_->ClearHistroy();
+		IntPtr ip = Marshal::GetFunctionPointerForDelegate(callback);
+		core_->UpdateSelectEntityCallback(static_cast<MtlEditorCore::UpdateSelectEntityEvent>(ip.ToPointer()));
 	}
 }

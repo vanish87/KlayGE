@@ -121,26 +121,21 @@ DeferredRenderingApp::DeferredRenderingApp()
 	ResLoader::Instance().AddPath("../../Samples/media/DeferredRendering");
 }
 
-bool DeferredRenderingApp::ConfirmDevice() const
-{
-	return true;
-}
-
 void DeferredRenderingApp::OnCreate()
 {
 	this->LookAt(float3(-14.5f, 18, -3), float3(-13.6f, 17.55f, -2.8f));
 	this->Proj(0.1f, 500.0f);
 
-	std::function<TexturePtr()> c_cube_tl = ASyncLoadTexture("Lake_CraterLake03_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
-	std::function<TexturePtr()> y_cube_tl = ASyncLoadTexture("Lake_CraterLake03_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
-	std::function<RenderablePtr()> model_ml = ASyncLoadModel("sponza_crytek.7z//sponza_crytek.meshml", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr c_cube = ASyncLoadTexture("Lake_CraterLake03_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr y_cube = ASyncLoadTexture("Lake_CraterLake03_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
+	RenderablePtr scene_model = ASyncLoadModel("sponza_crytek.meshml", EAH_GPU_Read | EAH_Immutable);
 
 	font_ = SyncLoadFont("gkai00mp.kfont");
 
 	deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
-	ambient_light->SkylightTex(y_cube_tl, c_cube_tl);
+	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
 	ambient_light->AddToSceneManager();
 	
@@ -168,7 +163,7 @@ void DeferredRenderingApp::OnCreate()
 
 	spot_light_[2] = MakeSharedPtr<SpotLightSource>();
 	spot_light_[2]->Attrib(LightSource::LSA_IndirectLighting);
-	spot_light_[2]->Color(float3(6.0f, 5.88f, 4.38f) * 2.0f);
+	spot_light_[2]->Color(float3(6.0f, 5.88f, 4.38f) * 10.0f);
 	spot_light_[2]->Position(float3(0.0f, 43.2f, -5.9f));
 	spot_light_[2]->Direction(float3(0.0f, -1, 0.1f));
 	spot_light_[2]->Falloff(float3(1, 0.1f, 0));
@@ -184,7 +179,7 @@ void DeferredRenderingApp::OnCreate()
 	spot_light_src_[2] = MakeSharedPtr<SceneObjectLightSourceProxy>(spot_light_[2]);
 	spot_light_src_[2]->AddToSceneManager();
 
-	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(model_ml, SceneObject::SOA_Cullable, 0);
+	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(scene_model, SceneObject::SOA_Cullable);
 	scene_obj->AddToSceneManager();
 
 	fpcController_.Scalers(0.05f, 0.5f);
@@ -239,7 +234,7 @@ void DeferredRenderingApp::OnCreate()
 	this->CtrlCameraHandler(*dialog_->Control<UICheckBox>(id_ctrl_camera_));
 
 	sky_box_ = MakeSharedPtr<SceneObjectSkyBox>();
-	checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube_tl, c_cube_tl);
+	checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube, c_cube);
 	sky_box_->AddToSceneManager();
 
 	ps_ = SyncLoadParticleSystem("Fire.psml");
@@ -437,11 +432,11 @@ uint32_t DeferredRenderingApp::DoUpdate(uint32_t pass)
 		{
 			float3 clr = MathLib::normalize(float3(sin(this->AppTime() * 0.3f + i * 10.0f),
 				cos(this->AppTime() * 0.2f + 0.5f + i * 20.0f),
-				sin(this->AppTime() * 0.1f + 1.0f + i * 30.0f))) * 0.1f + 0.1f;
+				sin(this->AppTime() * 0.1f + 1.0f + i * 30.0f))) * 0.3f + 0.1f;
 			particle_lights_[i]->Color(clr);
-			float factor = 50.0f / particle_lights_.size() + (this->AppTime() * 0.005f);
-			particle_lights_[i]->Position(float3(8 * sin(factor * i),
-				5.0f + 10.0f / particle_lights_.size() * i, 8 * cos(factor * i)));
+			float factor = (50.0f + this->AppTime() * 0.6f) / particle_lights_.size();
+			particle_lights_[i]->Position(float3(6.0f * sin(factor * i),
+				5.0f + 10.0f / particle_lights_.size() * i, 6.0f * cos(factor * i) + 1));
 		}
 	}
 

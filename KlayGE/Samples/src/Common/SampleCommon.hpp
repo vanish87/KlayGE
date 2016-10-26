@@ -26,13 +26,4 @@ inline int EntryFunc()
 	return SampleMain();
 }
 
-#ifdef KLAYGE_PLATFORM_WINDOWS_RUNTIME
-[Platform::MTAThread]
-int main(Platform::Array<Platform::String^>^ /*args*/)
-{
-	return EntryFunc();
-}
-#endif
-
-
 #endif		// _SAMPLECOMMON_HPP

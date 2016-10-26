@@ -29,33 +29,6 @@
 
 namespace KlayGE
 {
-	class NullGraphicsBuffer : public GraphicsBuffer
-	{
-	public:
-		NullGraphicsBuffer()
-			: GraphicsBuffer(BU_Static, 0, 0)
-		{
-		}
-
-		void* Map(BufferAccess /*ba*/)
-		{
-			return nullptr;
-		}
-
-		void Unmap()
-		{
-		}
-
-		void CopyToBuffer(GraphicsBuffer& /*rhs*/)
-		{
-		}
-
-		RenderViewPtr CreateRenderView(uint32_t /*width*/, uint32_t /*height*/)
-		{
-			return RenderView::NullObject();
-		}
-	};
-
 	GraphicsBuffer::GraphicsBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte)
 			: usage_(usage), access_hint_(access_hint), size_in_byte_(size_in_byte)
 	{
@@ -63,11 +36,5 @@ namespace KlayGE
 
 	GraphicsBuffer::~GraphicsBuffer()
 	{
-	}
-
-	GraphicsBufferPtr GraphicsBuffer::NullObject()
-	{
-		static GraphicsBufferPtr obj = MakeSharedPtr<NullGraphicsBuffer>();
-		return obj;
 	}
 }

@@ -11,8 +11,6 @@ class AreaLightingApp : public KlayGE::App3DFramework
 public:
 	AreaLightingApp();
 
-	bool ConfirmDevice() const;
-
 private:
 	void OnCreate();
 
@@ -33,7 +31,7 @@ private:
 
 	KlayGE::FirstPersonCameraController fpcController_;
 
-	KlayGE::DeferredRenderingLayerPtr deferred_rendering_;
+	KlayGE::DeferredRenderingLayer* deferred_rendering_;
 
 	KlayGE::LightSourcePtr point_light_;
 	KlayGE::SceneObjectPtr point_light_src_;

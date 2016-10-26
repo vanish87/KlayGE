@@ -13,8 +13,6 @@ class ScenePlayerApp : public KlayGE::App3DFramework
 public:
 	ScenePlayerApp();
 
-	bool ConfirmDevice() const;
-
 private:
 	void OnCreate();
 	void OnResize(KlayGE::uint32_t width, KlayGE::uint32_t height);
@@ -46,7 +44,7 @@ private:
 
 	KlayGE::FirstPersonCameraController fpcController_;
 
-	KlayGE::DeferredRenderingLayerPtr deferred_rendering_;
+	KlayGE::DeferredRenderingLayer* deferred_rendering_;
 
 	KlayGE::UIDialogPtr dialog_;
 

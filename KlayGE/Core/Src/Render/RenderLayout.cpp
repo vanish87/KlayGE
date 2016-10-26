@@ -20,14 +20,6 @@
 
 namespace KlayGE
 {
-	class NullRenderLayout : public RenderLayout
-	{
-	public:
-		NullRenderLayout()
-		{
-		}
-	};
-
 	RenderLayout::RenderLayout()
 			: topo_type_(TT_PointList),
 				index_format_(EF_Unknown),
@@ -45,12 +37,6 @@ namespace KlayGE
 
 	RenderLayout::~RenderLayout()
 	{
-	}
-
-	RenderLayoutPtr RenderLayout::NullObject()
-	{
-		static RenderLayoutPtr obj = MakeSharedPtr<NullRenderLayout>();
-		return obj;
 	}
 
 	void RenderLayout::NumVertices(uint32_t n)
@@ -94,6 +80,8 @@ namespace KlayGE
 					vertex_streams_[i].vertex_size = size;
 					vertex_streams_[i].type = type;
 					vertex_streams_[i].freq = freq;
+
+					streams_dirty_ = true;
 					return;
 				}
 			}
@@ -170,6 +158,7 @@ namespace KlayGE
 	void RenderLayout::InstanceStream(GraphicsBufferPtr const & buffer)
 	{
 		instance_stream_.stream = buffer;
+		streams_dirty_ = true;
 	}
 
 	void RenderLayout::NumInstances(uint32_t n)

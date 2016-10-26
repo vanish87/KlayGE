@@ -33,12 +33,11 @@ namespace KlayGE
 	public:
 		explicit SceneObjectHelper(uint32_t attrib);
 		SceneObjectHelper(RenderablePtr const & renderable, uint32_t attrib);
-		SceneObjectHelper(std::function<RenderablePtr()> const & renderable_rl, uint32_t attrib, int dummy);
 		virtual ~SceneObjectHelper()
 		{
 		}
 
-		virtual void OnAttachRenderable(bool add_to_scene) KLAYGE_OVERRIDE;
+		virtual void OnAttachRenderable(bool add_to_scene) override;
 	};
 
 	class KLAYGE_CORE_API SceneObjectSkyBox : public SceneObjectHelper
@@ -49,11 +48,9 @@ namespace KlayGE
 		{
 		}
 
-		void Technique(RenderTechniquePtr const & tech);
+		void Technique(RenderEffectPtr const & effect, RenderTechnique* tech);
 		void CubeMap(TexturePtr const & cube);
-		void CubeMap(std::function<TexturePtr()> const & cube);
 		void CompressedCubeMap(TexturePtr const & y_cube, TexturePtr const & c_cube);
-		void CompressedCubeMap(std::function<TexturePtr()> const & y_cube, std::function<TexturePtr()> const & c_cube);
 	};
 
 	class KLAYGE_CORE_API SceneObjectLightSourceProxy : public SceneObjectHelper
@@ -64,7 +61,7 @@ namespace KlayGE
 		SceneObjectLightSourceProxy(LightSourcePtr const & light,
 			std::function<StaticMeshPtr(RenderModelPtr const &, std::wstring const &)> CreateMeshFactoryFunc);
 
-		virtual bool MainThreadUpdate(float app_time, float elapsed_time) KLAYGE_OVERRIDE;
+		virtual bool MainThreadUpdate(float app_time, float elapsed_time) override;
 
 		void Scaling(float x, float y, float z);
 		void Scaling(float3 const & s);
@@ -88,7 +85,7 @@ namespace KlayGE
 		SceneObjectCameraProxy(CameraPtr const & camera,
 			std::function<StaticMeshPtr(RenderModelPtr const &, std::wstring const &)> CreateMeshFactoryFunc);
 
-		virtual void SubThreadUpdate(float app_time, float elapsed_time) KLAYGE_OVERRIDE;
+		virtual void SubThreadUpdate(float app_time, float elapsed_time) override;
 
 		void Scaling(float x, float y, float z);
 		void Scaling(float3 const & s);

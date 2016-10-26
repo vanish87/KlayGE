@@ -53,36 +53,16 @@ namespace KlayGE
 {
 	bool MeshMLObj::Material::operator==(MeshMLObj::Material const & rhs) const
 	{
-		bool same = (ambient == rhs.ambient) && (diffuse == rhs.diffuse)
-			&& (specular == rhs.specular) && (emit == rhs.emit)
-			&& (opacity == rhs.opacity) && (shininess == rhs.shininess)
-			&& (texture_slots.size() == rhs.texture_slots.size());
-		if (same)
-		{
-			for (size_t i = 0; i < texture_slots.size(); ++ i)
-			{
-				bool found = false;
-				for (size_t j = 0; j < rhs.texture_slots.size(); ++ j)
-				{
-					if (texture_slots[i] == rhs.texture_slots[j])
-					{
-						found = true;
-						break;
-					}
-				}
-
-				if (!found)
-				{
-					return false;
-				}
-			}
-
-			return true;
-		}
-		else
-		{
-			return false;
-		}
+		return (albedo == rhs.albedo)
+			&& (metalness == rhs.metalness) && (glossiness == rhs.glossiness)
+			&& (emissive == rhs.emissive)
+			&& (transparent == rhs.transparent)
+			&& (alpha_test == rhs.alpha_test)
+			&& (sss == rhs.sss)
+			&& (detail_mode == rhs.detail_mode)
+			&& (height_offset_scale == rhs.height_offset_scale)
+			&& (tess_factors == rhs.tess_factors)
+			&& (tex_names == rhs.tex_names);
 	}
 
 	std::pair<std::pair<Quaternion, Quaternion>, float> MeshMLObj::Keyframes::Frame(float frame) const
@@ -112,7 +92,7 @@ namespace KlayGE
 	int MeshMLObj::AllocJoint()
 	{
 		int id = static_cast<int>(joints_.size());
-		KLAYGE_EMPLACE(joints_, id, Joint());
+		joints_.emplace(id, Joint());
 		return id;
 	}
 
@@ -155,38 +135,39 @@ namespace KlayGE
 		return id;
 	}
 
-	void MeshMLObj::SetMaterial(int mtl_id, float3 const & ambient, float3 const & diffuse,
-			float3 const & specular, float3 const & emit, float opacity, float shininess)
+	void MeshMLObj::SetMaterial(int mtl_id, std::string const & name, float4 const & albedo, float metalness, float glossiness,
+		float3 const & emissive, bool transparent, float alpha_test, bool sss)
 	{
 		BOOST_ASSERT(static_cast<int>(materials_.size()) > mtl_id);
 
 		Material& mtl = materials_[mtl_id];
-		mtl.ambient = ambient;
-		mtl.diffuse = diffuse;
-		mtl.specular = specular;
-		mtl.emit = emit;
-		mtl.opacity = opacity;
-		mtl.shininess = shininess;
+		mtl.name = name;
+		mtl.albedo = albedo;
+		mtl.metalness = metalness;
+		mtl.glossiness = glossiness;
+		mtl.emissive = emissive;
+		mtl.transparent = transparent;
+		mtl.alpha_test = alpha_test;
+		mtl.sss = sss;
 	}
 
-	int MeshMLObj::AllocTextureSlot(int mtl_id)
+	void MeshMLObj::SetDetailMaterial(int mtl_id, Material::SurfaceDetailMode detail_mode, float height_offset, float height_scale,
+			float edge_tess_hint, float inside_tess_hint, float min_tess, float max_tess)
 	{
 		BOOST_ASSERT(static_cast<int>(materials_.size()) > mtl_id);
 
 		Material& mtl = materials_[mtl_id];
-		int id = static_cast<int>(mtl.texture_slots.size());
-		mtl.texture_slots.push_back(TextureSlot());
-		return id;
+		mtl.detail_mode = detail_mode;
+		mtl.height_offset_scale = float2(height_offset, height_scale);
+		mtl.tess_factors = float4(edge_tess_hint, inside_tess_hint, min_tess, max_tess);
 	}
 
-	void MeshMLObj::SetTextureSlot(int mtl_id, int slot_id, std::string const & type, std::string const & name)
+	void MeshMLObj::SetTextureSlot(int mtl_id, Material::TextureSlot type, std::string const & name)
 	{
 		BOOST_ASSERT(static_cast<int>(materials_.size()) > mtl_id);
-		BOOST_ASSERT(static_cast<int>(materials_[mtl_id].texture_slots.size()) > slot_id);
 
-		TextureSlot& ts = materials_[mtl_id].texture_slots[slot_id];
-		ts.first = type;
-		ts.second = name;
+		Material& mtl = materials_[mtl_id];
+		mtl.tex_names[type] = name;
 	}
 
 	int MeshMLObj::AllocMesh()
@@ -390,7 +371,7 @@ namespace KlayGE
 
 			for (int i = 0; i < static_cast<int>(joint_index_to_id.size()); ++ i)
 			{
-				KLAYGE_EMPLACE(joint_id_to_index, joint_index_to_id[i], i);
+				joint_id_to_index.emplace(joint_index_to_id[i], i);
 			}
 
 			// Replace parent_id
@@ -497,37 +478,99 @@ namespace KlayGE
 		os << "\t<materials_chunk>" << std::endl;
 		for (auto const & mtl : materials_)
 		{
-			os << "\t\t<material ambient=\"" << mtl.ambient[0]
-				<< " " << mtl.ambient[1]
-				<< " " << mtl.ambient[2]
-				<< "\" diffuse=\"" << mtl.diffuse[0]
-				<< " " << mtl.diffuse[1]
-				<< " " << mtl.diffuse[2]
-				<< "\" specular=\"" << mtl.specular[0]
-				<< " " << mtl.specular[1]
-				<< " " << mtl.specular[2]
-				<< "\" emit=\"" << mtl.emit[0]
-				<< " " << mtl.emit[1]
-				<< " " << mtl.emit[2]
-				<< "\" opacity=\"" << mtl.opacity
-				<< "\" shininess=\"" << mtl.shininess << "\"";
-
-			if (mtl.texture_slots.empty())
+			os << "\t\t<material name=\"" << mtl.name << "\">" << std::endl;
+			os << "\t\t\t<albedo color=\"" << mtl.albedo[0] << " " << mtl.albedo[1]
+				<< " " << mtl.albedo[2] << " " << mtl.albedo[3] << "\"";
+			if (!mtl.tex_names[Material::TS_Albedo].empty())
 			{
+				os << " texture=\"" << mtl.tex_names[Material::TS_Albedo] << "\"";
+			}
+			os << "/>" << std::endl;
+			if (mtl.metalness > 0)
+			{
+				os << "\t\t\t<metalness value=\"" << mtl.metalness << "\"";
+				if (!mtl.tex_names[Material::TS_Metalness].empty())
+				{
+					os << " texture=\"" << mtl.tex_names[Material::TS_Metalness] << "\"";
+				}
 				os << "/>" << std::endl;
 			}
-			else
+			if (mtl.glossiness > 0)
 			{
-				os << ">" << std::endl;
-
-				for (auto const & tl : mtl.texture_slots)
+				os << "\t\t\t<glossiness value=\"" << mtl.glossiness << "\"";
+				if (!mtl.tex_names[Material::TS_Glossiness].empty())
 				{
-					os << "\t\t\t<texture type=\"" << RemoveQuote(tl.first)
-						<< "\" name=\"" << RemoveQuote(tl.second) << "\"/>" << std::endl;
+					os << " texture=\"" << mtl.tex_names[Material::TS_Glossiness] << "\"";
 				}
-
-				os << "\t\t</material>" << std::endl;
+				os << "/>" << std::endl;
 			}
+			if ((mtl.emissive[0] != 0) || (mtl.emissive[1] != 0) || (mtl.emissive[2] != 0)
+				|| !mtl.tex_names[Material::TS_Emissive].empty())
+			{
+				os << "\t\t\t<emissive color=\"" << mtl.emissive[0] << " " << mtl.emissive[1]
+					<< " " << mtl.emissive[2] << "\"";
+				if (!mtl.tex_names[Material::TS_Emissive].empty())
+				{
+					os << " texture=\"" << mtl.tex_names[Material::TS_Emissive] << "\"";
+				}
+				os << "/>" << std::endl;
+			}
+			if (!mtl.tex_names[Material::TS_Bump].empty())
+			{
+				os << "\t\t\t<bump texture=\"" << mtl.tex_names[Material::TS_Bump] << "\"/>" << std::endl;
+			}
+			if (!mtl.tex_names[Material::TS_Normal].empty())
+			{
+				os << "\t\t\t<normal texture=\"" << mtl.tex_names[Material::TS_Normal] << "\"/>" << std::endl;
+			}
+			if (!mtl.tex_names[Material::TS_Height].empty())
+			{
+				os << "\t\t\t<height texture=\"" << mtl.tex_names[Material::TS_Height] << "\""
+					<< " offset=\"" << mtl.height_offset_scale.x() << "\""
+					<< " scale=\"" << mtl.height_offset_scale.y() << "\"/>" << std::endl;
+			}
+			if ((mtl.detail_mode != Material::SDM_Parallax)
+				|| (mtl.tess_factors.x() != 5)
+				|| (mtl.tess_factors.y() != 5)
+				|| (mtl.tess_factors.z() != 1)
+				|| (mtl.tess_factors.w() != 9))
+			{
+				os << "\t\t\t<detail mode=\"";
+				switch (mtl.detail_mode)
+				{
+				case Material::SDM_FlatTessellation:
+					os << "Flat Tessellation";
+					break;
+
+				case Material::SDM_SmoothTessellation:
+					os << "Smooth Tessellation";
+					break;
+
+				default:
+					os << "Parallax";
+					break;
+				}
+				os << "\">\n";
+				os << "\t\t\t\t<tess edge_hint=\"" << mtl.tess_factors.x()
+					<< "\" inside_hint=\"" << mtl.tess_factors.y()
+					<< "\" min=\"" << mtl.tess_factors.z()
+					<< "\" max=\"" << mtl.tess_factors.w()
+					<< "\"/>" << std::endl;
+				os << "\t\t\t</detail>" << std::endl;
+			}
+			if (mtl.transparent)
+			{
+				os << "\t\t\t<transparent value=\"1\"/>" << std::endl;
+			}
+			if (mtl.alpha_test > 0)
+			{
+				os << "\t\t\t<alpha_test value=\"" << mtl.alpha_test << "\"/>" << std::endl;
+			}
+			if (mtl.sss)
+			{
+				os << "\t\t\t<sss value=\"1\"/>" << std::endl;
+			}
+			os << "\t\t</material>" << std::endl;
 		}
 		os << "\t</materials_chunk>" << std::endl;
 	}
@@ -689,7 +732,7 @@ namespace KlayGE
 		std::map<int, int> joint_index_to_kf;
 		for (size_t i = 0; i < keyframes_.size(); ++ i)
 		{
-			KLAYGE_EMPLACE(joint_index_to_kf, keyframes_[i].joint_id, static_cast<int>(i));
+			joint_index_to_kf.emplace(keyframes_[i].joint_id, static_cast<int>(i));
 		}
 
 		os << "\t<key_frames_chunk num_frames=\"" << num_frames_

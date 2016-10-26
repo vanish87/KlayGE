@@ -31,6 +31,7 @@
 #include <KlayGE/Font.hpp>
 #include <KFL/Thread.hpp>
 #include <KlayGE/TransientBuffer.hpp>
+#include <KFL/Hash.hpp>
 
 #ifdef Bool
 #undef Bool		// for boost::foreach
@@ -113,6 +114,7 @@ namespace KlayGE
 												vertex_element(VEU_TextureCoord, 0, EF_GR32F)));
 			rl_->BindIndexStream(tb_ib_->GetBuffer(), EF_R16UI);
 
+			effect_ = effect;
 			if (texture)
 			{
 				technique_ = effect->TechniqueByName("UITec");
@@ -122,8 +124,8 @@ namespace KlayGE
 				technique_ = effect->TechniqueByName("UITecNoTex");
 			}
 
-			ui_tex_ep_ = technique_->Effect().ParameterByName("ui_tex");
-			half_width_height_ep_ = technique_->Effect().ParameterByName("half_width_height");
+			ui_tex_ep_ = effect->ParameterByName("ui_tex");
+			half_width_height_ep_ = effect->ParameterByName("half_width_height");
 		}
 
 		bool Empty() const
@@ -186,7 +188,7 @@ namespace KlayGE
 				rl_->StartIndexLocation(ind_offset / sizeof(uint16_t));
 				rl_->NumIndices(ind_length / sizeof(uint16_t));
 
-				re.Render(*this->GetRenderTechnique(), *rl_);
+				re.Render(*this->GetRenderEffect(), *this->GetRenderTechnique(), *rl_);
 			}
 
 			for (size_t i = 0; i < tb_vb_sub_allocs_.size(); ++ i)
@@ -228,8 +230,8 @@ namespace KlayGE
 	private:
 		bool restart_;
 
-		RenderEffectParameterPtr ui_tex_ep_;
-		RenderEffectParameterPtr half_width_height_ep_;
+		RenderEffectParameter* ui_tex_ep_;
+		RenderEffectParameter* half_width_height_ep_;
 
 		TexturePtr texture_;
 
@@ -780,7 +782,7 @@ namespace KlayGE
 
 	size_t UIManager::AddFont(FontPtr const & font, float font_size)
 	{
-		font_cache_.push_back(std::make_pair(font, font_size));
+		font_cache_.emplace_back(font, font_size);
 		return font_cache_.size() - 1;
 	}
 
@@ -1871,7 +1873,7 @@ namespace KlayGE
 
 	void UIDialog::AddIDName(std::string const & name, int id)
 	{
-		KLAYGE_EMPLACE(id_name_, name, id);
+		id_name_.emplace(name, id);
 	}
 
 	int UIDialog::IDFromName(std::string const & name)
@@ -1881,7 +1883,7 @@ namespace KlayGE
 
 	void UIDialog::CtrlLocation(int id, UIDialog::ControlLocation const & loc)
 	{
-		KLAYGE_EMPLACE(id_location_, id, loc);
+		id_location_.emplace(id, loc);
 	}
 
 	UIDialog::ControlLocation const & UIDialog::CtrlLocation(int id)

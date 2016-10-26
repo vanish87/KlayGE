@@ -58,11 +58,26 @@ namespace KlayGE
 		void Begin();
 		void End();
 
-		double TimeElapsed() KLAYGE_OVERRIDE;
+		double TimeElapsed() override;
 
 	private:
 		ID3D11QueryPtr timestamp_start_query_;
 		ID3D11QueryPtr timestamp_end_query_;
+	};
+
+	class D3D11SOStatisticsQuery : public SOStatisticsQuery
+	{
+	public:
+		D3D11SOStatisticsQuery();
+
+		void Begin();
+		void End();
+
+		uint64_t NumPrimitivesWritten() override;
+		uint64_t PrimitivesGenerated() override;
+
+	private:
+		ID3D11QueryPtr so_stat_query_;
 	};
 }
 

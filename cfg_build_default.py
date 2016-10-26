@@ -3,20 +3,20 @@
 ################################################
 
 # Compiler name.
-#   On Windows desktop, could be "vc140", "vc120", "vc110", "mingw", "auto".
-#   On Windows store, could be "vc140", "vc120", "vc110", "auto".
-#   On Windows phone, could be "vc140", "vc120", "vc110", "auto".
-#   On Android, could be "gcc", "auto".
+#   On Windows desktop, could be "vc140", "vc120", "mingw", "auto".
+#   On Windows store, could be "vc140", "vc120", "auto".
+#   On Windows phone, could be "vc140", "vc120", "auto".
+#   On Android, could be "clang", "auto".
 #   On Linux, could be "gcc", "auto".
 #   On MacOSX, could be "clang", "auto".
 #   On iOS, could be "clang", "auto".
 compiler		= "auto"
 
 # Toolset name.
-#   On Windows desktop, could be "v140", "v140_xp", "v120", "v120_xp", "v110", "v110_xp", "auto".
+#   On Windows desktop, could be "v140", "v140_xp", "v120", "v120_xp", "auto".
 #   On Windows store, could be "auto".
 #   On Windows phone, could be "auto".
-#   On Android, could be "4.6", "4.8", "4.9", "auto".
+#   On Android, could be "auto".
 #   On Linux, could be "auto".
 #   On MacOSX, could be "auto".
 #   On iOS, could be "auto".
@@ -37,3 +37,6 @@ config			= ("Debug", "RelWithDebInfo")
 
 # Target platform for cross compiling. Could be "android" plus version number, "win_store", "win_phone" plus version number, "ios", or "auto".
 target			= "auto"
+
+# A name for offline FXML compiling. Could be one of "d3d_11_0", "d3d_10_1", "d3d_10_0", "d3d_9_3", "d3d_9_1", "gles_2_0", "gles_3_0", "gles_3_1", "gles_3_2", or "auto".
+shader_platform_name	= "auto"

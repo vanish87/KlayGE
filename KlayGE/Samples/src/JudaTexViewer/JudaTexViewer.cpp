@@ -52,7 +52,8 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			technique_ = SyncLoadRenderEffect("JudaTexViewer.fxml")->TechniqueByName("Render");
+			effect_ = SyncLoadRenderEffect("JudaTexViewer.fxml");
+			technique_ = effect_->TechniqueByName("Render");
 
 			float2 texs[] =
 			{
@@ -92,7 +93,7 @@ namespace
 		void OnRenderBegin()
 		{
 			FrameBufferPtr const & fb = Context::Instance().RenderFactoryInstance().RenderEngineInstance().CurFrameBuffer();
-			*(technique_->Effect().ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
+			*(effect_->ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
 		}
 
 	private:
@@ -151,7 +152,8 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			technique_ = SyncLoadRenderEffect("JudaTexViewer.fxml")->TechniqueByName("GridBorder");
+			effect_ = SyncLoadRenderEffect("JudaTexViewer.fxml");
+			technique_ = effect_->TechniqueByName("GridBorder");
 
 			float2 texs[] =
 			{
@@ -191,7 +193,7 @@ namespace
 		void OnRenderBegin()
 		{
 			FrameBufferPtr const & fb = Context::Instance().RenderFactoryInstance().RenderEngineInstance().CurFrameBuffer();
-			*(technique_->Effect().ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
+			*(effect_->ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
 		}
 
 	private:
@@ -282,11 +284,6 @@ JudaTexViewer::JudaTexViewer()
 				last_mouse_pt_(-1, -1), position_(0, 0), scale_(1)
 {
 	ResLoader::Instance().AddPath("../../Samples/media/JudaTexViewer");
-}
-
-bool JudaTexViewer::ConfirmDevice() const
-{
-	return true;
 }
 
 void JudaTexViewer::OnCreate()
@@ -402,7 +399,7 @@ void JudaTexViewer::OpenJudaTex(std::string const & name)
 	position_ = float2(0, 0);
 	scale_ = 1;
 
-	juda_tex_->SetParams(tile_->GetRenderable()->GetRenderTechnique());
+	juda_tex_->SetParams(*tile_->GetRenderable()->GetRenderEffect());
 
 	checked_pointer_cast<TileObject>(tile_)->TileSize(tile_size_);
 	checked_pointer_cast<TileObject>(tile_)->Position(position_);
@@ -521,16 +518,16 @@ uint32_t JudaTexViewer::DoUpdate(uint32_t /*pass*/)
 	checked_pointer_cast<TileObject>(tile_)->SetPosBuffer(tile_pos_vb_);
 	checked_pointer_cast<GridBorderObject>(grid_border_)->SetPosBuffer(tile_pos_vb_);
 
-	RenderLayoutPtr const & rl_tile = tile_->GetRenderable()->GetRenderLayout();
-	for (uint32_t i = 0; i < rl_tile->NumVertexStreams(); ++ i)
+	RenderLayout& rl_tile = tile_->GetRenderable()->GetRenderLayout();
+	for (uint32_t i = 0; i < rl_tile.NumVertexStreams(); ++ i)
 	{
-		rl_tile->VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
+		rl_tile.VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
 	}
 
-	RenderLayoutPtr const & rl_border = grid_border_->GetRenderable()->GetRenderLayout();
-	for (uint32_t i = 0; i < rl_border->NumVertexStreams(); ++ i)
+	RenderLayout& rl_border = grid_border_->GetRenderable()->GetRenderLayout();
+	for (uint32_t i = 0; i < rl_border.NumVertexStreams(); ++ i)
 	{
-		rl_border->VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
+		rl_border.VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
 	}
 
 	juda_tex_->UpdateCache(tile_ids);

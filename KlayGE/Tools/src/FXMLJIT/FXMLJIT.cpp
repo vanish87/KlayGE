@@ -71,7 +71,7 @@
 using namespace std;
 using namespace KlayGE;
 
-uint32_t const KFX_VERSION = 0x0107;
+uint32_t const KFX_VERSION = 0x0108;
 
 int RetrieveAttrValue(XMLNodePtr node, std::string const & attr_name, int default_value)
 {
@@ -148,6 +148,7 @@ Offline::OfflineRenderDeviceCaps LoadPlatformConfig(std::string const & platform
 	caps.shader_texture_lod_support = RetrieveNodeValue(root, "shader_texture_lod_support", 0) ? true : false;
 	caps.fp_color_support = RetrieveNodeValue(root, "fp_color_support", 0) ? true : false;
 	caps.pack_to_rgba_required = RetrieveNodeValue(root, "pack_to_rgba_required", 0) ? true : false;
+	caps.render_to_texture_array_support = RetrieveNodeValue(root, "render_to_texture_array_support", 0) ? true : false;
 
 	caps.gs_support = RetrieveNodeValue(root, "gs_support", 0) ? true : false;
 	caps.cs_support = RetrieveNodeValue(root, "cs_support", 0) ? true : false;
@@ -295,7 +296,14 @@ int main(int argc, char* argv[])
 		kfx_path = target_folder / kfx_name;
 	}
 
-	cout << "Compiled kfx has been saved to " << kfx_path << "." << endl;
+	if (filesystem::exists(kfx_path))
+	{
+		cout << "Compiled kfx has been saved to " << kfx_path << "." << endl;
+	}
+	else
+	{
+		cout << "Couldn't find " << fxml_name << "." << endl;
+	}
 
 	Context::Destroy();
 

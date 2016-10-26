@@ -16,7 +16,7 @@
 #pragma once
 
 #include <KlayGE/SALWrapper.hpp>
-#include <dxgi1_4.h>
+#include <dxgi1_5.h>
 #if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-compare" // Ignore comparison between int and uint
@@ -29,20 +29,25 @@
 namespace KlayGE
 {
 	typedef std::shared_ptr<IDXGIFactory1>				IDXGIFactory1Ptr;
-	typedef std::shared_ptr<IDXGIAdapter1>				IDXGIAdapter1Ptr;
 	typedef std::shared_ptr<IDXGIFactory2>				IDXGIFactory2Ptr;
-	typedef std::shared_ptr<IDXGIAdapter2>				IDXGIAdapter2Ptr;
 	typedef std::shared_ptr<IDXGIFactory3>				IDXGIFactory3Ptr;
 	typedef std::shared_ptr<IDXGIFactory4>				IDXGIFactory4Ptr;
+	typedef std::shared_ptr<IDXGIFactory5>				IDXGIFactory5Ptr;
+	typedef std::shared_ptr<IDXGIAdapter1>				IDXGIAdapter1Ptr;
+	typedef std::shared_ptr<IDXGIAdapter2>				IDXGIAdapter2Ptr;
 	typedef std::shared_ptr<IDXGISwapChain>				IDXGISwapChainPtr;
-	typedef std::shared_ptr<ID3D11Device>				ID3D11DevicePtr;
-	typedef std::shared_ptr<ID3D11DeviceContext>		ID3D11DeviceContextPtr;
 	typedef std::shared_ptr<IDXGISwapChain1>			IDXGISwapChain1Ptr;
-	typedef std::shared_ptr<ID3D11Device1>				ID3D11Device1Ptr;
-	typedef std::shared_ptr<ID3D11DeviceContext1>		ID3D11DeviceContext1Ptr;
 	typedef std::shared_ptr<IDXGISwapChain2>			IDXGISwapChain2Ptr;
+	typedef std::shared_ptr<IDXGISwapChain3>			IDXGISwapChain3Ptr;
+	typedef std::shared_ptr<IDXGISwapChain4>			IDXGISwapChain4Ptr;
+	typedef std::shared_ptr<ID3D11Device>				ID3D11DevicePtr;
+	typedef std::shared_ptr<ID3D11Device1>				ID3D11Device1Ptr;
 	typedef std::shared_ptr<ID3D11Device2>				ID3D11Device2Ptr;
+	typedef std::shared_ptr<ID3D11Device3>				ID3D11Device3Ptr;
+	typedef std::shared_ptr<ID3D11DeviceContext>		ID3D11DeviceContextPtr;
+	typedef std::shared_ptr<ID3D11DeviceContext1>		ID3D11DeviceContext1Ptr;
 	typedef std::shared_ptr<ID3D11DeviceContext2>		ID3D11DeviceContext2Ptr;
+	typedef std::shared_ptr<ID3D11DeviceContext3>		ID3D11DeviceContext3Ptr;
 	typedef std::shared_ptr<ID3D11Resource>				ID3D11ResourcePtr;
 	typedef std::shared_ptr<ID3D11Texture1D>			ID3D11Texture1DPtr;
 	typedef std::shared_ptr<ID3D11Texture2D>			ID3D11Texture2DPtr;

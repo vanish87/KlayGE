@@ -33,6 +33,8 @@
 
 #pragma once
 
+#include <list>
+
 #include <KlayGE/ElementFormat.hpp>
 #include <KlayGE/GraphicsBuffer.hpp>
 #include <KlayGE/D3D12/D3D12Typedefs.hpp>
@@ -44,7 +46,7 @@ namespace KlayGE
 	{
 	public:
 		D3D12GraphicsBuffer(BufferUsage usage, uint32_t access_hint,
-			uint32_t size_in_byte, void const * init_data, ElementFormat fmt);
+			uint32_t size_in_byte, ElementFormat fmt);
 		virtual ~D3D12GraphicsBuffer();
 
 		ID3D12ResourcePtr const & D3DBuffer() const
@@ -68,18 +70,25 @@ namespace KlayGE
 
 		void CopyToBuffer(GraphicsBuffer& rhs);
 
+		virtual void CreateHWResource(void const * init_data) override;
+		virtual void DeleteHWResource() override;
+
+		void UpdateSubresource(uint32_t offset, uint32_t size, void const * data) override;
+
 		uint32_t CounterOffset() const
 		{
 			return counter_offset_;
 		}
 
+		bool UpdateResourceBarrier(D3D12_RESOURCE_BARRIER& barrier, D3D12_RESOURCE_STATES target_state);
+
 	private:
-		void CreateBuffer(void const * init_data);
 
 		void* Map(BufferAccess ba);
 		void Unmap();
 
 	private:
+		std::list<std::pair<ID3D12ResourcePtr, bool>> buffer_pool_;
 		ID3D12ResourcePtr buffer_;
 		ID3D12ResourcePtr buffer_counter_upload_;
 		D3D12ShaderResourceViewSimulationPtr d3d_sr_view_;
@@ -87,6 +96,8 @@ namespace KlayGE
 		uint32_t counter_offset_;
 
 		ElementFormat fmt_as_shader_res_;
+
+		D3D12_RESOURCE_STATES curr_state_;
 	};
 	typedef std::shared_ptr<D3D12GraphicsBuffer> D3D12GraphicsBufferPtr;
 }

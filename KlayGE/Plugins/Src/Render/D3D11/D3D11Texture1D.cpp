@@ -31,7 +31,7 @@
 namespace KlayGE
 {
 	D3D11Texture1D::D3D11Texture1D(uint32_t width, uint32_t numMipMaps, uint32_t array_size, ElementFormat format,
-						uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+						uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 					: D3D11Texture(TT_1D, sample_count, sample_quality, access_hint)
 	{
 		if (0 == numMipMaps)
@@ -62,8 +62,6 @@ namespace KlayGE
 		format_		= format;
 		dxgi_fmt_ = D3D11Mapping::MappingFormat(format_);
 		width_ = width;
-
-		this->CreateHWResource(init_data);
 	}
 
 	uint32_t D3D11Texture1D::Width(uint32_t level) const
@@ -117,8 +115,8 @@ namespace KlayGE
 			src_box.bottom = 1;
 			src_box.back = 1;
 
-			d3d_imm_ctx_->CopySubresourceRegion(other.D3DResource().get(), D3D11CalcSubresource(dst_level, dst_array_index, target.NumMipMaps()),
-				dst_x_offset, 0, 0, this->D3DResource().get(), D3D11CalcSubresource(src_level, src_array_index, this->NumMipMaps()), &src_box);
+			d3d_imm_ctx_->CopySubresourceRegion(other.D3DResource(), D3D11CalcSubresource(dst_level, dst_array_index, target.NumMipMaps()),
+				dst_x_offset, 0, 0, this->D3DResource(), D3D11CalcSubresource(src_level, src_array_index, this->NumMipMaps()), &src_box);
 		}
 		else
 		{
@@ -127,10 +125,9 @@ namespace KlayGE
 		}
 	}
 
-	ID3D11ShaderResourceViewPtr const & D3D11Texture1D::RetriveD3DShaderResourceView(uint32_t first_array_index, uint32_t num_items, uint32_t first_level, uint32_t num_levels)
+	D3D11_SHADER_RESOURCE_VIEW_DESC D3D11Texture1D::FillSRVDesc(uint32_t first_array_index, uint32_t num_items,
+			uint32_t first_level, uint32_t num_levels) const
 	{
-		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Read);
-
 		D3D11_SHADER_RESOURCE_VIEW_DESC desc;
 		switch (format_)
 		{
@@ -166,13 +163,11 @@ namespace KlayGE
 			desc.Texture1D.MipLevels = num_levels;
 		}
 
-		return this->RetriveD3DSRV(desc);
+		return desc;
 	}
 
-	ID3D11UnorderedAccessViewPtr const & D3D11Texture1D::RetriveD3DUnorderedAccessView(uint32_t first_array_index, uint32_t num_items, uint32_t level)
+	D3D11_UNORDERED_ACCESS_VIEW_DESC D3D11Texture1D::FillUAVDesc(uint32_t first_array_index, uint32_t num_items, uint32_t level) const
 	{
-		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Unordered);
-
 		D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
 		desc.Format = dxgi_fmt_;
 		if (array_size_ > 1)
@@ -188,15 +183,11 @@ namespace KlayGE
 			desc.Texture1D.MipSlice = level;
 		}
 
-		return this->RetriveD3DUAV(desc);
+		return desc;
 	}
 
-	ID3D11RenderTargetViewPtr const & D3D11Texture1D::RetriveD3DRenderTargetView(uint32_t first_array_index, uint32_t array_size, uint32_t level)
+	D3D11_RENDER_TARGET_VIEW_DESC D3D11Texture1D::FillRTVDesc(uint32_t first_array_index, uint32_t array_size, uint32_t level) const
 	{
-		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
-		BOOST_ASSERT(first_array_index < this->ArraySize());
-		BOOST_ASSERT(first_array_index + array_size <= this->ArraySize());
-
 		D3D11_RENDER_TARGET_VIEW_DESC desc;
 		desc.Format = D3D11Mapping::MappingFormat(this->Format());
 		if (this->ArraySize() > 1)
@@ -212,15 +203,11 @@ namespace KlayGE
 			desc.Texture1D.MipSlice = level;
 		}
 
-		return this->RetriveD3DRTV(desc);
+		return desc;
 	}
 
-	ID3D11DepthStencilViewPtr const & D3D11Texture1D::RetriveD3DDepthStencilView(uint32_t first_array_index, uint32_t array_size, uint32_t level)
+	D3D11_DEPTH_STENCIL_VIEW_DESC D3D11Texture1D::FillDSVDesc(uint32_t first_array_index, uint32_t array_size, uint32_t level) const
 	{
-		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
-		BOOST_ASSERT(first_array_index < this->ArraySize());
-		BOOST_ASSERT(first_array_index + array_size <= this->ArraySize());
-
 		D3D11_DEPTH_STENCIL_VIEW_DESC desc;
 		desc.Format = D3D11Mapping::MappingFormat(this->Format());
 		desc.Flags = 0;
@@ -237,7 +224,7 @@ namespace KlayGE
 			desc.Texture1D.MipSlice = level;
 		}
 
-		return this->RetriveD3DDSV(desc);
+		return desc;
 	}
 
 	void D3D11Texture1D::Map1D(uint32_t array_index, uint32_t level, TextureMapAccess tma,

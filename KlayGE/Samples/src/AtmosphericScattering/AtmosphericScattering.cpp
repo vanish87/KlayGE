@@ -35,32 +35,39 @@ namespace
 		PlanetMesh(RenderModelPtr const & model, std::wstring const & name)
 			: StaticMesh(model, name)
 		{
-			RenderEffectPtr effect = SyncLoadRenderEffect("AtmosphericScattering.fxml");
-			technique_ = effect->TechniqueByName("PlanetTech");
+			effect_ = SyncLoadRenderEffect("AtmosphericScattering.fxml");
+			technique_ = effect_->TechniqueByName("PlanetTech");
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
+			AABBox const & pos_bb = this->PosBound();
+			*(effect_->ParameterByName("pos_center")) = pos_bb.Center();
+			*(effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
+
+			AABBox const & tc_bb = this->TexcoordBound();
+			*(effect_->ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
+			*(effect_->ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
 		}
 
 		void LightDir(float3 const & dir)
 		{
-			*(technique_->Effect().ParameterByName("light_dir")) = dir;
+			*(effect_->ParameterByName("light_dir")) = dir;
 		}
 
 		void Density(float density)
 		{
-			*(technique_->Effect().ParameterByName("density")) = density;
+			*(effect_->ParameterByName("density")) = density;
 		}
 
 		void Beta(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("beta")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("beta")) = float3(clr.r(), clr.g(), clr.b());
 		}
 
 		void Absorb(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("absorb")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("absorb")) = float3(clr.r(), clr.g(), clr.b());
 		}
 		
 		void OnRenderBegin()
@@ -68,11 +75,11 @@ namespace
 			App3DFramework const & app = Context::Instance().AppInstance();
 			Camera const & camera = app.ActiveCamera();
 
-			*(technique_->Effect().ParameterByName("mvp")) = model_mat_ * camera.ViewProjMatrix();
+			*(effect_->ParameterByName("mvp")) = model_mat_ * camera.ViewProjMatrix();
 
 			float4x4 inv_mv = MathLib::inverse(model_mat_ * camera.ViewMatrix());
-			*(technique_->Effect().ParameterByName("eye_pos")) = MathLib::transform_coord(float3(0, 0, 0), inv_mv);
-			*(technique_->Effect().ParameterByName("look_at_vec")) = MathLib::transform_normal(float3(0, 0, 1), inv_mv);
+			*(effect_->ParameterByName("eye_pos")) = MathLib::transform_coord(float3(0, 0, 0), inv_mv);
+			*(effect_->ParameterByName("look_at_vec")) = MathLib::transform_normal(float3(0, 0, 1), inv_mv);
 		}
 	};
 
@@ -82,39 +89,47 @@ namespace
 		AtmosphereMesh(RenderModelPtr const & model, std::wstring const & name)
 			: StaticMesh(model, name)
 		{
-			RenderEffectPtr effect = SyncLoadRenderEffect("AtmosphericScattering.fxml");
-			technique_ = effect->TechniqueByName("AtmosphereTech");
+			effect_ = SyncLoadRenderEffect("AtmosphericScattering.fxml");
+			technique_ = effect_->TechniqueByName("AtmosphereTech");
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
 			pos_aabb_.Min() *= 1.2f;
 			pos_aabb_.Max() *= 1.2f;
+
+			AABBox const & pos_bb = this->PosBound();
+			*(effect_->ParameterByName("pos_center")) = pos_bb.Center();
+			*(effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
+
+			AABBox const & tc_bb = this->TexcoordBound();
+			*(effect_->ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
+			*(effect_->ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
 		}
 
 		void AtmosphereTop(float top)
 		{
-			*(technique_->Effect().ParameterByName("atmosphere_top")) = top;
+			*(effect_->ParameterByName("atmosphere_top")) = top;
 		}
 
 		void LightDir(float3 const & dir)
 		{
-			*(technique_->Effect().ParameterByName("light_dir")) = dir;
+			*(effect_->ParameterByName("light_dir")) = dir;
 		}
 
 		void Density(float density)
 		{
-			*(technique_->Effect().ParameterByName("density")) = density;
+			*(effect_->ParameterByName("density")) = density;
 		}
 
 		void Beta(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("beta")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("beta")) = float3(clr.r(), clr.g(), clr.b());
 		}
 
 		void Absorb(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("absorb")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("absorb")) = float3(clr.r(), clr.g(), clr.b());
 		}
 		
 		void OnRenderBegin()
@@ -122,11 +137,11 @@ namespace
 			App3DFramework const & app = Context::Instance().AppInstance();
 			Camera const & camera = app.ActiveCamera();
 
-			*(technique_->Effect().ParameterByName("mvp")) = model_mat_ * camera.ViewProjMatrix();
+			*(effect_->ParameterByName("mvp")) = model_mat_ * camera.ViewProjMatrix();
 
 			float4x4 inv_mv = MathLib::inverse(model_mat_ * camera.ViewMatrix());
-			*(technique_->Effect().ParameterByName("eye_pos")) = MathLib::transform_coord(float3(0, 0, 0), inv_mv);
-			*(technique_->Effect().ParameterByName("look_at_vec")) = MathLib::transform_normal(float3(0, 0, 1), inv_mv);
+			*(effect_->ParameterByName("eye_pos")) = MathLib::transform_coord(float3(0, 0, 0), inv_mv);
+			*(effect_->ParameterByName("look_at_vec")) = MathLib::transform_normal(float3(0, 0, 1), inv_mv);
 		}
 	};
 
@@ -159,11 +174,6 @@ AtmosphericScatteringApp::AtmosphericScatteringApp()
 	ResLoader::Instance().AddPath("../../Samples/media/AtmosphericScattering");
 }
 
-bool AtmosphericScatteringApp::ConfirmDevice() const
-{
-	return true;
-}
-
 void AtmosphericScatteringApp::OnCreate()
 {
 	font_ = SyncLoadFont("gkai00mp.kfont");
@@ -178,12 +188,12 @@ void AtmosphericScatteringApp::OnCreate()
 	light_controller_.AttachCamera(light_ctrl_camera_);
 	light_controller_.Scalers(0.003f, 0.003f);
 
-	RenderModelPtr model_planet = SyncLoadModel("geosphere.7z//geosphere.meshml", EAH_GPU_Read | EAH_Immutable,
+	RenderModelPtr model_planet = SyncLoadModel("geosphere.meshml", EAH_GPU_Read | EAH_Immutable,
 		CreateModelFactory<RenderModel>(), CreateMeshFactory<PlanetMesh>());
 	planet_ = MakeSharedPtr<SceneObjectHelper>(model_planet->Subrenderable(0), SceneObjectHelper::SOA_Cullable);
 	planet_->AddToSceneManager();
 
-	RenderModelPtr model_atmosphere = SyncLoadModel("geosphere.7z//geosphere.meshml", EAH_GPU_Read | EAH_Immutable,
+	RenderModelPtr model_atmosphere = SyncLoadModel("geosphere.meshml", EAH_GPU_Read | EAH_Immutable,
 		CreateModelFactory<RenderModel>(), CreateMeshFactory<AtmosphereMesh>());
 	atmosphere_ = MakeSharedPtr<SceneObjectHelper>(model_atmosphere->Subrenderable(0), SceneObjectHelper::SOA_Cullable);
 	atmosphere_->AddToSceneManager();

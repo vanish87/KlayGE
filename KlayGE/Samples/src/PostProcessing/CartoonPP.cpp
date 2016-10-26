@@ -11,11 +11,12 @@ using namespace KlayGE;
 CartoonPostProcess::CartoonPostProcess()
 		: PostProcess(L"Cartoon")
 {
-	input_pins_.push_back(std::make_pair("normal_tex", TexturePtr()));
-	input_pins_.push_back(std::make_pair("depth_tex", TexturePtr()));
-	input_pins_.push_back(std::make_pair("color_tex", TexturePtr()));
+	input_pins_.emplace_back("normal_tex", TexturePtr());
+	input_pins_.emplace_back("depth_tex", TexturePtr());
+	input_pins_.emplace_back("color_tex", TexturePtr());
 
-	this->Technique(SyncLoadRenderEffect("CartoonPP.fxml")->TechniqueByName("Cartoon"));
+	auto effect = SyncLoadRenderEffect("CartoonPP.fxml");
+	this->Technique(effect, effect->TechniqueByName("Cartoon"));
 }
 
 void CartoonPostProcess::InputPin(uint32_t index, TexturePtr const & tex)
@@ -23,7 +24,7 @@ void CartoonPostProcess::InputPin(uint32_t index, TexturePtr const & tex)
 	PostProcess::InputPin(index, tex);
 	if ((0 == index) && tex)
 	{
-		*(technique_->Effect().ParameterByName("inv_width_height")) = float2(1.0f / tex->Width(0), 1.0f / tex->Height(0));
-		*(technique_->Effect().ParameterByName("inv_far")) = 1.0f / Context::Instance().AppInstance().ActiveCamera().FarPlane();
+		*(effect_->ParameterByName("inv_width_height")) = float2(1.0f / tex->Width(0), 1.0f / tex->Height(0));
+		*(effect_->ParameterByName("inv_far")) = 1.0f / Context::Instance().AppInstance().ActiveCamera().FarPlane();
 	}
 }

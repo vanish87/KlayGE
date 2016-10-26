@@ -2,6 +2,7 @@
 
 <effect>
 	<include name="PostProcess.fxml"/>
+	<include name="util.fxml"/>
 
 	<parameter type="texture2D" name="src_tex"/>
 	<parameter type="sampler" name="src_sampler">
@@ -25,10 +26,13 @@
 		<![CDATA[
 float4 AsciiArtsPS(float2 tex_coord0 : TEXCOORD0) : SV_Target
 {
+	int OUTPUT_NUM_ASCII = 64;
 	const float3 RGB_TO_LUM = float3(0.2126f, 0.7152f, 0.0722f);
-	float lum = saturate(dot(src_tex.SampleLevel(src_sampler, tex_coord0, 3).rgb, RGB_TO_LUM));
-	float2 t = float2(floor(lum * 31) / 32, 0) + frac(tex_coord0 / cell_per_row_line) / float2(32, 1);
-	return lum * lums_tex.Sample(lums_sampler, t).r;
+	float3 clr = Tex2DSampleLevel(src_tex, src_sampler, tex_coord0, 3, 0).rgb;
+	float lum = saturate(dot(clr, RGB_TO_LUM));
+	float2 t = float2(floor(lum * (OUTPUT_NUM_ASCII - 1)) / OUTPUT_NUM_ASCII, 0)
+		+ frac(tex_coord0 / cell_per_row_line) / float2(OUTPUT_NUM_ASCII, 1);
+	return float4(lums_tex.Sample(lums_sampler, t).r * 1.5f * clr, 1);
 }
 		]]>
 	</shader>

@@ -1,32 +1,32 @@
 /**
-* @file WindowsWin.cpp
-* @author Minmin Gong
-*
-* @section DESCRIPTION
-*
-* This source file is part of KlayGE
-* For the latest info, see http://www.klayge.org
-*
-* @section LICENSE
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published
-* by the Free Software Foundation; either version 2 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program; if not, write to the Free Software
-* Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-*
-* You may alternatively use this source under the terms of
-* the KlayGE Proprietary License (KPL). You can obtained such a license
-* from http://www.klayge.org/licensing/.
-*/
+ * @file WindowWin.cpp
+ * @author Minmin Gong
+ *
+ * @section DESCRIPTION
+ *
+ * This source file is part of KlayGE
+ * For the latest info, see http://www.klayge.org
+ *
+ * @section LICENSE
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ *
+ * You may alternatively use this source under the terms of
+ * the KlayGE Proprietary License (KPL). You can obtained such a license
+ * from http://www.klayge.org/licensing/.
+ */
 
 #include <KlayGE/KlayGE.hpp>
 
@@ -37,6 +37,10 @@
 
 #include <KlayGE/Window.hpp>
 
+#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
+#include <VersionHelpers.h>
+#include <ShellScalingAPI.h>
+#endif
 #include <windowsx.h>
 
 #ifndef GET_KEYSTATE_WPARAM
@@ -65,9 +69,40 @@ namespace KlayGE
 		}
 	}
 
-	Window::Window(std::string const & name, RenderSettings const & settings)
-		: active_(false), ready_(false), closed_(false), hide_(settings.hide_win)
+#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
+	BOOL Window::EnumMonProc(HMONITOR mon, HDC dc_mon, RECT* rc_mon, LPARAM lparam)
 	{
+		KFL_UNUSED(dc_mon);
+		KFL_UNUSED(rc_mon);
+
+		HMODULE shcore = ::LoadLibraryEx(TEXT("SHCore.dll"), nullptr, 0);
+		if (shcore)
+		{
+			typedef HRESULT (CALLBACK *GetDpiForMonitorFunc)(HMONITOR mon, MONITOR_DPI_TYPE dpi_type, UINT* dpi_x, UINT* dpi_y);
+			GetDpiForMonitorFunc DynamicGetDpiForMonitor
+				= reinterpret_cast<GetDpiForMonitorFunc>(::GetProcAddress(shcore, "GetDpiForMonitor"));
+			if (DynamicGetDpiForMonitor)
+			{
+				UINT dpi_x, dpi_y;
+				if (S_OK == DynamicGetDpiForMonitor(mon, MDT_DEFAULT, &dpi_x, &dpi_y))
+				{
+					Window* win = reinterpret_cast<Window*>(lparam);
+					win->dpi_scale_ = std::max(win->dpi_scale_, static_cast<float>(std::max(dpi_x, dpi_y)) / USER_DEFAULT_SCREEN_DPI);
+				}
+			}
+
+			::FreeLibrary(shcore);
+		}
+
+		return TRUE;
+	}
+#endif
+
+	Window::Window(std::string const & name, RenderSettings const & settings)
+		: active_(false), ready_(false), closed_(false), dpi_scale_(1), win_rotation_(WR_Identity), hide_(settings.hide_win)
+	{
+		this->DetectsDPI();
+
 		HINSTANCE hInst = ::GetModuleHandle(nullptr);
 
 		// Register the window class
@@ -110,14 +145,14 @@ namespace KlayGE
 		external_wnd_ = false;
 
 		::GetClientRect(wnd_, &rc);
-		left_ = settings.left;
-		top_ = settings.top;
+		left_ = rc.left;
+		top_ = rc.top;
 		width_ = rc.right - rc.left;
 		height_ = rc.bottom - rc.top;
 
 #ifdef KLAYGE_COMPILER_MSVC
 #pragma warning(push)
-#pragma warning(disable: 4244) // Pointer to LONG_TR, possible loss of data
+#pragma warning(disable: 4244) // Pointer to LONG_PTR, possible loss of data
 #endif
 		::SetWindowLongPtrW(wnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 #ifdef KLAYGE_COMPILER_MSVC
@@ -126,11 +161,15 @@ namespace KlayGE
 
 		::ShowWindow(wnd_, hide_ ? SW_HIDE : SW_SHOWNORMAL);
 		::UpdateWindow(wnd_);
+
+		ready_ = true;
 	}
 
 	Window::Window(std::string const & name, RenderSettings const & settings, void* native_wnd)
-		: active_(false), ready_(false), closed_(false), hide_(settings.hide_win)
+		: active_(false), ready_(false), closed_(false), dpi_scale_(1), win_rotation_(WR_Identity), hide_(settings.hide_win)
 	{
+		this->DetectsDPI();
+
 		Convert(wname_, name);
 
 		wnd_ = static_cast<HWND>(native_wnd);
@@ -140,14 +179,14 @@ namespace KlayGE
 
 		RECT rc;
 		::GetClientRect(wnd_, &rc);
-		left_ = settings.left;
-		top_ = settings.top;
+		left_ = rc.left;
+		top_ = rc.top;
 		width_ = rc.right - rc.left;
 		height_ = rc.bottom - rc.top;
 
 #ifdef KLAYGE_COMPILER_MSVC
 #pragma warning(push)
-#pragma warning(disable: 4244) // Pointer to LONG_TR, possible loss of data
+#pragma warning(disable: 4244) // Pointer to LONG_PTR, possible loss of data
 #endif
 		::SetWindowLongPtrW(wnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 #ifdef KLAYGE_COMPILER_MSVC
@@ -155,6 +194,8 @@ namespace KlayGE
 #endif
 
 		::UpdateWindow(wnd_);
+
+		ready_ = true;
 	}
 
 	Window::~Window()
@@ -163,7 +204,7 @@ namespace KlayGE
 		{
 #ifdef KLAYGE_COMPILER_MSVC
 #pragma warning(push)
-#pragma warning(disable: 4244) // Pointer to LONG_TR, possible loss of data
+#pragma warning(disable: 4244) // Pointer to LONG_PTR, possible loss of data
 #endif
 			::SetWindowLongPtrW(wnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(nullptr));
 #ifdef KLAYGE_COMPILER_MSVC
@@ -182,6 +223,10 @@ namespace KlayGE
 	{
 		if (!external_wnd_)
 		{
+			ready_ = false;
+
+			this->DetectsDPI();
+
 			HINSTANCE hInst = ::GetModuleHandle(nullptr);
 
 			uint32_t style = static_cast<uint32_t>(::GetWindowLongPtrW(wnd_, GWL_STYLE));
@@ -195,12 +240,14 @@ namespace KlayGE
 				rc.right - rc.left, rc.bottom - rc.top, 0, 0, hInst, nullptr);
 
 			::GetClientRect(wnd_, &rc);
+			left_ = rc.left;
+			top_ = rc.top;
 			width_ = rc.right - rc.left;
 			height_ = rc.bottom - rc.top;
 
 #ifdef KLAYGE_COMPILER_MSVC
 #pragma warning(push)
-#pragma warning(disable: 4244) // Pointer to LONG_TR, possible loss of data
+#pragma warning(disable: 4244) // Pointer to LONG_PTR, possible loss of data
 #endif
 			::SetWindowLongPtrW(wnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 #ifdef KLAYGE_COMPILER_MSVC
@@ -209,6 +256,8 @@ namespace KlayGE
 
 			::ShowWindow(wnd_, hide_ ? SW_HIDE : SW_SHOWNORMAL);
 			::UpdateWindow(wnd_);
+
+			ready_ = true;
 		}
 	}
 
@@ -239,24 +288,27 @@ namespace KlayGE
 			ready_ = true;
 			break;
 
-		case WM_SIZING:
-			ready_ = false;
-			break;
-
 		case WM_SIZE:
-			// Check to see if we are losing or gaining our window.  Set the
-			// active flag to match
-			if ((SIZE_MAXHIDE == wParam) || (SIZE_MINIMIZED == wParam))
 			{
-				active_ = false;
-				ready_ = false;
-				this->OnSize()(*this, false);
-			}
-			else
-			{
-				active_ = true;
-				ready_ = true;
-				this->OnSize()(*this, true);
+				RECT rc;
+				::GetClientRect(wnd_, &rc);
+				left_ = rc.left;
+				top_ = rc.top;
+				width_ = rc.right - rc.left;
+				height_ = rc.bottom - rc.top;
+
+				// Check to see if we are losing or gaining our window.  Set the
+				// active flag to match
+				if ((SIZE_MAXHIDE == wParam) || (SIZE_MINIMIZED == wParam))
+				{
+					active_ = false;
+					this->OnSize()(*this, false);
+				}
+				else
+				{
+					active_ = true;
+					this->OnSize()(*this, true);
+				}
 			}
 			break;
 
@@ -313,6 +365,12 @@ namespace KlayGE
 			}
 			break;
 
+#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
+		case WM_DPICHANGED:
+			dpi_scale_ = static_cast<float>(HIWORD(wParam)) / USER_DEFAULT_SCREEN_DPI;
+			break;
+#endif
+
 #elif (_WIN32_WINNT >= _WIN32_WINNT_WIN7)
 		case WM_TOUCH:
 			this->OnTouch()(*this, reinterpret_cast<HTOUCHINPUT>(lParam), LOWORD(wParam));
@@ -329,6 +387,41 @@ namespace KlayGE
 		}
 
 		return default_wnd_proc_(hWnd, uMsg, wParam, lParam);
+	}
+
+	void Window::DetectsDPI()
+	{
+#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
+		HMODULE shcore = ::LoadLibraryEx(TEXT("SHCore.dll"), nullptr, 0);
+		if (shcore)
+		{
+			typedef HRESULT (WINAPI *SetProcessDpiAwarenessFunc)(PROCESS_DPI_AWARENESS value);
+			SetProcessDpiAwarenessFunc DynamicSetProcessDpiAwareness
+				= reinterpret_cast<SetProcessDpiAwarenessFunc>(::GetProcAddress(shcore, "SetProcessDpiAwareness"));
+
+			DynamicSetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+
+			::FreeLibrary(shcore);
+		}
+
+		typedef NTSTATUS (WINAPI *RtlGetVersionFunc)(OSVERSIONINFOEXW* pVersionInformation);
+		HMODULE ntdll = ::GetModuleHandleW(L"ntdll.dll");
+		KLAYGE_ASSUME(ntdll != nullptr);
+		RtlGetVersionFunc DynamicRtlGetVersion = reinterpret_cast<RtlGetVersionFunc>(::GetProcAddress(ntdll, "RtlGetVersion"));
+		if (DynamicRtlGetVersion)
+		{
+			OSVERSIONINFOEXW os_ver_info;
+			os_ver_info.dwOSVersionInfoSize = sizeof(os_ver_info);
+			DynamicRtlGetVersion(&os_ver_info);
+
+			if ((os_ver_info.dwMajorVersion > 6) || ((6 == os_ver_info.dwMajorVersion) && (os_ver_info.dwMinorVersion >= 3)))
+			{
+				HDC desktop_dc = ::GetDC(nullptr);
+				::EnumDisplayMonitors(desktop_dc, nullptr, EnumMonProc, reinterpret_cast<LPARAM>(this));
+				::ReleaseDC(nullptr, desktop_dc);
+			}
+		}
+#endif
 	}
 }
 

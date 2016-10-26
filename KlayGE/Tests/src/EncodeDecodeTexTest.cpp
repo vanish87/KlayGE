@@ -6,7 +6,14 @@
 #include <KFL/Half.hpp>
 
 #include <boost/assert.hpp>
+#ifdef KLAYGE_COMPILER_CLANG
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter" // Ignore unused parameter in boost
+#endif
 #include <boost/test/unit_test.hpp>
+#ifdef KLAYGE_COMPILER_CLANG
+#pragma clang diagnostic pop
+#endif
 
 #include <vector>
 #include <string>
@@ -233,22 +240,6 @@ void TestEncodeDecodeTex(std::string const & input_name, std::string const & tc_
 	mse = sqrt(mse / (width * height) / 4);
 	BOOST_CHECK(mse < threshold);
 }
-
-class EncodeDecodeTexFixture
-{
-public:
-	EncodeDecodeTexFixture()
-	{
-		ResLoader::Instance().AddPath("../../Tests/media");
-	}
-
-	~EncodeDecodeTexFixture()
-	{
-		Context::Destroy();
-	}
-};
-
-BOOST_GLOBAL_FIXTURE(EncodeDecodeTexFixture);
 
 BOOST_AUTO_TEST_CASE(DecodeBC1)
 {

@@ -92,19 +92,20 @@ namespace KlayGE
 	public:
 		D3D11ShaderObject();
 
-		bool AttachNativeShader(ShaderType type, RenderEffect const & effect, std::vector<uint32_t> const & shader_desc_ids,
-			std::vector<uint8_t> const & native_shader_block);
+		bool AttachNativeShader(ShaderType type, RenderEffect const & effect,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::vector<uint8_t> const & native_shader_block) override;
 
-		virtual bool StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
-			std::vector<uint32_t> const & shader_desc_ids) KLAYGE_OVERRIDE;
-		virtual void StreamOut(std::ostream& os, ShaderType type) KLAYGE_OVERRIDE;
+		bool StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) override;
+		void StreamOut(std::ostream& os, ShaderType type) override;
 
 		void AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids);
+			RenderTechnique const & tech, RenderPass const & pass,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) override;
 		void AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
-		void LinkShaders(RenderEffect const & effect);
-		ShaderObjectPtr Clone(RenderEffect const & effect);
+			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so) override;
+		void LinkShaders(RenderEffect const & effect) override;
+		ShaderObjectPtr Clone(RenderEffect const & effect) override;
 
 		void Bind();
 		void Unbind();
@@ -122,19 +123,19 @@ namespace KlayGE
 	private:
 		struct parameter_bind_t
 		{
-			RenderEffectParameterPtr param;
+			RenderEffectParameter* param;
 			D3D11ShaderParameterHandle p_handle;
 			std::function<void()> func;
 		};
 		typedef std::vector<parameter_bind_t> parameter_binds_t;
 
-		parameter_bind_t GetBindFunc(D3D11ShaderParameterHandle const & p_handle, RenderEffectParameterPtr const & param);
+		parameter_bind_t GetBindFunc(D3D11ShaderParameterHandle const & p_handle, RenderEffectParameter* param);
 
 		std::string GetShaderProfile(ShaderType type, RenderEffect const & effect, uint32_t shader_desc_id);
 		std::shared_ptr<std::vector<uint8_t>> CompiteToBytecode(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids);
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);
 		void AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
-			std::vector<uint32_t> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob);
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob);
 
 	private:
 		std::array<parameter_binds_t, ST_NumShaderTypes> param_binds_;
@@ -146,17 +147,17 @@ namespace KlayGE
 		ID3D11HullShaderPtr hull_shader_;
 		ID3D11DomainShaderPtr domain_shader_;
 		std::array<std::pair<std::shared_ptr<std::vector<uint8_t>>, std::string>, ST_NumShaderTypes> shader_code_;
-		std::array<D3D11ShaderDesc, ST_NumShaderTypes> shader_desc_;
+		std::array<std::shared_ptr<D3D11ShaderDesc>, ST_NumShaderTypes> shader_desc_;
 
-		std::array<std::vector<ID3D11SamplerStatePtr>, ST_NumShaderTypes> samplers_;
+		std::array<std::vector<ID3D11SamplerState*>, ST_NumShaderTypes> samplers_;
 		std::array<std::vector<std::tuple<void*, uint32_t, uint32_t>>, ST_NumShaderTypes> srvsrcs_;
-		std::array<std::vector<ID3D11ShaderResourceViewPtr>, ST_NumShaderTypes> srvs_;
+		std::array<std::vector<ID3D11ShaderResourceView*>, ST_NumShaderTypes> srvs_;
 		std::array<std::vector<void*>, ST_NumShaderTypes> uavsrcs_;
-		std::array<std::vector<ID3D11UnorderedAccessViewPtr>, ST_NumShaderTypes> uavs_;
-		std::array<std::vector<uint8_t>, ST_NumShaderTypes> cbuff_indices_;
-		std::array<std::vector<ID3D11BufferPtr>, ST_NumShaderTypes> d3d11_cbuffs_;
+		std::array<std::vector<ID3D11UnorderedAccessView*>, ST_NumShaderTypes> uavs_;
+		std::array<std::shared_ptr<std::vector<uint8_t>>, ST_NumShaderTypes> cbuff_indices_;
+		std::array<std::vector<ID3D11Buffer*>, ST_NumShaderTypes> d3d11_cbuffs_;
 
-		std::vector<RenderEffectConstantBufferPtr> all_cbuffs_;
+		std::vector<RenderEffectConstantBuffer*> all_cbuffs_;
 
 		uint32_t vs_signature_;
 	};

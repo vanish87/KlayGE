@@ -37,8 +37,6 @@
 #include <KlayGE/RenderView.hpp>
 #include <KlayGE/Texture.hpp>
 
-#include <boost/noncopyable.hpp>
-
 #include <KlayGE/D3D12/D3D12Typedefs.hpp>
 
 namespace KlayGE
@@ -144,7 +142,7 @@ namespace KlayGE
 		void ClearStencil(int32_t stencil);
 		void ClearDepthStencil(float depth, int32_t stencil);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -188,7 +186,7 @@ namespace KlayGE
 		void ClearStencil(int32_t stencil);
 		void ClearDepthStencil(float depth, int32_t stencil);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -231,7 +229,7 @@ namespace KlayGE
 		void Clear(float4 const & val);
 		void Clear(uint4 const & val);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -267,6 +265,9 @@ namespace KlayGE
 		uint32_t ua_first_subres_;
 		uint32_t ua_num_subres_;
 		uint32_t counter_offset_;
+
+		float4 clear_f4_val_;
+		uint4 clear_ui4_val_;
 	};
 	typedef std::shared_ptr<D3D12UnorderedAccessView> D3D12UnorderedAccessViewPtr;
 }

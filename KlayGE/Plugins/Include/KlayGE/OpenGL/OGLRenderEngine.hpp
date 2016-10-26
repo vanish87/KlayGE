@@ -63,6 +63,8 @@ namespace KlayGE
 
 		void ForceFlush();
 
+		virtual TexturePtr const & ScreenDepthStencilTexture() const override;
+
 		void ScissorRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 
 		void GetCustomAttrib(std::string const & name, void* value);
@@ -140,28 +142,29 @@ namespace KlayGE
 #endif
 
 	private:
-		virtual void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) KLAYGE_OVERRIDE;
-		virtual void DoBindFrameBuffer(FrameBufferPtr const & fb) KLAYGE_OVERRIDE;
-		virtual void DoBindSOBuffers(RenderLayoutPtr const & rl) KLAYGE_OVERRIDE;
-		virtual void DoRender(RenderTechnique const & tech, RenderLayout const & rl) KLAYGE_OVERRIDE;
-		virtual void DoDispatch(RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz) KLAYGE_OVERRIDE;
-		virtual void DoDispatchIndirect(RenderTechnique const & tech,
-			GraphicsBufferPtr const & buff_args, uint32_t offset) KLAYGE_OVERRIDE;
-		virtual void DoResize(uint32_t width, uint32_t height) KLAYGE_OVERRIDE;
-		virtual void DoDestroy() KLAYGE_OVERRIDE;
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
+		virtual void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) override;
+		virtual void DoBindFrameBuffer(FrameBufferPtr const & fb) override;
+		virtual void DoBindSOBuffers(RenderLayoutPtr const & rl) override;
+		virtual void DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl) override;
+		virtual void DoDispatch(RenderEffect const & effect, RenderTechnique const & tech,
+			uint32_t tgx, uint32_t tgy, uint32_t tgz) override;
+		virtual void DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
+			GraphicsBufferPtr const & buff_args, uint32_t offset) override;
+		virtual void DoResize(uint32_t width, uint32_t height) override;
+		virtual void DoDestroy() override;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
 
 		void FillRenderDeviceCaps();
 		void InitRenderStates();
 
-		virtual void StereoscopicForLCDShutter(int32_t eye) KLAYGE_OVERRIDE;
+		virtual void StereoscopicForLCDShutter(int32_t eye) override;
 
 		bool VertexFormatSupport(ElementFormat elem_fmt);
 		bool TextureFormatSupport(ElementFormat elem_fmt);
 		bool RenderTargetFormatSupport(ElementFormat elem_fmt, uint32_t sample_count, uint32_t sample_quality);
 
-		virtual void CheckConfig(RenderSettings& settings) KLAYGE_OVERRIDE;
+		virtual void CheckConfig(RenderSettings& settings) override;
 
 	private:
 #if defined KLAYGE_PLATFORM_WINDOWS
@@ -191,8 +194,6 @@ namespace KlayGE
 
 		RenderLayoutPtr so_rl_;
 		GLenum so_primitive_mode_;
-		std::vector<std::string> so_vars_;
-		std::vector<char const *> so_vars_ptrs_;
 		std::vector<GLuint> so_buffs_;
 
 		GLenum active_tex_unit_;
@@ -203,9 +204,9 @@ namespace KlayGE
 
 		GLuint restart_index_;
 
-		std::set<ElementFormat> vertex_format_;
-		std::set<ElementFormat> texture_format_;
-		std::set<ElementFormat> rendertarget_format_;
+		std::vector<ElementFormat> vertex_format_;
+		std::vector<ElementFormat> texture_format_;
+		std::vector<ElementFormat> rendertarget_format_;
 		uint32_t max_samples_;
 
 		std::map<GLuint, std::map<GLint, int4>> uniformi_cache_;
@@ -218,8 +219,6 @@ namespace KlayGE
 		bool hack_for_amd_;
 		bool hack_for_intel_;
 	};
-
-	typedef std::shared_ptr<OGLRenderEngine> OGLRenderEnginePtr;
 }
 
 #endif			// _OGLRENDERENGINE_HPP

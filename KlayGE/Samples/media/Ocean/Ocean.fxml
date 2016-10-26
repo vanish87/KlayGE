@@ -12,7 +12,6 @@
 	<macro name="BLEND_FACTOR" value="0.6"/>
 	
 	<parameter type="float3" name="waterbody_color" x="0.07" y="0.15" z="0.2"/>
-	<parameter type="float3" name="waterbody_specular_color" x="10" y="10" z="10"/>	
 	<parameter type="float" name="patch_length"/>
 	<parameter type="float3" name="fog_color"/>
 
@@ -121,54 +120,6 @@ float4 OceanDepthAlphaBlendPS(float3 texcoord_depth : TEXCOORD0) : SV_Target
 	return texcoord_depth.z;
 }
 
-float4 OceanGBufferAlphaBlendRT0PS(float3 texcoord_depth : TEXCOORD0, float2 noise_grad : TEXCOORD1,
-#ifdef NOPERSPECTIVE_SUPPORT
-					noperspective float2 screen_tc : TEXCOORD2
-#else
-					float3 screen_tc_w : TEXCOORD2
-#endif
-					) : SV_Target
-{
-#ifndef NOPERSPECTIVE_SUPPORT
-	float2 screen_tc = screen_tc_w.xy / screen_tc_w.z;
-#endif
-
-	clip(ReadAFloat(opaque_depth_tex.Sample(point_sampler, screen_tc), near_q_far.z) - texcoord_depth.z);
-
-#if KLAYGE_MAX_TEX_ARRAY_LEN > 1
-	float2 gradient0 = gradient_tex_array.Sample(linear_wrap_sampler, float3(texcoord_depth.xy, frames.x)).xy;
-	float2 gradient1 = gradient_tex_array.Sample(linear_wrap_sampler, float3(texcoord_depth.xy * 6.4f, frames.x)).xy;
-	float2 gradient2 = gradient_tex_array.Sample(linear_wrap_sampler, float3(texcoord_depth.xy, frames.y)).xy;
-	float2 gradient3 = gradient_tex_array.Sample(linear_wrap_sampler, float3(texcoord_depth.xy * 6.4f, frames.y)).xy;
-#else
-	float2 gradient0 = gradient_tex_0.Sample(linear_wrap_sampler, texcoord_depth.xy).xy;
-	float2 gradient1 = gradient_tex_0.Sample(linear_wrap_sampler, texcoord_depth.xy * 6.4f).xy;
-	float2 gradient2 = gradient_tex_1.Sample(linear_wrap_sampler, texcoord_depth.xy).xy;
-	float2 gradient3 = gradient_tex_1.Sample(linear_wrap_sampler, texcoord_depth.xy * 6.4f).xy;
-#endif
-
-	float2 gradient = lerp(lerp(gradient0, gradient1, 0.3f), lerp(gradient2, gradient3, 0.3f), interpolate_frac) * 2 - 1;
-	gradient = lerp(noise_grad, gradient, BLEND_FACTOR);
-	
-	float3 normal = normalize(mul(float3(gradient.x, 1, gradient.y), (float3x3)model_view));
-
-	return StoreGBufferRT0(normal, shininess_clr.x);
-}
-
-float4 OceanGBufferAlphaBlendRT1PS(float3 texcoord_depth : TEXCOORD0, float2 noise_grad : TEXCOORD1,
-#ifdef NOPERSPECTIVE_SUPPORT
-					noperspective float2 screen_tc : TEXCOORD2
-#else
-					float3 screen_tc_w : TEXCOORD2
-#endif
-					) : SV_Target
-{
-	float3 diffuse = waterbody_color;
-	float specular = waterbody_specular_color.x;
-	
-	return StoreGBufferRT1(diffuse, specular);
-}
-
 void OceanGBufferAlphaBlendMRTPS(float3 texcoord_depth : TEXCOORD0, float2 noise_grad : TEXCOORD1,
 #ifdef NOPERSPECTIVE_SUPPORT
 					noperspective float2 screen_tc : TEXCOORD2,
@@ -181,7 +132,7 @@ void OceanGBufferAlphaBlendMRTPS(float3 texcoord_depth : TEXCOORD0, float2 noise
 	float2 screen_tc = screen_tc_w.xy / screen_tc_w.z;
 #endif
 
-	clip(ReadAFloat(opaque_depth_tex.Sample(point_sampler, screen_tc), near_q_far.z) - texcoord_depth.z);
+	clip(opaque_depth_tex.Sample(point_sampler, screen_tc).x - texcoord_depth.z);
 
 #if KLAYGE_MAX_TEX_ARRAY_LEN > 1
 	float2 gradient0 = gradient_tex_array.Sample(linear_wrap_sampler, float3(texcoord_depth.xy, frames.x)).xy;
@@ -200,10 +151,7 @@ void OceanGBufferAlphaBlendMRTPS(float3 texcoord_depth : TEXCOORD0, float2 noise
 	
 	float3 normal = normalize(mul(float3(gradient.x, 1, gradient.y), (float3x3)model_view));
 
-	float3 diffuse = waterbody_color;
-	float specular = waterbody_specular_color.x;
-	
-	StoreGBufferMRT(normal, specular, shininess_clr.x, diffuse,
+	StoreGBufferMRT(normal, glossiness_clr.x, waterbody_color, 0,
 		mrt_0, mrt_1);
 }
 
@@ -341,10 +289,10 @@ float4 OceanSpecialShadingAlphaBlendPS(float3 eye_dir : TEXCOORD0, float4 tex_co
 	float2 bump = normal_ws.xz / (pos_ss.z / pos_ss.w);
 	float3 reflection = reflection_tex.Sample(reflection_sampler, tc + bump * 0.2f).xyz;
 
-	float no_water_depth = ReadAFloat(opaque_depth_tex.Sample(point_clamp_sampler, tc), near_q_far.z);
+	float no_water_depth = opaque_depth_tex.Sample(point_clamp_sampler, tc).x;
 
 	float3 refraction;
-	float offseted_depth = ReadAFloat(opaque_depth_tex.Sample(point_clamp_sampler, tc + bump * 0.2f), near_q_far.z);
+	float offseted_depth = opaque_depth_tex.Sample(point_clamp_sampler, tc + bump * 0.2f).x;
 	if (offseted_depth < pos_ss.w)
 	{
 		refraction = opaque_shading_tex.Sample(linear_clamp_sampler, tc).rgb;
@@ -358,7 +306,7 @@ float4 OceanSpecialShadingAlphaBlendPS(float3 eye_dir : TEXCOORD0, float4 tex_co
 
 	float water_depth = clamp(no_water_depth - pos_ss.w, 0, 100.0f);
 
-	float fresnel = fresnel_term_schlick(eye_dir, normal, 0.027f).x;
+	float fresnel = FresnelTerm(eye_dir, normal, 0.027f).x;
 
 	float3 water_color = lerp(refraction * exp(-water_depth * 0.05f) * saturate(10 / pos_ss.w), reflection, fresnel);
 
@@ -366,27 +314,6 @@ float4 OceanSpecialShadingAlphaBlendPS(float3 eye_dir : TEXCOORD0, float4 tex_co
 }
 		]]>
 	</shader>
-
-	<technique name="OceanDepthAlphaBlendFront" inherit="DepthAlphaBlendFrontTech">
-		<pass name="p0">
-			<state name="vertex_shader" value="OceanGBufferVS()"/>
-			<state name="pixel_shader" value="OceanDepthAlphaBlendPS()"/>
-		</pass>
-	</technique>
-
-	<technique name="OceanGBufferAlphaBlendFrontRT0" inherit="GBufferAlphaBlendFrontRT0Tech">
-		<pass name="p0">
-			<state name="vertex_shader" value="OceanGBufferVS()"/>
-			<state name="pixel_shader" value="OceanGBufferAlphaBlendRT0PS()"/>
-		</pass>
-	</technique>
-
-	<technique name="OceanGBufferAlphaBlendFrontRT1" inherit="GBufferAlphaBlendFrontRT1Tech">
-		<pass name="p0">
-			<state name="vertex_shader" value="OceanGBufferVS()"/>
-			<state name="pixel_shader" value="OceanGBufferAlphaBlendRT1PS()"/>
-		</pass>
-	</technique>
 
 	<technique name="OceanGBufferAlphaBlendFrontMRT" inherit="GBufferAlphaBlendFrontMRTTech">
 		<pass name="p0">
@@ -421,16 +348,6 @@ void FoggySkyBoxVS(float4 pos : POSITION,
 	texcoord0 = mul(pos, inv_mvp).xyz;
 }
 
-float4 GBufferFoggySkyBoxRT0PS() : SV_Target
-{
-	return 0;
-}
-
-float4 GBufferFoggySkyBoxRT1PS() : SV_Target
-{
-	return 0;
-}
-
 void GBufferFoggySkyBoxMRTPS(out float4 mrt_0 : SV_Target0, out float4 mrt_1 : SV_Target1)
 {
 	mrt_0 = mrt_1 = 0;
@@ -448,20 +365,6 @@ float4 SpecialShadingFoggySkyBoxPS(float3 texCoord0 : TEXCOORD0) : SV_Target
 }
 		]]>
 	</shader>
-
-	<technique name="GBufferFoggySkyBoxRT0" inherit="GBufferSkyBoxRT0Tech">
-		<pass name="p0">
-			<state name="vertex_shader" value="FoggySkyBoxVS()"/>
-			<state name="pixel_shader" value="GBufferFoggySkyBoxRT0PS()"/>
-		</pass>
-	</technique>
-
-	<technique name="GBufferFoggySkyBoxRT1" inherit="GBufferSkyBoxRT1Tech">
-		<pass name="p0">
-			<state name="vertex_shader" value="FoggySkyBoxVS()"/>
-			<state name="pixel_shader" value="GBufferFoggySkyBoxRT1PS()"/>
-		</pass>
-	</technique>
 
 	<technique name="GBufferFoggySkyBoxMRT" inherit="GBufferSkyBoxMRTTech">
 		<pass name="p0">

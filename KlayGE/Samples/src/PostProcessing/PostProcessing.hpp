@@ -11,8 +11,6 @@ class PostProcessingApp : public KlayGE::App3DFramework
 public:
 	PostProcessingApp();
 
-	bool ConfirmDevice() const;
-
 private:
 	void OnCreate();
 
@@ -29,16 +27,17 @@ private:
 	void TilingHandler(KlayGE::UIRadioButton const & sender);
 	void HDRHandler(KlayGE::UIRadioButton const & sender);
 	void NightVisionHandler(KlayGE::UIRadioButton const & sender);
-	void OldFashionHandler(KlayGE::UIRadioButton const & sender);
+	void SepiaHandler(KlayGE::UIRadioButton const & sender);
 	void CrossStitchingHandler(KlayGE::UIRadioButton const & sender);
 	void FrostedGlassHandler(KlayGE::UIRadioButton const & sender);
+	void BlackHoleHandler(KlayGE::UIRadioButton const & sender);
 
 	KlayGE::FontPtr font_;
 	KlayGE::SceneObjectPtr sky_box_;
 
 	KlayGE::FirstPersonCameraController fpcController_;
 
-	KlayGE::DeferredRenderingLayerPtr deferred_rendering_;
+	KlayGE::DeferredRenderingLayer* deferred_rendering_;
 
 	KlayGE::TexturePtr color_tex_;
 	KlayGE::FrameBufferPtr color_fb_;
@@ -49,9 +48,10 @@ private:
 	KlayGE::PostProcessPtr tiling_;
 	KlayGE::PostProcessPtr hdr_;
 	KlayGE::PostProcessPtr night_vision_;
-	KlayGE::PostProcessPtr old_fashion_;
+	KlayGE::PostProcessPtr sepia_;
 	KlayGE::PostProcessPtr cross_stitching_;
 	KlayGE::PostProcessPtr frosted_glass_;
+	KlayGE::PostProcessPtr black_hole_;
 
 	KlayGE::UIDialogPtr dialog_;
 	int id_fps_camera_;
@@ -64,6 +64,7 @@ private:
 	int id_old_fashion_;
 	int id_cross_stitching_;
 	int id_frosted_glass_;
+	int id_black_hole_;
 
 	KlayGE::PointLightSourcePtr point_light_;
 };

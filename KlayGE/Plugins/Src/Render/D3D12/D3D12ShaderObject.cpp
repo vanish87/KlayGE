@@ -40,6 +40,7 @@
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/RenderEffect.hpp>
 #include <KFL/Thread.hpp>
+#include <KFL/Hash.hpp>
 
 #include <string>
 #include <map>
@@ -47,8 +48,6 @@
 #include <sstream>
 #include <cstring>
 #include <boost/assert.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/functional/hash.hpp>
 
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 #include <KlayGE/SALWrapper.hpp>
@@ -62,9 +61,6 @@
 #include <KlayGE/D3D12/D3D12InterfaceLoader.hpp>
 #include <KlayGE/D3D12/D3D12ShaderObject.hpp>
 
-DEFINE_GUID(IID_ID3D12ShaderReflection_47,
-	0x5a58797d, 0xa72c, 0x478d, 0x8b, 0xa2, 0xef, 0xc6, 0xb0, 0xef, 0xe8, 0x8e);
-
 namespace
 {
 	using namespace KlayGE;
@@ -72,7 +68,8 @@ namespace
 	class SetD3D12ShaderParameterTextureSRV
 	{
 	public:
-		SetD3D12ShaderParameterTextureSRV(std::tuple<ID3D12Resource*, uint32_t, uint32_t>& srvsrc, D3D12ShaderResourceViewSimulationPtr& srv, RenderEffectParameterPtr const & param)
+		SetD3D12ShaderParameterTextureSRV(std::tuple<ID3D12Resource*, uint32_t, uint32_t>& srvsrc,
+				D3D12ShaderResourceViewSimulation*& srv, RenderEffectParameter* param)
 			: srvsrc_(&srvsrc), srv_(&srv), param_(param)
 		{
 		}
@@ -88,7 +85,7 @@ namespace
 					tex_subres.num_items * tex_subres.num_levels);
 				*srv_ = checked_cast<D3D12Texture*>(tex_subres.tex.get())->RetriveD3DShaderResourceView(
 					tex_subres.first_array_index, tex_subres.num_items,
-					tex_subres.first_level, tex_subres.num_levels);
+					tex_subres.first_level, tex_subres.num_levels).get();
 			}
 			else
 			{
@@ -98,14 +95,15 @@ namespace
 
 	private:
 		std::tuple<ID3D12Resource*, uint32_t, uint32_t>* srvsrc_;
-		D3D12ShaderResourceViewSimulationPtr* srv_;
-		RenderEffectParameterPtr param_;
+		D3D12ShaderResourceViewSimulation** srv_;
+		RenderEffectParameter* param_;
 	};
 
 	class SetD3D12ShaderParameterGraphicsBufferSRV
 	{
 	public:
-		SetD3D12ShaderParameterGraphicsBufferSRV(std::tuple<ID3D12Resource*, uint32_t, uint32_t>& srvsrc, D3D12ShaderResourceViewSimulationPtr& srv, RenderEffectParameterPtr const & param)
+		SetD3D12ShaderParameterGraphicsBufferSRV(std::tuple<ID3D12Resource*, uint32_t, uint32_t>& srvsrc,
+				D3D12ShaderResourceViewSimulation*& srv, RenderEffectParameter* param)
 			: srvsrc_(&srvsrc), srv_(&srv), param_(param)
 		{
 		}
@@ -117,7 +115,7 @@ namespace
 			if (buf)
 			{
 				*srvsrc_ = std::make_tuple(checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DBuffer().get(), 0, 1);
-				*srv_ = checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DShaderResourceView();
+				*srv_ = checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DShaderResourceView().get();
 			}
 			else
 			{
@@ -127,14 +125,15 @@ namespace
 
 	private:
 		std::tuple<ID3D12Resource*, uint32_t, uint32_t>* srvsrc_;
-		D3D12ShaderResourceViewSimulationPtr* srv_;
-		RenderEffectParameterPtr param_;
+		D3D12ShaderResourceViewSimulation** srv_;
+		RenderEffectParameter* param_;
 	};
 
 	class SetD3D12ShaderParameterTextureUAV
 	{
 	public:
-		SetD3D12ShaderParameterTextureUAV(std::pair<ID3D12Resource*, ID3D12Resource*>& uavsrc, D3D12UnorderedAccessViewSimulationPtr& uav, RenderEffectParameterPtr const & param)
+		SetD3D12ShaderParameterTextureUAV(std::pair<ID3D12Resource*, ID3D12Resource*>& uavsrc,
+				D3D12UnorderedAccessViewSimulation*& uav, RenderEffectParameter* param)
 			: uavsrc_(&uavsrc), uav_(&uav), param_(param)
 		{
 		}
@@ -148,7 +147,7 @@ namespace
 				uavsrc_->first = checked_cast<D3D12Texture*>(tex_subres.tex.get())->D3DResource().get();
 				uavsrc_->second = nullptr; // TODO
 				*uav_ = checked_cast<D3D12Texture*>(tex_subres.tex.get())->RetriveD3DUnorderedAccessView(
-					tex_subres.first_array_index, tex_subres.num_items, tex_subres.first_level);
+					tex_subres.first_array_index, tex_subres.num_items, tex_subres.first_level).get();
 			}
 			else
 			{
@@ -159,14 +158,15 @@ namespace
 
 	private:
 		std::pair<ID3D12Resource*, ID3D12Resource*>* uavsrc_;
-		D3D12UnorderedAccessViewSimulationPtr* uav_;
-		RenderEffectParameterPtr param_;
+		D3D12UnorderedAccessViewSimulation** uav_;
+		RenderEffectParameter* param_;
 	};
 
 	class SetD3D12ShaderParameterGraphicsBufferUAV
 	{
 	public:
-		SetD3D12ShaderParameterGraphicsBufferUAV(std::pair<ID3D12Resource*, ID3D12Resource*>& uavsrc, D3D12UnorderedAccessViewSimulationPtr& uav, RenderEffectParameterPtr const & param)
+		SetD3D12ShaderParameterGraphicsBufferUAV(std::pair<ID3D12Resource*, ID3D12Resource*>& uavsrc,
+				D3D12UnorderedAccessViewSimulation*& uav, RenderEffectParameter* const & param)
 			: uavsrc_(&uavsrc), uav_(&uav), param_(param)
 		{
 		}
@@ -179,7 +179,7 @@ namespace
 			{
 				uavsrc_->first = checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DBuffer().get();
 				uavsrc_->second = checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DBufferCounterUpload().get();
-				*uav_ = checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DUnorderedAccessView();
+				*uav_ = checked_cast<D3D12GraphicsBuffer*>(buf.get())->D3DUnorderedAccessView().get();
 			}
 			else
 			{
@@ -190,8 +190,8 @@ namespace
 
 	private:
 		std::pair<ID3D12Resource*, ID3D12Resource*>* uavsrc_;
-		D3D12UnorderedAccessViewSimulationPtr* uav_;
-		RenderEffectParameterPtr param_;
+		D3D12UnorderedAccessViewSimulation** uav_;
+		RenderEffectParameter* param_;
 	};
 }
 
@@ -275,7 +275,7 @@ namespace KlayGE
 		return shader_profile;
 	}
 
-	bool D3D12ShaderObject::AttachNativeShader(ShaderType type, RenderEffect const & effect, std::vector<uint32_t> const & shader_desc_ids,
+	bool D3D12ShaderObject::AttachNativeShader(ShaderType type, RenderEffect const & effect, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids,
 		std::vector<uint8_t> const & native_shader_block)
 	{
 		bool ret = false;
@@ -288,7 +288,7 @@ namespace KlayGE
 
 			uint8_t len = *nsbp;
 			++ nsbp;
-			std::string profile;
+			std::string profile = shader_code_[type].second;
 			profile.resize(len);
 			std::memcpy(&profile[0], nsbp, len);
 			nsbp += len;
@@ -304,7 +304,8 @@ namespace KlayGE
 				std::memcpy(&((*code_blob)[0]), nsbp, blob_size);
 				nsbp += blob_size;
 
-				D3D12ShaderDesc& sd = shader_desc_[type];
+				shader_desc_[type] = MakeSharedPtr<D3D12ShaderDesc>();
+				D3D12ShaderDesc& sd = *shader_desc_[type];
 
 				uint16_t cb_desc_size;
 				std::memcpy(&cb_desc_size, nsbp, sizeof(cb_desc_size));
@@ -418,7 +419,7 @@ namespace KlayGE
 	}
 
 	bool D3D12ShaderObject::StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
-		std::vector<uint32_t> const & shader_desc_ids)
+		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
 		uint32_t len;
 		res->read(&len, sizeof(len));
@@ -434,22 +435,24 @@ namespace KlayGE
 
 	void D3D12ShaderObject::StreamOut(std::ostream& os, ShaderType type)
 	{
-		std::vector<uint8_t> native_shader_block;
+		std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
+
+		{
+			uint8_t len = static_cast<uint8_t>(shader_code_[type].second.size());
+			oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
+			oss.write(reinterpret_cast<char const *>(&shader_code_[type].second[0]), len);
+		}
 
 		std::shared_ptr<std::vector<uint8_t>> code_blob = shader_code_[type].first;
 		if (code_blob)
 		{
-			std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
-
-			uint8_t len = static_cast<uint8_t>(shader_code_[type].second.size());
-			oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
-			oss.write(reinterpret_cast<char const *>(&shader_code_[type].second[0]), len);
+			uint8_t len;
 
 			uint32_t blob_size = Native2LE(static_cast<uint32_t>(code_blob->size()));
 			oss.write(reinterpret_cast<char const *>(&blob_size), sizeof(blob_size));
 			oss.write(reinterpret_cast<char const *>(&((*code_blob)[0])), code_blob->size());
 
-			D3D12ShaderDesc const & sd = shader_desc_[type];
+			D3D12ShaderDesc const & sd = *shader_desc_[type];
 
 			uint16_t cb_desc_size = Native2LE(static_cast<uint16_t>(sd.cb_desc.size()));
 			oss.write(reinterpret_cast<char const *>(&cb_desc_size), sizeof(cb_desc_size));
@@ -517,12 +520,9 @@ namespace KlayGE
 				uint32_t cs_block_size_z = Native2LE(cs_block_size_z_);
 				oss.write(reinterpret_cast<char const *>(&cs_block_size_z), sizeof(cs_block_size_z));
 			}
-
-			std::string out_str = oss.str();
-			native_shader_block.resize(out_str.size());
-			std::memcpy(&native_shader_block[0], &out_str[0], out_str.size());
 		}
 
+		std::string native_shader_block = oss.str();
 		uint32_t len = static_cast<uint32_t>(native_shader_block.size());
 		{
 			uint32_t tmp = Native2LE(len);
@@ -535,28 +535,18 @@ namespace KlayGE
 	}
 
 	std::shared_ptr<std::vector<uint8_t>> D3D12ShaderObject::CompiteToBytecode(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids)
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		D3D12RenderEngine const & render_eng = *checked_cast<D3D12RenderEngine const *>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		RenderDeviceCaps const & caps = render_eng.DeviceCaps();
 
-		std::string max_sm_str = boost::lexical_cast<std::string>(caps.max_shader_model.FullVersion());
-		std::string max_tex_array_str = boost::lexical_cast<std::string>(caps.max_texture_array_length);
-		std::string max_tex_depth_str = boost::lexical_cast<std::string>(caps.max_texture_depth);
-		std::string max_tex_units_str = boost::lexical_cast<std::string>(static_cast<int>(caps.max_pixel_texture_units));
-		std::string flipping_str = boost::lexical_cast<std::string>(render_eng.RequiresFlipping() ? -1 : +1);
-		std::string standard_derivatives_str = boost::lexical_cast<std::string>(caps.standard_derivatives_support ? 1 : 0);
-		std::string no_tex_lod_str = boost::lexical_cast<std::string>((ST_PixelShader == type) ? (caps.shader_texture_lod_support ? 0 : 1) : 1);
-
 		ShaderDesc const & sd = effect.GetShaderDesc(shader_desc_ids[type]);
-
-		std::string const & shader_text = effect.HLSLShaderText();
 
 		is_shader_validate_[type] = true;
 
-		std::string shader_profile = sd.profile;
-		size_t const shader_profile_hash = RT_HASH(shader_profile.c_str());
+		char const * shader_profile = sd.profile.c_str();
+		size_t const shader_profile_hash = RT_HASH(shader_profile);
 		switch (type)
 		{
 		case ST_VertexShader:
@@ -583,7 +573,7 @@ namespace KlayGE
 			}
 			else
 			{
-				is_shader_validate_[type] = false;				
+				is_shader_validate_[type] = false;
 			}
 			break;
 
@@ -635,213 +625,30 @@ namespace KlayGE
 		}
 		shader_code_[type].second = shader_profile;
 
-		ID3DBlob* code = nullptr;
+		std::shared_ptr<std::vector<uint8_t>> code = MakeSharedPtr<std::vector<uint8_t>>();
 		if (is_shader_validate_[type])
 		{
-			ID3DBlob* err_msg;
-			std::vector<D3D_SHADER_MACRO> macros;
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_D3D12", "1" }; // TODO
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_SHADER_MODEL", max_sm_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_MAX_TEX_ARRAY_LEN", max_tex_array_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_MAX_TEX_DEPTH", max_tex_depth_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_MAX_TEX_UNITS", max_tex_units_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_FLIPPING", flipping_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_DERIVATIVES", standard_derivatives_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			{
-				D3D_SHADER_MACRO macro_d3d12 = { "KLAYGE_NO_TEX_LOD", no_tex_lod_str.c_str() };
-				macros.push_back(macro_d3d12);
-			}
-			if (!caps.fp_color_support)
-			{
-				D3D_SHADER_MACRO macro_no_fp_tex = { "KLAYGE_NO_FP_COLOR", "1" };
-				macros.push_back(macro_no_fp_tex);
-			}
-			if (caps.pack_to_rgba_required)
-			{
-				D3D_SHADER_MACRO macro_pack_to_rgba = { "KLAYGE_PACK_TO_RGBA", "1" };
-				macros.push_back(macro_pack_to_rgba);
-			}
-			{
-				D3D_SHADER_MACRO macro_frag_depth = { "KLAYGE_FRAG_DEPTH", "1" };
-				macros.push_back(macro_frag_depth);
-			}
-			{
-				D3D_SHADER_MACRO macro_shader_type = { "", "1" };
-				switch (type)
-				{
-				case ST_VertexShader:
-					macro_shader_type.Name = "KLAYGE_VERTEX_SHADER";
-					break;
+			std::vector<std::pair<char const *, char const *>> macros;
+			macros.emplace_back("KLAYGE_D3D12", "1");
+			macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
 
-				case ST_PixelShader:
-					macro_shader_type.Name = "KLAYGE_PIXEL_SHADER";
-					break;
-
-				case ST_GeometryShader:
-					macro_shader_type.Name = "KLAYGE_GEOMETRY_SHADER";
-					break;
-
-				case ST_ComputeShader:
-					macro_shader_type.Name = "KLAYGE_COMPUTE_SHADER";
-					break;
-
-				case ST_HullShader:
-					macro_shader_type.Name = "KLAYGE_HULL_SHADER";
-					break;
-
-				case ST_DomainShader:
-					macro_shader_type.Name = "KLAYGE_DOMAIN_SHADER";
-					break;
-
-				default:
-					BOOST_ASSERT(false);
-					break;
-				}
-				macros.push_back(macro_shader_type);
-			}
-
-			for (uint32_t i = 0; i < tech.NumMacros(); ++ i)
-			{
-				std::pair<std::string, std::string> const & name_value = tech.MacroByIndex(i);
-				D3D_SHADER_MACRO macro_d3d11 = { name_value.first.c_str(), name_value.second.c_str() };
-				macros.push_back(macro_d3d11);
-			}
-
-			for (uint32_t i = 0; i < pass.NumMacros(); ++ i)
-			{
-				std::pair<std::string, std::string> const & name_value = pass.MacroByIndex(i);
-				D3D_SHADER_MACRO macro_d3d11 = { name_value.first.c_str(), name_value.second.c_str() };
-				macros.push_back(macro_d3d11);
-			}
-
-			{
-				D3D_SHADER_MACRO macro_end = { nullptr, nullptr };
-				macros.push_back(macro_end);
-			}
-			uint32_t flags = 0;
+			uint32_t flags = D3DCOMPILE_ENABLE_STRICTNESS;
 #if !defined(KLAYGE_DEBUG)
 			flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
 #endif
-			D3D12InterfaceLoader::Instance().D3DCompile(shader_text.c_str(), static_cast<UINT>(shader_text.size()), nullptr, &macros[0],
-				nullptr, sd.func_name.c_str(), shader_profile.c_str(),
-				flags, 0, &code, &err_msg);
-			if (err_msg != nullptr)
-			{
-				LogError("Error when compiling %s:", sd.func_name.c_str());
+			*code = this->CompileToDXBC(type, effect, tech, pass, macros, sd.func_name.c_str(), shader_profile, flags);
 
-				std::map<int, std::vector<std::string>> err_lines;
-				{
-					std::istringstream err_iss(static_cast<char*>(err_msg->GetBufferPointer()));
-					std::string err_str;
-					while (err_iss)
-					{
-						std::getline(err_iss, err_str);
-
-						int err_line = -1;
-						std::string::size_type pos = err_str.find("): error X");
-						if (pos == std::string::npos)
-						{
-							pos = err_str.find("): warning X");
-						}
-						if (pos != std::string::npos)
-						{
-							std::string part_err_str = err_str.substr(0, pos);
-							pos = part_err_str.rfind("(");
-							part_err_str = part_err_str.substr(pos + 1);
-							std::istringstream(part_err_str) >> err_line;
-						}
-
-						std::vector<std::string>& msgs = err_lines[err_line];
-						bool found = false;
-						for (auto const & msg : msgs)
-						{
-							if (msg == err_str)
-							{
-								found = true;
-								break;
-							}
-						}
-
-						if (!found)
-						{
-							// To make the error message unrecognized by Visual Studio
-							if ((0 == err_str.find("error X")) || (0 == err_str.find("warning X")))
-							{
-								err_str = "(0): " + err_str;
-							}
-
-							msgs.push_back(err_str);
-						}
-					}
-				}
-
-				for (auto iter = err_lines.begin(); iter != err_lines.end(); ++ iter)
-				{
-					if (iter->first >= 0)
-					{
-						std::istringstream iss(shader_text);
-						std::string s;
-						int line = 1;
-
-						LogInfo("...");
-						while (iss && ((iter->first - line) >= 3))
-						{
-							std::getline(iss, s);
-							++ line;
-						}
-						while (iss && (abs(line - iter->first) < 3))
-						{
-							std::getline(iss, s);
-							
-							while (!s.empty() && (('\r' == s[s.size() - 1]) || ('\n' == s[s.size() - 1])))
-							{
-								s.resize(s.size() - 1);
-							}
-
-							LogInfo("%d %s", line, s.c_str());
-
-							++ line;
-						}
-						LogInfo("...");
-					}
-
-					for (auto const & msg : iter->second)
-					{
-						LogError(msg.c_str());
-					}
-				}
-
-				err_msg->Release();
-			}
-
-			if (code)
+			if (!code->empty())
 			{
 				ID3D12ShaderReflection* reflection;
-				D3D12InterfaceLoader::Instance().D3DReflect(code->GetBufferPointer(), code->GetBufferSize(),
-					IID_ID3D12ShaderReflection_47, reinterpret_cast<void**>(&reflection));
+				this->ReflectDXBC(*code, reinterpret_cast<void**>(&reflection));
 				if (reflection != nullptr)
 				{
+					if (!shader_desc_[type])
+					{
+						shader_desc_[type] = MakeSharedPtr<D3D12ShaderDesc>();
+					}
+
 					D3D12_SHADER_DESC desc;
 					reflection->GetDesc(&desc);
 
@@ -878,7 +685,7 @@ namespace KlayGE
 								cb_desc.var_desc.push_back(vd);
 							}
 
-							shader_desc_[type].cb_desc.push_back(cb_desc);
+							shader_desc_[type]->cb_desc.push_back(cb_desc);
 						}
 					}
 
@@ -916,9 +723,9 @@ namespace KlayGE
 						}
 					}
 
-					shader_desc_[type].num_samplers = static_cast<uint16_t>(num_samplers + 1);
-					shader_desc_[type].num_srvs = static_cast<uint16_t>(num_srvs + 1);
-					shader_desc_[type].num_uavs = static_cast<uint16_t>(num_uavs + 1);
+					shader_desc_[type]->num_samplers = static_cast<uint16_t>(num_samplers + 1);
+					shader_desc_[type]->num_srvs = static_cast<uint16_t>(num_srvs + 1);
+					shader_desc_[type]->num_uavs = static_cast<uint16_t>(num_uavs + 1);
 
 					for (uint32_t i = 0; i < desc.BoundResources; ++ i)
 					{
@@ -937,16 +744,13 @@ namespace KlayGE
 						case D3D_SIT_UAV_APPEND_STRUCTURED:
 						case D3D_SIT_UAV_CONSUME_STRUCTURED:
 						case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
+							if (effect.ParameterByName(si_desc.Name))
 							{
-								RenderEffectParameterPtr const & p = effect.ParameterByName(si_desc.Name);
-								if (p)
-								{
-									D3D12ShaderDesc::BoundResourceDesc brd;
-									brd.name = si_desc.Name;
-									brd.type = static_cast<uint8_t>(si_desc.Type);
-									brd.bind_point = static_cast<uint16_t>(si_desc.BindPoint);
-									shader_desc_[type].res_desc.push_back(brd);
-								}
+								D3D12ShaderDesc::BoundResourceDesc brd;
+								brd.name = si_desc.Name;
+								brd.type = static_cast<uint8_t>(si_desc.Type);
+								brd.bind_point = static_cast<uint16_t>(si_desc.BindPoint);
+								shader_desc_[type]->res_desc.push_back(brd);
 							}
 							break;
 
@@ -963,18 +767,18 @@ namespace KlayGE
 						{
 							reflection->GetInputParameterDesc(i, &signature);
 
-							size_t seed = boost::hash_range(signature.SemanticName, signature.SemanticName + strlen(signature.SemanticName));
-							boost::hash_combine(seed, signature.SemanticIndex);
-							boost::hash_combine(seed, signature.Register);
-							boost::hash_combine(seed, static_cast<uint32_t>(signature.SystemValueType));
-							boost::hash_combine(seed, static_cast<uint32_t>(signature.ComponentType));
-							boost::hash_combine(seed, signature.Mask);
-							boost::hash_combine(seed, signature.ReadWriteMask);
-							boost::hash_combine(seed, signature.Stream);
-							boost::hash_combine(seed, signature.MinPrecision);
+							size_t seed = RT_HASH(signature.SemanticName);
+							HashCombine(seed, signature.SemanticIndex);
+							HashCombine(seed, signature.Register);
+							HashCombine(seed, static_cast<uint32_t>(signature.SystemValueType));
+							HashCombine(seed, static_cast<uint32_t>(signature.ComponentType));
+							HashCombine(seed, signature.Mask);
+							HashCombine(seed, signature.ReadWriteMask);
+							HashCombine(seed, signature.Stream);
+							HashCombine(seed, signature.MinPrecision);
 
 							size_t sig = vs_signature_;
-							boost::hash_combine(sig, seed);
+							HashCombine(sig, seed);
 							vs_signature_ = static_cast<uint32_t>(sig);
 						}
 					}
@@ -986,41 +790,30 @@ namespace KlayGE
 					reflection->Release();
 				}
 
-				ID3DBlob* strip_code = nullptr;
-				D3D12InterfaceLoader::Instance().D3DStripShader(code->GetBufferPointer(), code->GetBufferSize(),
-					D3DCOMPILER_STRIP_REFLECTION_DATA | D3DCOMPILER_STRIP_DEBUG_INFO
-					| D3DCOMPILER_STRIP_TEST_BLOBS | D3DCOMPILER_STRIP_PRIVATE_DATA,
-					&strip_code);
-				if (strip_code)
-				{
-					code->Release();
-					code = strip_code;
-				}
+				*code = this->StripDXBC(*code, D3DCOMPILER_STRIP_REFLECTION_DATA | D3DCOMPILER_STRIP_DEBUG_INFO
+					| D3DCOMPILER_STRIP_TEST_BLOBS | D3DCOMPILER_STRIP_PRIVATE_DATA);
 			}
 		}
 
-		std::shared_ptr<std::vector<uint8_t>> ret;
-		if (code)
+		if (code->empty())
 		{
-			ret = MakeSharedPtr<std::vector<uint8_t>>(code->GetBufferSize());
-			std::memcpy(&((*ret)[0]), code->GetBufferPointer(), code->GetBufferSize());
-			code->Release();
+			code.reset();
 		}
 
-		return ret;
+		return code;
 #else
-		UNREF_PARAM(type);
-		UNREF_PARAM(effect);
-		UNREF_PARAM(tech);
-		UNREF_PARAM(pass);
-		UNREF_PARAM(shader_desc_ids);
+		KFL_UNUSED(type);
+		KFL_UNUSED(effect);
+		KFL_UNUSED(tech);
+		KFL_UNUSED(pass);
+		KFL_UNUSED(shader_desc_ids);
 
-		return shared_ptr<std::vector<uint8_t>>();
+		return std::shared_ptr<std::vector<uint8_t>>();
 #endif
 	}
 
 	void D3D12ShaderObject::AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
-		std::vector<uint32_t> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob)
+		std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob)
 	{
 		if (code_blob)
 		{
@@ -1048,7 +841,7 @@ namespace KlayGE
 						so_decl_.resize(sd.so_decl.size());
 						for (size_t i = 0; i < sd.so_decl.size(); ++ i)
 						{
-							so_decl_[i] = D3D12Mapping::Mapping(sd.so_decl[i], static_cast<uint8_t>(i));
+							so_decl_[i] = D3D12Mapping::Mapping(sd.so_decl[i]);
 						}
 
 						rasterized_stream_ = 0;
@@ -1074,7 +867,7 @@ namespace KlayGE
 						so_decl_.resize(sd.so_decl.size());
 						for (size_t i = 0; i < sd.so_decl.size(); ++ i)
 						{
-							so_decl_[i] = D3D12Mapping::Mapping(sd.so_decl[i], static_cast<uint8_t>(i));
+							so_decl_[i] = D3D12Mapping::Mapping(sd.so_decl[i]);
 						}
 
 						rasterized_stream_ = 0;
@@ -1118,7 +911,7 @@ namespace KlayGE
 								so_decl_.resize(sd.so_decl.size());
 								for (size_t i = 0; i < sd.so_decl.size(); ++ i)
 								{
-									so_decl_[i] = D3D12Mapping::Mapping(sd.so_decl[i], static_cast<uint8_t>(i));
+									so_decl_[i] = D3D12Mapping::Mapping(sd.so_decl[i]);
 								}
 
 								rasterized_stream_ = 0;
@@ -1150,43 +943,46 @@ namespace KlayGE
 			}
 
 			// Shader reflection
-			cbuff_indices_[type].resize(shader_desc_[type].cb_desc.size());
-			d3d_cbuffs_[type].resize(shader_desc_[type].cb_desc.size());
-			for (size_t c = 0; c < shader_desc_[type].cb_desc.size(); ++ c)
+			if (!shader_desc_[type]->cb_desc.empty())
+			{
+				cbuff_indices_[type] = MakeSharedPtr<std::vector<uint8_t>>(shader_desc_[type]->cb_desc.size());
+			}
+			d3d_cbuffs_[type].resize(shader_desc_[type]->cb_desc.size());
+			for (size_t c = 0; c < shader_desc_[type]->cb_desc.size(); ++ c)
 			{
 				uint32_t i = 0;
 				for (; i < effect.NumCBuffers(); ++ i)
 				{
-					if (effect.CBufferByIndex(i)->NameHash() == shader_desc_[type].cb_desc[c].name_hash)
+					if (effect.CBufferByIndex(i)->NameHash() == shader_desc_[type]->cb_desc[c].name_hash)
 					{
-						cbuff_indices_[type][c] = static_cast<uint8_t>(i);
+						(*cbuff_indices_[type])[c] = static_cast<uint8_t>(i);
 						break;
 					}
 				}
 				BOOST_ASSERT(i < effect.NumCBuffers());
 			}
 
-			samplers_[type].resize(shader_desc_[type].num_samplers);
-			srvsrcs_[type].resize(shader_desc_[type].num_srvs,
+			samplers_[type].resize(shader_desc_[type]->num_samplers);
+			srvsrcs_[type].resize(shader_desc_[type]->num_srvs,
 				std::make_tuple(static_cast<ID3D12Resource*>(nullptr), 0, 0));
-			srvs_[type].resize(shader_desc_[type].num_srvs);
-			uavsrcs_[type].resize(shader_desc_[type].num_uavs,
+			srvs_[type].resize(shader_desc_[type]->num_srvs);
+			uavsrcs_[type].resize(shader_desc_[type]->num_uavs,
 				std::make_pair(static_cast<ID3D12Resource*>(nullptr), static_cast<ID3D12Resource*>(nullptr)));
-			uavs_[type].resize(shader_desc_[type].num_uavs);
+			uavs_[type].resize(shader_desc_[type]->num_uavs);
 
-			for (size_t i = 0; i < shader_desc_[type].res_desc.size(); ++ i)
+			for (size_t i = 0; i < shader_desc_[type]->res_desc.size(); ++ i)
 			{
-				RenderEffectParameterPtr const & p = effect.ParameterByName(shader_desc_[type].res_desc[i].name);
+				RenderEffectParameter* p = effect.ParameterByName(shader_desc_[type]->res_desc[i].name);
 				BOOST_ASSERT(p);
 
 				D3D12ShaderParameterHandle p_handle;
 				p_handle.shader_type = static_cast<uint8_t>(type);
 				p_handle.cbuff = 0;
-				p_handle.offset = shader_desc_[type].res_desc[i].bind_point;
+				p_handle.offset = shader_desc_[type]->res_desc[i].bind_point;
 				p_handle.elements = 1;
 				p_handle.rows = 0;
 				p_handle.columns = 1;
-				if (D3D_SIT_SAMPLER == shader_desc_[type].res_desc[i].type)
+				if (D3D_SIT_SAMPLER == shader_desc_[type]->res_desc[i].type)
 				{
 					p_handle.param_type = D3D_SVT_SAMPLER;
 
@@ -1200,7 +996,7 @@ namespace KlayGE
 				}
 				else
 				{
-					if (D3D_SRV_DIMENSION_BUFFER == shader_desc_[type].res_desc[i].dimension)
+					if (D3D_SRV_DIMENSION_BUFFER == shader_desc_[type]->res_desc[i].dimension)
 					{
 						p_handle.param_type = D3D_SVT_BUFFER;
 					}
@@ -1220,7 +1016,7 @@ namespace KlayGE
 	}
 
 	void D3D12ShaderObject::AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids)
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids)
 	{
 		std::shared_ptr<std::vector<uint8_t>> code_blob = this->CompiteToBytecode(type, effect, tech, pass, shader_desc_ids);
 		this->AttachShaderBytecode(type, effect, shader_desc_ids, code_blob);
@@ -1317,43 +1113,46 @@ namespace KlayGE
 		{
 			is_validate_ &= is_shader_validate_[type];
 
-			all_cbuff_indices.insert(all_cbuff_indices.end(),
-				cbuff_indices_[type].begin(), cbuff_indices_[type].end());
-			for (size_t i = 0; i < cbuff_indices_[type].size(); ++ i)
+			if (cbuff_indices_[type] && !cbuff_indices_[type]->empty())
 			{
-				RenderEffectConstantBufferPtr const & cbuff = effect.CBufferByIndex(cbuff_indices_[type][i]);
-				cbuff->Resize(shader_desc_[type].cb_desc[i].size);
-				BOOST_ASSERT(cbuff->NumParameters() == shader_desc_[type].cb_desc[i].var_desc.size());
-				for (uint32_t j = 0; j < cbuff->NumParameters(); ++ j)
+				all_cbuff_indices.insert(all_cbuff_indices.end(),
+					cbuff_indices_[type]->begin(), cbuff_indices_[type]->end());
+				for (size_t i = 0; i < cbuff_indices_[type]->size(); ++ i)
 				{
-					RenderEffectParameterPtr const & param = effect.ParameterByIndex(cbuff->ParameterIndex(j));
-					uint32_t stride;
-					if (shader_desc_[type].cb_desc[i].var_desc[j].elements > 0)
+					auto cbuff = effect.CBufferByIndex((*cbuff_indices_[type])[i]);
+					cbuff->Resize(shader_desc_[type]->cb_desc[i].size);
+					BOOST_ASSERT(cbuff->NumParameters() == shader_desc_[type]->cb_desc[i].var_desc.size());
+					for (uint32_t j = 0; j < cbuff->NumParameters(); ++ j)
 					{
-						if (param->Type() != REDT_float4x4)
+						RenderEffectParameter* param = effect.ParameterByIndex(cbuff->ParameterIndex(j));
+						uint32_t stride;
+						if (shader_desc_[type]->cb_desc[i].var_desc[j].elements > 0)
 						{
-							stride = 16;
+							if (param->Type() != REDT_float4x4)
+							{
+								stride = 16;
+							}
+							else
+							{
+								stride = 64;
+							}
 						}
 						else
 						{
-							stride = 64;
+							if (param->Type() != REDT_float4x4)
+							{
+								stride = 4;
+							}
+							else
+							{
+								stride = 16;
+							}
 						}
+						param->BindToCBuffer(*cbuff, shader_desc_[type]->cb_desc[i].var_desc[j].start_offset, stride);
 					}
-					else
-					{
-						if (param->Type() != REDT_float4x4)
-						{
-							stride = 4;
-						}
-						else
-						{
-							stride = 16;
-						}
-					}
-					param->BindToCBuffer(cbuff, shader_desc_[type].cb_desc[i].var_desc[j].start_offset, stride);
-				}
 
-				d3d_cbuffs_[type][i] = cbuff->HWBuff();
+					d3d_cbuffs_[type][i] = cbuff->HWBuff().get();
+				}
 			}
 		}
 
@@ -1446,18 +1245,21 @@ namespace KlayGE
 			ret->uavs_[i].resize(uavs_[i].size());
 
 			ret->cbuff_indices_[i] = cbuff_indices_[i];
-			ret->d3d_cbuffs_[i].resize(d3d_cbuffs_[i].size());
-			all_cbuff_indices.insert(all_cbuff_indices.end(), cbuff_indices_[i].begin(), cbuff_indices_[i].end());
-			for (size_t j = 0; j < cbuff_indices_[i].size(); ++ j)
+			if (cbuff_indices_[i] && !cbuff_indices_[i]->empty())
 			{
-				RenderEffectConstantBufferPtr cbuff = effect.CBufferByIndex(cbuff_indices_[i][j]);
-				ret->d3d_cbuffs_[i][j] = cbuff->HWBuff();
+				ret->d3d_cbuffs_[i].resize(d3d_cbuffs_[i].size());
+				all_cbuff_indices.insert(all_cbuff_indices.end(), cbuff_indices_[i]->begin(), cbuff_indices_[i]->end());
+				for (size_t j = 0; j < cbuff_indices_[i]->size(); ++ j)
+				{
+					auto cbuff = effect.CBufferByIndex((*cbuff_indices_[i])[j]);
+					ret->d3d_cbuffs_[i][j] = cbuff->HWBuff().get();
+				}
 			}
 
 			ret->param_binds_[i].reserve(param_binds_[i].size());
 			for (auto const & pb : param_binds_[i])
 			{
-				ret->param_binds_[i].push_back(ret->GetBindFunc(pb.p_handle, effect.ParameterByName(*(pb.param->Name()))));
+				ret->param_binds_[i].push_back(ret->GetBindFunc(pb.p_handle, effect.ParameterByName(pb.param->Name())));
 			}
 		}
 
@@ -1476,7 +1278,8 @@ namespace KlayGE
 		return ret;
 	}
 
-	D3D12ShaderObject::parameter_bind_t D3D12ShaderObject::GetBindFunc(D3D12ShaderParameterHandle const & p_handle, RenderEffectParameterPtr const & param)
+	D3D12ShaderObject::parameter_bind_t D3D12ShaderObject::GetBindFunc(D3D12ShaderParameterHandle const & p_handle,
+		RenderEffectParameter* param)
 	{
 		parameter_bind_t ret;
 		ret.param = param;

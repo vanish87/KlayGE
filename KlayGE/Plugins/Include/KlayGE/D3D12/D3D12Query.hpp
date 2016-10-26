@@ -50,7 +50,6 @@ namespace KlayGE
 	private:
 		ID3D12QueryHeapPtr query_heap_;
 		ID3D12ResourcePtr query_result_;
-		ID3D12ResourcePtr query_result_readback_;
 	};
 
 	class D3D12ConditionalRender : public ConditionalRender
@@ -69,7 +68,6 @@ namespace KlayGE
 	private:
 		ID3D12QueryHeapPtr predicate_heap_;
 		ID3D12ResourcePtr predicate_result_;
-		ID3D12ResourcePtr predicate_result_readback_;
 	};
 
 	class D3D12TimerQuery : public TimerQuery
@@ -80,12 +78,27 @@ namespace KlayGE
 		void Begin();
 		void End();
 
-		double TimeElapsed() KLAYGE_OVERRIDE;
+		double TimeElapsed() override;
 
 	private:
 		ID3D12QueryHeapPtr timestamp_heap_;
 		ID3D12ResourcePtr timestamp_result_;
-		ID3D12ResourcePtr timestamp_result_readback_;
+	};
+
+	class D3D12SOStatisticsQuery : public SOStatisticsQuery
+	{
+	public:
+		D3D12SOStatisticsQuery();
+
+		void Begin();
+		void End();
+
+		uint64_t NumPrimitivesWritten() override;
+		uint64_t PrimitivesGenerated() override;
+
+	private:
+		ID3D12QueryHeapPtr so_stat_query_heap_;
+		ID3D12ResourcePtr so_stat_query_result_;
 	};
 }
 

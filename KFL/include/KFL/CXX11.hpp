@@ -42,66 +42,10 @@
 	#define KLAYGE_NOEXCEPT_IF(predicate)
 	#define KLAYGE_NOEXCEPT_EXPR(expression) false
 #endif
-#ifdef KLAYGE_CXX11_CORE_OVERRIDE_SUPPORT
-	#define KLAYGE_OVERRIDE override
-	#define KLAYGE_FINAL final
-#else
-	#define KLAYGE_OVERRIDE
-	#define KLAYGE_FINAL
-#endif
 #ifdef KLAYGE_CXX11_CORE_CONSTEXPR_SUPPORT
 	#define KLAYGE_CONSTEXPR constexpr
 #else
 	#define KLAYGE_CONSTEXPR
-#endif
-
-#ifdef KLAYGE_CXX11_LIBRARY_CHRONO_SUPPORT
-	#include <chrono>
-#else
-	#include <boost/chrono.hpp>
-	namespace std
-	{
-		namespace chrono = boost::chrono;
-	}
-#endif
-
-#ifdef KLAYGE_CXX11_LIBRARY_EMPLACE_SUPPORT
-	#define KLAYGE_EMPLACE(container, key, value) (container).emplace((key), (value))
-#else
-	#define KLAYGE_EMPLACE(container, key, value) (container).insert(std::make_pair((key), (value)))
-#endif
-
-#ifdef KLAYGE_CXX11_LIBRARY_MEM_FN_SUPPORT
-	#include <functional>
-	namespace KlayGE
-	{
-		using std::mem_fn;
-	}
-#else
-	#if defined(KLAYGE_PLATFORM_WIN32) && defined(KLAYGE_CPU_X86)
-		#ifndef BOOST_MEM_FN_ENABLE_STDCALL
-			#define BOOST_MEM_FN_ENABLE_STDCALL
-		#endif
-	#endif
-	#include <boost/mem_fn.hpp>
-	namespace KlayGE
-	{
-		using boost::mem_fn;
-	}
-#endif
-
-#if !(((defined(KLAYGE_COMPILER_GCC) || defined(KLAYGE_COMPILER_CLANG)) && (__GLIBCXX__ >= 20130531)) \
-		|| defined(KLAYGE_PLATFORM_DARWIN) || defined(KLAYGE_PLATFORM_IOS) \
-		|| defined(KLAYGE_COMPILER_MSVC))
-#include <type_traits>
-namespace std
-{
-	template <typename T>
-	struct is_trivially_destructible
-	{
-		static const bool value = std::has_trivial_destructor<T>::value;
-	};
-}
 #endif
 
 #endif		// _KFL_CXX11_HPP

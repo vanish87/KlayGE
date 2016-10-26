@@ -30,7 +30,7 @@ namespace KlayGE
 		: RasterizerStateObject(desc)
 	{
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-		ID3D11DevicePtr const & d3d_device = re.D3DDevice();
+		ID3D11Device* d3d_device = re.D3DDevice();
 
 		D3D11_RASTERIZER_DESC d3d_desc;
 		d3d_desc.FillMode = D3D11Mapping::Mapping(desc.polygon_mode);
@@ -46,7 +46,7 @@ namespace KlayGE
 
 		if (re.D3D11RuntimeSubVer() >= 1)
 		{
-			ID3D11Device1Ptr const & d3d_device_1 = std::static_pointer_cast<ID3D11Device1>(d3d_device);
+			ID3D11Device1* d3d_device_1 = re.D3DDevice1();
 			D3D11_RASTERIZER_DESC1 d3d_desc1;
 			d3d_desc1.FillMode = d3d_desc.FillMode;
 			d3d_desc1.CullMode = d3d_desc.CullMode;
@@ -75,7 +75,7 @@ namespace KlayGE
 	void D3D11RasterizerStateObject::Active()
 	{
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-		re.RSSetState(rasterizer_state_);
+		re.RSSetState(rasterizer_state_.get());
 	}
 
 	D3D11DepthStencilStateObject::D3D11DepthStencilStateObject(DepthStencilStateDesc const & desc)
@@ -97,7 +97,7 @@ namespace KlayGE
 		d3d_desc.BackFace.StencilPassOp = D3D11Mapping::Mapping(desc.back_stencil_pass);
 		d3d_desc.BackFace.StencilFunc = D3D11Mapping::Mapping(desc.back_stencil_func);
 
-		ID3D11DevicePtr const & d3d_device = checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance())->D3DDevice();
+		ID3D11Device* d3d_device = checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance())->D3DDevice();
 
 		ID3D11DepthStencilState* ds_state;
 		TIF(d3d_device->CreateDepthStencilState(&d3d_desc, &ds_state));
@@ -107,7 +107,7 @@ namespace KlayGE
 	void D3D11DepthStencilStateObject::Active(uint16_t front_stencil_ref, uint16_t /*back_stencil_ref*/)
 	{
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-		re.OMSetDepthStencilState(depth_stencil_state_, front_stencil_ref);
+		re.OMSetDepthStencilState(depth_stencil_state_.get(), front_stencil_ref);
 	}
 
 	D3D11BlendStateObject::D3D11BlendStateObject(BlendStateDesc const & desc)
@@ -133,11 +133,11 @@ namespace KlayGE
 			d3d_desc.RenderTarget[i].RenderTargetWriteMask = static_cast<UINT8>(D3D11Mapping::MappingColorMask(desc.color_write_mask[rt_index]));
 		}
 
-		ID3D11DevicePtr const & d3d_device = re.D3DDevice();
+		ID3D11Device* d3d_device = re.D3DDevice();
 
 		if (re.D3D11RuntimeSubVer() >= 1)
 		{
-			ID3D11Device1Ptr const & d3d_device_1 = std::static_pointer_cast<ID3D11Device1>(d3d_device);
+			ID3D11Device1* d3d_device_1 = re.D3DDevice1();
 			D3D11_BLEND_DESC1 d3d_desc1;
 			d3d_desc1.AlphaToCoverageEnable = d3d_desc.AlphaToCoverageEnable;
 			d3d_desc1.IndependentBlendEnable = d3d_desc.IndependentBlendEnable;
@@ -173,38 +173,23 @@ namespace KlayGE
 	void D3D11BlendStateObject::Active(Color const & blend_factor, uint32_t sample_mask)
 	{
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-		re.OMSetBlendState(blend_state_, blend_factor, sample_mask);
+		re.OMSetBlendState(blend_state_.get(), blend_factor, sample_mask);
 	}
 
 	D3D11SamplerStateObject::D3D11SamplerStateObject(SamplerStateDesc const & desc)
 		: SamplerStateObject(desc)
 	{
 		D3D11RenderEngine const & render_eng = *checked_cast<D3D11RenderEngine const *>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-		ID3D11DevicePtr const & d3d_device = render_eng.D3DDevice();
+		ID3D11Device* d3d_device = render_eng.D3DDevice();
 		D3D_FEATURE_LEVEL feature_level = render_eng.DeviceFeatureLevel();
 
 		D3D11_SAMPLER_DESC d3d_desc;
 		d3d_desc.Filter = D3D11Mapping::Mapping(desc.filter);
-		TexAddressingMode addr_mode_u = desc.addr_mode_u;
-		if ((feature_level <= D3D_FEATURE_LEVEL_9_2) && (TAM_Border == desc.addr_mode_u))
-		{
-			addr_mode_u = TAM_Clamp;
-		}
-		d3d_desc.AddressU = D3D11Mapping::Mapping(addr_mode_u);
-		TexAddressingMode addr_mode_v = desc.addr_mode_v;
-		if ((feature_level <= D3D_FEATURE_LEVEL_9_2) && (TAM_Border == desc.addr_mode_u))
-		{
-			addr_mode_v = TAM_Clamp;
-		}
-		d3d_desc.AddressV = D3D11Mapping::Mapping(addr_mode_v);
-		TexAddressingMode addr_mode_w = desc.addr_mode_w;
-		if ((feature_level <= D3D_FEATURE_LEVEL_9_2) && (TAM_Border == desc.addr_mode_u))
-		{
-			addr_mode_w = TAM_Clamp;
-		}
-		d3d_desc.AddressW = D3D11Mapping::Mapping(addr_mode_w);
+		d3d_desc.AddressU = D3D11Mapping::Mapping(desc.addr_mode_u);
+		d3d_desc.AddressV = D3D11Mapping::Mapping(desc.addr_mode_v);
+		d3d_desc.AddressW = D3D11Mapping::Mapping(desc.addr_mode_w);
 		d3d_desc.MipLODBias = desc.mip_map_lod_bias;
-		d3d_desc.MaxAnisotropy = (feature_level <= D3D_FEATURE_LEVEL_9_1) ? 1 : desc.max_anisotropy;
+		d3d_desc.MaxAnisotropy = desc.max_anisotropy;
 		d3d_desc.ComparisonFunc = D3D11Mapping::Mapping(desc.cmp_func);
 		d3d_desc.BorderColor[0] = desc.border_clr.r();
 		d3d_desc.BorderColor[1] = desc.border_clr.g();

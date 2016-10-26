@@ -69,6 +69,57 @@ namespace KlayGE
 			UES_All = 0xFF
 		};
 
+		struct Material
+		{
+			enum TextureSlot
+			{
+				TS_Albedo,
+				TS_Metalness,
+				TS_Glossiness,
+				TS_Emissive,
+				TS_Normal,
+				TS_Height,
+
+				// Offline only
+				TS_Bump,	// Will be converted to normal map
+
+				TS_NumTextureSlots
+			};
+
+			enum SurfaceDetailMode
+			{
+				SDM_Parallax = 0,
+				SDM_FlatTessellation,
+				SDM_SmoothTessellation
+			};
+			
+			Material()
+				: detail_mode(SDM_Parallax),
+					height_offset_scale(-0.5f, 0.06f),
+					tess_factors(5, 5, 1, 9)
+			{
+			}
+
+			std::string name;
+
+			float4 albedo;
+			float metalness;
+			float glossiness;
+			float3 emissive;
+
+			bool transparent;
+			float alpha_test;
+			bool sss;
+
+			std::array<std::string, TS_NumTextureSlots> tex_names;
+
+			SurfaceDetailMode detail_mode;
+			float2 height_offset_scale;
+			float4 tess_factors;
+
+			bool operator==(Material const & rhs) const;
+		};
+
 	public:
 		explicit MeshMLObj(float unit_scale);
 
@@ -99,10 +150,11 @@ namespace KlayGE
 			Quaternion const & bind_real, Quaternion const & bind_dual);
 
 		int AllocMaterial();
-		void SetMaterial(int mtl_id, float3 const & ambient, float3 const & diffuse,
-			float3 const & specular, float3 const & emit, float opacity, float shininess);
-		int AllocTextureSlot(int mtl_id);
-		void SetTextureSlot(int mtl_id, int slot_id, std::string const & type, std::string const & name);
+		void SetMaterial(int mtl_id, std::string const & name, float4 const & albedo, float metalness, float glossiness,
+			float3 const & emissive, bool transparent, float alpha_test, bool sss);
+		void SetDetailMaterial(int mtl_id, Material::SurfaceDetailMode detail_mode, float height_offset, float height_scale,
+			float edge_tess_hint, float inside_tess_hint, float min_tess, float max_tess);
+		void SetTextureSlot(int mtl_id, Material::TextureSlot type, std::string const & name);
 
 		int AllocMesh();
 		void SetMesh(int mesh_id, int material_id, std::string const & name);
@@ -135,22 +187,8 @@ namespace KlayGE
 			std::string const & encoding = std::string());
 
 	private:
-		typedef std::pair<std::string, std::string> TextureSlot;
 		typedef std::pair<int, float> JointBinding;
 
-		struct Material
-		{
-			float3 ambient;
-			float3 diffuse;
-			float3 specular;
-			float3 emit;
-			float opacity;
-			float shininess;
-			std::vector<TextureSlot> texture_slots;
-
-			bool operator==(Material const & rhs) const;
-		};
-		
 		struct Vertex
 		{
 			float3 position;

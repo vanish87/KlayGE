@@ -668,7 +668,7 @@ namespace KlayGE
 					memset(&(*data)[0], 0, full_tile_bytes);
 				}
 
-				iter = KLAYGE_EMPLACE(decoded_block_cache_, data_index, DecodedBlockInfo(data, decode_tick_)).first;
+				iter = decoded_block_cache_.emplace(data_index, DecodedBlockInfo(data, decode_tick_)).first;
 			}
 
 			return &(*iter->second.data)[0];
@@ -1146,7 +1146,7 @@ namespace KlayGE
 			uint32_t const scale = tile_size_ / cache_tile_size_;
 			BOOST_ASSERT(scale * cache_tile_size_ == tile_size_);
 			BOOST_ASSERT(0 == (scale & (scale - 1)));
-			UNREF_PARAM(scale);
+			KFL_UNUSED(scale);
 
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
@@ -1191,7 +1191,8 @@ namespace KlayGE
 			uint32_t array_size = std::min(std::min((pages + s * s - 1) / (s * s), static_cast<uint32_t>(caps.max_pixel_texture_units - 1)), 7U);
 			if (caps.max_texture_array_length > array_size)
 			{
-				tex_cache_ = rf.MakeTexture2D(tile_with_border_size * s, tile_with_border_size * s, mipmap, array_size, format, 1, 0, EAH_GPU_Read, nullptr);
+				tex_cache_ = rf.MakeTexture2D(tile_with_border_size * s, tile_with_border_size * s, mipmap,
+					std::max(array_size, 2U), format, 1, 0, EAH_GPU_Read, nullptr);
 			}
 			else
 			{
@@ -1202,11 +1203,9 @@ namespace KlayGE
 				}
 			}
 
-			tex_a_tile_cache_ = rf.MakeTexture2D(tile_with_border_size, tile_with_border_size, mipmap, 1, format, 1, 0, EAH_CPU_Write, nullptr);
 			tex_indirect_ = rf.MakeTexture2D(num_tiles_, num_tiles_, 1, 1, EF_ABGR8, 1, 0, EAH_GPU_Read, nullptr);
-			tex_a_tile_indirect_ = rf.MakeTexture2D(1, 1, 1, 1, EF_ABGR8, 1, 0, EAH_CPU_Write, nullptr);
 
-			tile_free_list_.push_back(std::make_pair(0, pages));
+			tile_free_list_.emplace_back(0, pages);
 		}
 	}
 
@@ -1225,9 +1224,8 @@ namespace KlayGE
 		return tex_indirect_;
 	}
 
-	void JudaTexture::SetParams(RenderTechniquePtr const tech)
+	void JudaTexture::SetParams(RenderEffect const & effect)
 	{
-		RenderEffect& effect = tech->Effect();
 		if (tex_cache_)
 		{
 			*(effect.ParameterByName("juda_tex_cache")) = tex_cache_;
@@ -1365,7 +1363,7 @@ namespace KlayGE
 					{
 						if (neighbor_id_map.find(new_tile_id_with_neighbors[j]) == neighbor_id_map.end())
 						{
-							KLAYGE_EMPLACE(neighbor_id_map, new_tile_id_with_neighbors[j], static_cast<uint32_t>(neighbor_ids.size()));
+							neighbor_id_map.emplace(new_tile_id_with_neighbors[j], static_cast<uint32_t>(neighbor_ids.size()));
 							neighbor_ids.push_back(new_tile_id_with_neighbors[j]);
 						}
 					}
@@ -1375,7 +1373,7 @@ namespace KlayGE
 			}
 		}
 
-		uint32_t mipmaps = tex_a_tile_cache_->NumMipMaps();
+		uint32_t mipmaps = tex_cache_->NumMipMaps();
 		std::vector<std::vector<uint8_t>> neighbor_data;
 		this->DecodeTiles(neighbor_data, neighbor_ids, mipmaps);
 
@@ -1444,7 +1442,7 @@ namespace KlayGE
 						{
 							++ freeiter;
 						}
-						tile_free_list_.insert(freeiter, std::make_pair(id, id + 1));
+						tile_free_list_.emplace(freeiter, id, id + 1);
 
 						tileiter = tim.erase(tileiter);
 					}
@@ -1471,7 +1469,7 @@ namespace KlayGE
 				}
 			}
 
-			std::array<uint32_t, 9> index_with_neighbors;
+			std::array<uint32_t, 9> index_with_neighbors = { { 0 } };
 			for (size_t j = 0; j < index_with_neighbors.size(); ++ j)
 			{
 				if (all_neighbor_ids[i + j] != 0xFFFFFFFF)
@@ -1492,7 +1490,11 @@ namespace KlayGE
 			uint32_t mip_border_size = cache_tile_border_size_;
 			for (uint32_t l = 0; l < mipmaps; ++ l)
 			{
+#if defined(KLAYGE_COMPILER_MSVC)
+				std::array<uint8_t const *, 9> neighbor_data_ptr{};
+#else
 				std::array<uint8_t const *, 9> neighbor_data_ptr;
+#endif
 				for (uint32_t j = 0; j < neighbor_data_ptr.size(); ++ j)
 				{
 					if (index_with_neighbors[j] != 0xFFFFFFFF)
@@ -2445,6 +2447,19 @@ namespace KlayGE
 					format = tex_cache_array_[tile_info.z]->Format();
 				}
 
+				TexturePtr target_tex;
+				uint32_t target_array_index;
+				if (tex_cache_)
+				{
+					target_tex = tex_cache_;
+					target_array_index = tile_info.z;
+				}
+				else
+				{
+					target_tex = tex_cache_array_[tile_info.z];
+					target_array_index = 0;
+				}
+
 				if (IsCompressedFormat(format))
 				{
 					uint32_t const block_width = tex_codec_->BlockWidth();
@@ -2533,75 +2548,37 @@ namespace KlayGE
 						tex_codec_->EncodeMem(mip_tile_with_border_size, mip_tile_with_border_size,
 							&bc[0], bc_row_pitch, bc_slice_pitch, p_argb, row_pitch, slice_pitch, TCM_Quality);
 					}
-					{
-						Texture::Mapper mapper(*tex_a_tile_cache_, 0, l, TMA_Write_Only,
-							0, 0, mip_tile_with_border_size, mip_tile_with_border_size);
 
-						uint8_t const * src = &bc[0];
-						uint32_t const src_pitch = bc_row_pitch;
-
-						uint8_t* dst = mapper.Pointer<uint8_t>();
-						uint32_t const dst_pitch = mapper.RowPitch();
-
-						for (uint32_t y = 0; y < (mip_tile_with_border_size + block_height - 1) / block_height; ++ y)
-						{
-							std::memcpy(dst, src, src_pitch);
-							src += src_pitch;
-							dst += dst_pitch;
-						}
-					}
+					target_tex->UpdateSubresource2D(target_array_index, l,
+						tile_info.x * mip_tile_with_border_size, tile_info.y * mip_tile_with_border_size,
+						mip_tile_with_border_size, mip_tile_with_border_size,
+						&bc[0], bc_row_pitch);
 				}
 				else
 				{
-					Texture::Mapper mapper(*tex_a_tile_cache_, 0, l, TMA_Write_Only,
-						0, 0, mip_tile_with_border_size, mip_tile_with_border_size);
-
-					uint8_t const * src = &tex_a_tile_data[0];
-					uint32_t const src_pitch = mip_tile_with_border_size * texel_size_;
-
-					uint8_t* dst = mapper.Pointer<uint8_t>();
-					uint32_t const dst_pitch = mapper.RowPitch();
-
-					for (uint32_t y = 0; y < mip_tile_with_border_size; ++ y)
-					{
-						std::memcpy(dst, src, src_pitch);
-						src += src_pitch;
-						dst += dst_pitch;
-					}
-				}
-
-				if (tex_cache_)
-				{
-					tex_a_tile_cache_->CopyToSubTexture2D(*tex_cache_,
-						tile_info.z, l, tile_info.x * mip_tile_with_border_size, tile_info.y * mip_tile_with_border_size, mip_tile_with_border_size, mip_tile_with_border_size,
-						0, l, 0, 0, mip_tile_with_border_size, mip_tile_with_border_size);
-				}
-				else
-				{
-					tex_a_tile_cache_->CopyToSubTexture2D(*tex_cache_array_[tile_info.z],
-						0, l, tile_info.x * mip_tile_with_border_size, tile_info.y * mip_tile_with_border_size, mip_tile_with_border_size, mip_tile_with_border_size,
-						0, l, 0, 0, mip_tile_with_border_size, mip_tile_with_border_size);
+					target_tex->UpdateSubresource2D(target_array_index, l,
+						tile_info.x * mip_tile_with_border_size, tile_info.y * mip_tile_with_border_size,
+						mip_tile_with_border_size, mip_tile_with_border_size,
+						&tex_a_tile_data[0], mip_tile_with_border_size * texel_size_);
 				}
 
 				mip_tile_size /= 2;
 				mip_tile_with_border_size /= 2;
 				mip_border_size /= 2;
 			}
-			{
-				Texture::Mapper mapper(*tex_a_tile_indirect_, 0, 0, TMA_Write_Only, 0, 0, 1, 1);
-				uint8_t* p = mapper.Pointer<uint8_t>();
-				p[0] = static_cast<uint8_t>(tile_info.x);
-				p[1] = static_cast<uint8_t>(tile_info.y);
-				p[2] = static_cast<uint8_t>(tile_info.z);
-			}
 
+			uint8_t const a_tile_indirect[] =
+			{
+				static_cast<uint8_t>(tile_info.x),
+				static_cast<uint8_t>(tile_info.y),
+				static_cast<uint8_t>(tile_info.z),
+				0
+			};
 			uint32_t level, tile_x, tile_y;
 			this->DecodeTileID(level, tile_x, tile_y, all_neighbor_ids[i]);
-			tex_a_tile_indirect_->CopyToSubTexture2D(*tex_indirect_,
-				0, 0, tile_x, tile_y, 1, 1,
-				0, 0, 0, 0, 1, 1);
+			tex_indirect_->UpdateSubresource2D(0, 0, tile_x, tile_y, 1, 1, a_tile_indirect, sizeof(a_tile_indirect));
 
-			KLAYGE_EMPLACE(tim, all_neighbor_ids[i], tile_info);
+			tim.emplace(all_neighbor_ids[i], tile_info);
 		}
 	}
 }

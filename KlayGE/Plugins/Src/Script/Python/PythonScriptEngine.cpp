@@ -49,11 +49,16 @@ namespace KlayGE
 
 	PyObject* StdoutWrite(PyObject* self, PyObject* args)
 	{
-		UNREF_PARAM(self);
-		UNREF_PARAM(args);
+		KFL_UNUSED(self);
+		KFL_UNUSED(args);
 
-		char* data;
+		char* data = nullptr;
 		if (!PyArg_ParseTuple(args, "s", &data))
+		{
+			return 0;
+		}
+
+		if (nullptr == data)
 		{
 			return 0;
 		}
@@ -68,8 +73,8 @@ namespace KlayGE
 	
 	PyObject* StdoutFlush(PyObject* self, PyObject* args)
 	{
-		UNREF_PARAM(self);
-		UNREF_PARAM(args);
+		KFL_UNUSED(self);
+		KFL_UNUSED(args);
 
 		// no-op
 		return Py_BuildValue("");

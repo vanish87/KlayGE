@@ -580,7 +580,10 @@ namespace KlayGE
 			Vector_T<T, 4> temp(transform(vec, world));
 			temp = transform(temp, view);
 			temp = transform(temp, proj);
-			temp /= temp.w();
+			if (!MathLib::equal(temp.w(), T(0)))
+			{
+				temp /= temp.w();
+			}
 
 			Vector_T<T, 3> ret;
 			ret.x() = (temp.x() + 1) * viewport[2] / 2 + viewport[0];
@@ -710,17 +713,17 @@ namespace KlayGE
 				return 0;
 			}
 
-			Vector_T<T, 3> dst[8];
+			Vector_T<T, 2> dst[8];
 			for (uint32_t i = 0; i < num; ++ i)
 			{
-				dst[i] = MathLib::transform_coord(aabbox.Corner(HULL_VERTEX[pos][i]), view_proj);
-				dst[i] = dst[i] * T(0.5) + Vector_T<T, 3>(0.5, 0.5, 0.0);
+				Vector_T<T, 3> v = MathLib::transform_coord(aabbox.Corner(HULL_VERTEX[pos][i]), view_proj);
+				dst[i] = Vector_T<T, 2>(v.x(), v.y()) * T(0.5) + Vector_T<T, 2>(0.5, 0.5);
 			}
 
-			T sum = 0;
-			for (uint32_t i = 0; i < num; ++ i)
+			T sum = abs((dst[num - 1].x() - dst[0].x()) * (dst[num - 1].y() + dst[0].y()));
+			for (uint32_t i = 0; i < num - 1; ++ i)
 			{
-				int next = (i + 1) % num;
+				uint32_t const next = i + 1;
 				sum += abs((dst[i].x() - dst[next].x()) * (dst[i].y() + dst[next].y()));
 			}
 			return sum / 2;
@@ -2006,8 +2009,7 @@ namespace KlayGE
 
 			for (int i0 = 0; i0 < 3; ++ i0)
 			{
-				int i1;
-				for (i1 = 0; i1 < nIterPower; ++ i1)
+				for (int i1 = 0; i1 < nIterPower; ++ i1)
 				{
 					int i2;
 					for (i2 = i0; i2 <= 3 - 2; ++ i2)
@@ -2078,13 +2080,12 @@ namespace KlayGE
 			// IncreasingSort
 
 			// Sort the eigenvalues in increasing order, e[0] <= ... <= e[mSize-1]
-			for (int i0 = 0, i1; i0 <= 3 - 2; ++ i0)
+			for (int i0 = 0; i0 <= 3 - 2; ++ i0)
 			{ 
 				// Locate the minimum eigenvalue.
-				i1 = i0;
+				int i1 = i0;
 				float min_value = diagonal[i1];
-				int i2;
-				for (i2 = i0 + 1; i2 < 3; ++ i2)
+				for (int i2 = i0 + 1; i2 < 3; ++ i2)
 				{
 					if (diagonal[i2] < min_value)
 					{
@@ -2100,7 +2101,7 @@ namespace KlayGE
 					diagonal[i0] = min_value;
 
 					// Swap the eigenvectors corresponding to the eigenvalues.
-					for (i2 = 0; i2 < 3; ++ i2)
+					for (int i2 = 0; i2 < 3; ++ i2)
 					{
 						value_type tmp = matrix[i2][i0];
 						matrix[i2][i0] = matrix[i2][i1];

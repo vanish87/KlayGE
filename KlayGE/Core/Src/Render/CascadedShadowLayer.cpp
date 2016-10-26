@@ -211,33 +211,33 @@ namespace KlayGE
 					bias_buff_->Size(), nullptr);
 			}
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("CascadedShadow.fxml");
+			effect_ = SyncLoadRenderEffect("CascadedShadow.fxml");
 
-			clear_z_bounds_tech_ = effect->TechniqueByName("ClearZBounds");
-			reduce_z_bounds_from_depth_tech_ = effect->TechniqueByName("ReduceZBoundsFromDepth");
-			compute_log_cascades_from_z_bounds_tech_ = effect->TechniqueByName("ComputeLogCascadesFromZBounds");
-			clear_cascade_bounds_tech_ = effect->TechniqueByName("ClearCascadeBounds");
-			reduce_bounds_from_depth_tech_ = effect->TechniqueByName("ReduceBoundsFromDepth");
-			compute_custom_cascades_tech_ = effect->TechniqueByName("ComputeCustomCascades");
+			clear_z_bounds_tech_ = effect_->TechniqueByName("ClearZBounds");
+			reduce_z_bounds_from_depth_tech_ = effect_->TechniqueByName("ReduceZBoundsFromDepth");
+			compute_log_cascades_from_z_bounds_tech_ = effect_->TechniqueByName("ComputeLogCascadesFromZBounds");
+			clear_cascade_bounds_tech_ = effect_->TechniqueByName("ClearCascadeBounds");
+			reduce_bounds_from_depth_tech_ = effect_->TechniqueByName("ReduceBoundsFromDepth");
+			compute_custom_cascades_tech_ = effect_->TechniqueByName("ComputeCustomCascades");
 
-			interval_buff_param_ = effect->ParameterByName("interval_buff");
-			interval_buff_uint_param_ = effect->ParameterByName("interval_buff_uint");
-			interval_buff_read_param_ = effect->ParameterByName("interval_buff_read");
-			scale_buff_param_ = effect->ParameterByName("scale_buff");
-			bias_buff_param_ = effect->ParameterByName("bias_buff");
-			cascade_min_buff_uint_param_ = effect->ParameterByName("cascade_min_buff_uint");
-			cascade_max_buff_uint_param_ = effect->ParameterByName("cascade_max_buff_uint");
-			cascade_min_buff_read_param_ = effect->ParameterByName("cascade_min_buff_read");
-			cascade_max_buff_read_param_ = effect->ParameterByName("cascade_max_buff_read");
-			depth_tex_param_ = effect->ParameterByName("depth_tex");
-			num_cascades_param_ = effect->ParameterByName("num_cascades");
-			inv_depth_width_height_param_ = effect->ParameterByName("inv_depth_width_height");
-			near_far_param_ = effect->ParameterByName("near_far");
-			upper_left_param_ = effect->ParameterByName("upper_left");
-			xy_dir_param_ = effect->ParameterByName("xy_dir");
-			view_to_light_view_proj_param_ = effect->ParameterByName("view_to_light_view_proj");
-			light_space_border_param_ = effect->ParameterByName("light_space_border");
-			max_cascade_scale_param_ = effect->ParameterByName("max_cascade_scale");
+			interval_buff_param_ = effect_->ParameterByName("interval_buff");
+			interval_buff_uint_param_ = effect_->ParameterByName("interval_buff_uint");
+			interval_buff_read_param_ = effect_->ParameterByName("interval_buff_read");
+			scale_buff_param_ = effect_->ParameterByName("scale_buff");
+			bias_buff_param_ = effect_->ParameterByName("bias_buff");
+			cascade_min_buff_uint_param_ = effect_->ParameterByName("cascade_min_buff_uint");
+			cascade_max_buff_uint_param_ = effect_->ParameterByName("cascade_max_buff_uint");
+			cascade_min_buff_read_param_ = effect_->ParameterByName("cascade_min_buff_read");
+			cascade_max_buff_read_param_ = effect_->ParameterByName("cascade_max_buff_read");
+			depth_tex_param_ = effect_->ParameterByName("depth_tex");
+			num_cascades_param_ = effect_->ParameterByName("num_cascades");
+			inv_depth_width_height_param_ = effect_->ParameterByName("inv_depth_width_height");
+			near_far_param_ = effect_->ParameterByName("near_far");
+			upper_left_param_ = effect_->ParameterByName("upper_left");
+			xy_dir_param_ = effect_->ParameterByName("xy_dir");
+			view_to_light_view_proj_param_ = effect_->ParameterByName("view_to_light_view_proj");
+			light_space_border_param_ = effect_->ParameterByName("light_space_border");
+			max_cascade_scale_param_ = effect_->ParameterByName("max_cascade_scale");
 		}
 		else
 		{
@@ -326,12 +326,12 @@ namespace KlayGE
 			*light_space_border_param_ = light_space_border;
 			*max_cascade_scale_param_ = max_cascade_scale;
 
-			re.Dispatch(*clear_z_bounds_tech_, 1, 1, 1);
-			re.Dispatch(*reduce_z_bounds_from_depth_tech_, dispatch_x, dispatch_y, 1);
-			re.Dispatch(*compute_log_cascades_from_z_bounds_tech_, 1, 1, 1);
-			re.Dispatch(*clear_cascade_bounds_tech_, 1, 1, 1);
-			re.Dispatch(*reduce_bounds_from_depth_tech_, dispatch_x, dispatch_y, 1);
-			re.Dispatch(*compute_custom_cascades_tech_, 1, 1, 1);
+			re.Dispatch(*effect_, *clear_z_bounds_tech_, 1, 1, 1);
+			re.Dispatch(*effect_, *reduce_z_bounds_from_depth_tech_, dispatch_x, dispatch_y, 1);
+			re.Dispatch(*effect_, *compute_log_cascades_from_z_bounds_tech_, 1, 1, 1);
+			re.Dispatch(*effect_, *clear_cascade_bounds_tech_, 1, 1, 1);
+			re.Dispatch(*effect_, *reduce_bounds_from_depth_tech_, dispatch_x, dispatch_y, 1);
+			re.Dispatch(*effect_, *compute_custom_cascades_tech_, 1, 1, 1);
 
 			interval_buff_->CopyToBuffer(*interval_cpu_buffs_[copy_index]);
 			scale_buff_->CopyToBuffer(*scale_cpu_buffs_[copy_index]);
@@ -363,22 +363,21 @@ namespace KlayGE
 
 			for (uint32_t i = 1; i < depth_deriative_tex_->NumMipMaps(); ++ i)
 			{
-				int width = depth_deriative_tex_->Width(i - 1);
-				int height = depth_deriative_tex_->Height(i - 1);
+				uint32_t const width = depth_deriative_tex_->Width(i - 1);
+				uint32_t const height = depth_deriative_tex_->Height(i - 1);
+				uint32_t const lower_width = depth_deriative_tex_->Width(i);
+				uint32_t const lower_height = depth_deriative_tex_->Height(i);
 
-				float delta_x = 1.0f / width;
-				float delta_y = 1.0f / height;
-				float4 delta_offset(delta_x, delta_y, -delta_x / 2, -delta_y / 2);			
+				float const delta_x = 1.0f / width;
+				float const delta_y = 1.0f / height;
+				float4 const delta_offset(delta_x, delta_y, -delta_x / 2, -delta_y / 2);			
 				reduce_z_bounds_from_depth_mip_map_pp_->SetParam(0, delta_offset);
 
 				reduce_z_bounds_from_depth_mip_map_pp_->OutputPin(0, depth_deriative_small_tex_, i - 1);
 				reduce_z_bounds_from_depth_mip_map_pp_->Apply();
 
-				int sw = depth_deriative_tex_->Width(i);
-				int sh = depth_deriative_tex_->Height(i);
-
-				depth_deriative_small_tex_->CopyToSubTexture2D(*depth_deriative_tex_, 0, i, 0, 0, sw, sh,
-					0, i - 1, 0, 0, sw, sh);
+				depth_deriative_small_tex_->CopyToSubTexture2D(*depth_deriative_tex_, 0, i, 0, 0,
+					lower_width, lower_height, 0, i - 1, 0, 0, lower_width, lower_height);
 			}
 
 			compute_log_cascades_from_z_bounds_pp_->SetParam(1, static_cast<int32_t>(num_cascades));

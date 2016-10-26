@@ -35,7 +35,7 @@ namespace KlayGE
 		void ClearStencil(int32_t stencil);
 		void ClearDepthStencil(float depth, int32_t stencil);
 
-		GLuint OGLTexture() const
+		GLuint GLTexture() const
 		{
 			return tex_;
 		}
@@ -64,7 +64,7 @@ namespace KlayGE
 		void ClearStencil(int32_t stencil);
 		void ClearDepthStencil(float depth, int32_t stencil);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -80,7 +80,7 @@ namespace KlayGE
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -92,11 +92,11 @@ namespace KlayGE
 	class OGLTexture1DRenderView : public OGLRenderView, boost::noncopyable
 	{
 	public:
-		OGLTexture1DRenderView(Texture& texture_1d, int array_index, int level);
+		OGLTexture1DRenderView(Texture& texture_1d, int array_index, int array_size, int level);
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -104,6 +104,7 @@ namespace KlayGE
 	private:
 		OGLTexture1D& texture_1d_;
 		int array_index_;
+		int array_size_;
 		int level_;
 	};
 
@@ -113,11 +114,11 @@ namespace KlayGE
 	class OGLTexture2DRenderView : public OGLRenderView, boost::noncopyable
 	{
 	public:
-		OGLTexture2DRenderView(Texture& texture_2d, int array_index, int level);
+		OGLTexture2DRenderView(Texture& texture_2d, int array_index, int array_size, int level);
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -125,6 +126,7 @@ namespace KlayGE
 	private:
 		OGLTexture2D& texture_2d_;
 		int array_index_;
+		int array_size_;
 		int level_;
 	};
 
@@ -139,7 +141,7 @@ namespace KlayGE
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -164,10 +166,11 @@ namespace KlayGE
 	{
 	public:
 		OGLTextureCubeRenderView(Texture& texture_cube, int array_index, Texture::CubeFaces face, int level);
+		OGLTextureCubeRenderView(Texture& texture_cube, int array_index, int level);
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -190,7 +193,7 @@ namespace KlayGE
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -211,12 +214,12 @@ namespace KlayGE
 	{
 	public:
 		OGLDepthStencilRenderView(uint32_t width, uint32_t height, ElementFormat pf, uint32_t sample_count, uint32_t sample_quality);
-		OGLDepthStencilRenderView(Texture& texture, int array_index, int level);
+		OGLDepthStencilRenderView(Texture& texture, int array_index, int array_size, int level);
 		~OGLDepthStencilRenderView();
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);
@@ -224,6 +227,7 @@ namespace KlayGE
 	private:
 		GLenum target_type_;
 		int array_index_;
+		int array_size_;
 		int level_;
 		uint32_t sample_count_, sample_quality_;
 		GLuint rbo_;
@@ -238,7 +242,7 @@ namespace KlayGE
 
 		void ClearColor(Color const & clr);
 
-		virtual void Discard() KLAYGE_OVERRIDE;
+		virtual void Discard() override;
 
 		void OnAttached(FrameBuffer& fb, uint32_t att);
 		void OnDetached(FrameBuffer& fb, uint32_t att);

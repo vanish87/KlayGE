@@ -111,19 +111,20 @@ namespace KlayGE
 	public:
 		D3D12ShaderObject();
 
-		bool AttachNativeShader(ShaderType type, RenderEffect const & effect, std::vector<uint32_t> const & shader_desc_ids,
-			std::vector<uint8_t> const & native_shader_block);
+		bool AttachNativeShader(ShaderType type, RenderEffect const & effect,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::vector<uint8_t> const & native_shader_block) override;
 
-		virtual bool StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
-			std::vector<uint32_t> const & shader_desc_ids) KLAYGE_OVERRIDE;
-		virtual void StreamOut(std::ostream& os, ShaderType type) KLAYGE_OVERRIDE;
+		bool StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) override;
+		void StreamOut(std::ostream& os, ShaderType type) override;
 
 		void AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids);
+			RenderTechnique const & tech, RenderPass const & pass,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) override;
 		void AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so);
-		void LinkShaders(RenderEffect const & effect);
-		ShaderObjectPtr Clone(RenderEffect const & effect);
+			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so) override;
+		void LinkShaders(RenderEffect const & effect) override;
+		ShaderObjectPtr Clone(RenderEffect const & effect) override;
 
 		void Bind();
 		void Unbind();
@@ -149,7 +150,7 @@ namespace KlayGE
 			return srvsrcs_[type];
 		}
 
-		std::vector<D3D12ShaderResourceViewSimulationPtr> const & SRVs(ShaderType type) const
+		std::vector<D3D12ShaderResourceViewSimulation*> const & SRVs(ShaderType type) const
 		{
 			return srvs_[type];
 		}
@@ -159,12 +160,12 @@ namespace KlayGE
 			return uavsrcs_[type];
 		}
 
-		std::vector<D3D12UnorderedAccessViewSimulationPtr> const & UAVs(ShaderType type) const
+		std::vector<D3D12UnorderedAccessViewSimulation*> const & UAVs(ShaderType type) const
 		{
 			return uavs_[type];
 		}
 
-		std::vector<GraphicsBufferPtr> const & CBuffers(ShaderType type) const
+		std::vector<GraphicsBuffer*> const & CBuffers(ShaderType type) const
 		{
 			return d3d_cbuffs_[type];
 		}
@@ -191,19 +192,19 @@ namespace KlayGE
 	private:
 		struct parameter_bind_t
 		{
-			RenderEffectParameterPtr param;
+			RenderEffectParameter* param;
 			D3D12ShaderParameterHandle p_handle;
 			std::function<void()> func;
 		};
 		typedef std::vector<parameter_bind_t> parameter_binds_t;
 
-		parameter_bind_t GetBindFunc(D3D12ShaderParameterHandle const & p_handle, RenderEffectParameterPtr const & param);
+		parameter_bind_t GetBindFunc(D3D12ShaderParameterHandle const & p_handle, RenderEffectParameter* param);
 
 		std::string GetShaderProfile(ShaderType type, RenderEffect const & effect, uint32_t shader_desc_id);
 		std::shared_ptr<std::vector<uint8_t>> CompiteToBytecode(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids);
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids);
 		void AttachShaderBytecode(ShaderType type, RenderEffect const & effect,
-			std::vector<uint32_t> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob);
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::shared_ptr<std::vector<uint8_t>> const & code_blob);
 
 		void CreateRootSignature();
 
@@ -211,21 +212,21 @@ namespace KlayGE
 		std::array<parameter_binds_t, ST_NumShaderTypes> param_binds_;
 
 		std::array<std::pair<std::shared_ptr<std::vector<uint8_t>>, std::string>, ST_NumShaderTypes> shader_code_;
-		std::array<D3D12ShaderDesc, ST_NumShaderTypes> shader_desc_;
+		std::array<std::shared_ptr<D3D12ShaderDesc>, ST_NumShaderTypes> shader_desc_;
 
 		std::array<std::vector<D3D12_SAMPLER_DESC>, ST_NumShaderTypes> samplers_;
 		std::array<std::vector<std::tuple<ID3D12Resource*, uint32_t, uint32_t>>, ST_NumShaderTypes> srvsrcs_;
-		std::array<std::vector<D3D12ShaderResourceViewSimulationPtr>, ST_NumShaderTypes> srvs_;
+		std::array<std::vector<D3D12ShaderResourceViewSimulation*>, ST_NumShaderTypes> srvs_;
 		std::array<std::vector<std::pair<ID3D12Resource*, ID3D12Resource*>>, ST_NumShaderTypes> uavsrcs_;
-		std::array<std::vector<D3D12UnorderedAccessViewSimulationPtr>, ST_NumShaderTypes> uavs_;
-		std::array<std::vector<uint8_t>, ST_NumShaderTypes> cbuff_indices_;
-		std::array<std::vector<GraphicsBufferPtr>, ST_NumShaderTypes> d3d_cbuffs_;
+		std::array<std::vector<D3D12UnorderedAccessViewSimulation*>, ST_NumShaderTypes> uavs_;
+		std::array<std::shared_ptr<std::vector<uint8_t>>, ST_NumShaderTypes> cbuff_indices_;
+		std::array<std::vector<GraphicsBuffer*>, ST_NumShaderTypes> d3d_cbuffs_;
 		bool vs_so_;
 		bool ds_so_;
 		std::vector<D3D12_SO_DECLARATION_ENTRY> so_decl_;
 		uint32_t rasterized_stream_;
 
-		std::vector<RenderEffectConstantBufferPtr> all_cbuffs_;
+		std::vector<RenderEffectConstantBuffer*> all_cbuffs_;
 
 		uint32_t vs_signature_;
 

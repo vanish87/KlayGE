@@ -32,9 +32,9 @@
 #include <KFL/XMLDom.hpp>
 #include <KlayGE/ResLoader.hpp>
 #include <KlayGE/Camera.hpp>
+#include <KFL/Hash.hpp>
 
 #include <cstring>
-#include <boost/functional/hash.hpp>
 
 #include <KlayGE/PostProcess.hpp>
 
@@ -164,12 +164,15 @@ namespace
 
 		std::shared_ptr<void> MainThreadStage()
 		{
+			std::lock_guard<std::mutex> lock(main_thread_stage_mutex_);
+
 			if (!*pp_desc_.pp)
 			{
-				RenderTechniquePtr tech = SyncLoadRenderEffect(pp_desc_.pp_data->effect_name)->TechniqueByName(pp_desc_.pp_data->tech_name);
+				auto effect = SyncLoadRenderEffect(pp_desc_.pp_data->effect_name);
+				auto tech = effect->TechniqueByName(pp_desc_.pp_data->tech_name);
 
 				PostProcessPtr pp = MakeSharedPtr<PostProcess>(pp_desc_.pp_data->name, pp_desc_.pp_data->param_names,
-					pp_desc_.pp_data->input_pin_names, pp_desc_.pp_data->output_pin_names, tech);
+					pp_desc_.pp_data->input_pin_names, pp_desc_.pp_data->output_pin_names, effect, tech);
 				pp->CSPixelPerThreadX(pp_desc_.pp_data->cs_data_per_thread_x);
 				pp->CSPixelPerThreadY(pp_desc_.pp_data->cs_data_per_thread_y);
 				pp->CSPixelPerThreadZ(pp_desc_.pp_data->cs_data_per_thread_z);
@@ -210,8 +213,14 @@ namespace
 			return std::static_pointer_cast<void>(rhs_pp->Clone());
 		}
 
+		virtual std::shared_ptr<void> Resource() const override
+		{
+			return *pp_desc_.pp;
+		}
+
 	private:
 		PostProcessDesc pp_desc_;
+		std::mutex main_thread_stage_mutex_;
 	};
 }
 
@@ -228,7 +237,7 @@ namespace KlayGE
 		std::vector<std::string> const & param_names,
 		std::vector<std::string> const & input_pin_names,
 		std::vector<std::string> const & output_pin_names,
-		RenderTechniquePtr const & tech)
+		RenderEffectPtr const & effect, RenderTechnique* tech)
 			: RenderableHelper(name),
 				cs_based_(false), cs_pixel_per_thread_x_(1), cs_pixel_per_thread_y_(1), cs_pixel_per_thread_z_(1),
 				input_pins_(input_pin_names.size()),
@@ -249,13 +258,13 @@ namespace KlayGE
 		{
 			params_[i].first = param_names[i];
 		}
-		this->Technique(tech);
+		this->Technique(effect, tech);
 	}
 
 	PostProcessPtr PostProcess::Clone()
 	{
-		RenderEffectPtr effect = technique_->Effect().PrototypeEffect()->Clone();
-		RenderTechniquePtr tech = effect->TechniqueByName(technique_->Name());
+		RenderEffectPtr effect = effect_->Clone();
+		RenderTechnique* tech = effect->TechniqueByName(technique_->Name());
 
 		std::vector<std::string> param_names(params_.size());
 		for (size_t i = 0; i < param_names.size(); ++ i)
@@ -276,21 +285,24 @@ namespace KlayGE
 		}
 
 		PostProcessPtr pp = MakeSharedPtr<PostProcess>(this->Name(),
-			param_names, input_pin_names, output_pin_names, tech);
+			param_names, input_pin_names, output_pin_names, effect, tech);
 		pp->CSPixelPerThreadX(cs_pixel_per_thread_x_);
 		pp->CSPixelPerThreadY(cs_pixel_per_thread_y_);
 		pp->CSPixelPerThreadZ(cs_pixel_per_thread_z_);
 		return pp;
 	}
 
-	void PostProcess::Technique(RenderTechniquePtr const & tech)
+	void PostProcess::Technique(RenderEffectPtr const & effect, RenderTechnique* tech)
 	{
+		effect_ = effect;
 		technique_ = tech;
 		this->UpdateBinds();
 
 		if (technique_)
 		{
-			cs_based_ = (technique_->Pass(0)->GetShaderObject()->CSBlockSizeX() > 0);
+			BOOST_ASSERT(effect);
+
+			cs_based_ = (technique_->Pass(0).GetShaderObject(*effect_)->CSBlockSizeX() > 0);
 		}
 		else
 		{
@@ -308,25 +320,27 @@ namespace KlayGE
 	{
 		if (technique_)
 		{
+			BOOST_ASSERT(effect_);
+
 			input_pins_ep_.resize(input_pins_.size());
 			for (size_t i = 0; i < input_pins_.size(); ++ i)
 			{
-				input_pins_ep_[i] = technique_->Effect().ParameterByName(input_pins_[i].first);
+				input_pins_ep_[i] = effect_->ParameterByName(input_pins_[i].first);
 			}
 
 			output_pins_ep_.resize(output_pins_.size());
 			for (size_t i = 0; i < output_pins_.size(); ++ i)
 			{
-				output_pins_ep_[i] = technique_->Effect().ParameterByName(output_pins_[i].first);
+				output_pins_ep_[i] = effect_->ParameterByName(output_pins_[i].first);
 			}
 
 			for (size_t i = 0; i < params_.size(); ++ i)
 			{
-				params_[i].second = technique_->Effect().ParameterByName(params_[i].first);
+				params_[i].second = effect_->ParameterByName(params_[i].first);
 			}
 
-			width_height_ep_ = technique_->Effect().ParameterByName("width_height");
-			inv_width_height_ep_ = technique_->Effect().ParameterByName("inv_width_height");
+			width_height_ep_ = effect_->ParameterByName("width_height");
+			inv_width_height_ep_ = effect_->ParameterByName("inv_width_height");
 		}
 	}
 
@@ -753,7 +767,7 @@ namespace KlayGE
 			re.BindFrameBuffer(re.DefaultFrameBuffer());
 			re.DefaultFrameBuffer()->Discard(FrameBuffer::CBM_Color);
 
-			ShaderObjectPtr const & so = technique_->Pass(0)->GetShaderObject();
+			ShaderObjectPtr const & so = technique_->Pass(0).GetShaderObject(*effect_);
 			uint32_t const bx = so->CSBlockSizeX() * cs_pixel_per_thread_x_;
 			uint32_t const by = so->CSBlockSizeY() * cs_pixel_per_thread_y_;
 			uint32_t const bz = so->CSBlockSizeZ() * cs_pixel_per_thread_z_;
@@ -768,7 +782,7 @@ namespace KlayGE
 			uint32_t tgz = (tex->Depth(0) + bz - 1) / bz;
 
 			this->OnRenderBegin();
-			re.Dispatch(*technique_, tgx, tgy, tgz);
+			re.Dispatch(*effect_, *technique_, tgx, tgy, tgz);
 			this->OnRenderEnd();
 		}
 		else
@@ -820,9 +834,10 @@ namespace KlayGE
 		return ResLoader::Instance().SyncQueryT<PostProcess>(MakeSharedPtr<PostProcessLoadingDesc>(ppml_name, pp_name));
 	}
 
-	std::function<PostProcessPtr()> ASyncLoadPostProcess(std::string const & ppml_name, std::string const & pp_name)
+	PostProcessPtr ASyncLoadPostProcess(std::string const & ppml_name, std::string const & pp_name)
 	{
-		return ResLoader::Instance().ASyncQueryT<PostProcess>(MakeSharedPtr<PostProcessLoadingDesc>(ppml_name, pp_name));
+		// TODO: Make it really async
+		return ResLoader::Instance().SyncQueryT<PostProcess>(MakeSharedPtr<PostProcessLoadingDesc>(ppml_name, pp_name));
 	}
 
 
@@ -835,8 +850,8 @@ namespace KlayGE
 		std::vector<std::string> const & param_names,
 		std::vector<std::string> const & input_pin_names,
 		std::vector<std::string> const & output_pin_names,
-		RenderTechniquePtr const & tech)
-			: PostProcess(name, param_names, input_pin_names, output_pin_names, tech)
+		RenderEffectPtr const & effect, RenderTechnique* tech)
+			: PostProcess(name, param_names, input_pin_names, output_pin_names, effect, tech)
 	{
 	}
 
@@ -1210,19 +1225,36 @@ namespace KlayGE
 	}
 
 
-	SeparableBoxFilterPostProcess::SeparableBoxFilterPostProcess(RenderTechniquePtr const & tech, int kernel_radius, float multiplier, bool x_dir)
+	SeparableBoxFilterPostProcess::SeparableBoxFilterPostProcess(RenderEffectPtr const & effect,
+		RenderTechnique* tech, int kernel_radius, float multiplier, bool x_dir)
 		: PostProcess(L"SeparableBoxFilter",
 				std::vector<std::string>(),
 				std::vector<std::string>(1, "src_tex"),
 				std::vector<std::string>(1, "output"),
-				tech ? tech : SyncLoadRenderEffect("Blur.fxml")->TechniqueByName(x_dir ? "BlurX" : "BlurY")),
+				effect, tech),
 			kernel_radius_(kernel_radius), multiplier_(multiplier), x_dir_(x_dir)
 	{
 		BOOST_ASSERT((kernel_radius > 0) && (kernel_radius <= 8));
 
-		src_tex_size_ep_ = technique_->Effect().ParameterByName("src_tex_size");
-		color_weight_ep_ = technique_->Effect().ParameterByName("color_weight");
-		tex_coord_offset_ep_ = technique_->Effect().ParameterByName("tex_coord_offset");
+		RenderEffectPtr ei;
+		RenderTechnique* te;
+		if (tech)
+		{
+			BOOST_ASSERT(effect);
+
+			ei = effect;
+			te = tech;
+		}
+		else
+		{
+			ei = SyncLoadRenderEffect("Blur.fxml");
+			te = ei->TechniqueByName(x_dir ? "BlurX" : "BlurY");
+		}
+		this->Technique(ei, te);
+
+		src_tex_size_ep_ = effect_->ParameterByName("src_tex_size");
+		color_weight_ep_ = effect_->ParameterByName("color_weight");
+		tex_coord_offset_ep_ = effect_->ParameterByName("tex_coord_offset");
 	}
 
 	SeparableBoxFilterPostProcess::~SeparableBoxFilterPostProcess()
@@ -1278,19 +1310,36 @@ namespace KlayGE
 	}
 
 
-	SeparableGaussianFilterPostProcess::SeparableGaussianFilterPostProcess(RenderTechniquePtr const & tech, int kernel_radius, float multiplier, bool x_dir)
+	SeparableGaussianFilterPostProcess::SeparableGaussianFilterPostProcess(RenderEffectPtr const & effect,
+		RenderTechnique* tech, int kernel_radius, float multiplier, bool x_dir)
 			: PostProcess(L"SeparableGaussian",
 					std::vector<std::string>(),
 					std::vector<std::string>(1, "src_tex"),
 					std::vector<std::string>(1, "output"),
-					tech ? tech : SyncLoadRenderEffect("Blur.fxml")->TechniqueByName(x_dir ? "BlurX" : "BlurY")),
+					effect, tech),
 				kernel_radius_(kernel_radius), multiplier_(multiplier), x_dir_(x_dir)
 	{
 		BOOST_ASSERT((kernel_radius > 0) && (kernel_radius <= 8));
 
-		src_tex_size_ep_ = technique_->Effect().ParameterByName("src_tex_size");
-		color_weight_ep_ = technique_->Effect().ParameterByName("color_weight");
-		tex_coord_offset_ep_ = technique_->Effect().ParameterByName("tex_coord_offset");
+		RenderEffectPtr ei;
+		RenderTechnique* te;
+		if (tech)
+		{
+			BOOST_ASSERT(effect);
+
+			ei = effect;
+			te = tech;
+		}
+		else
+		{
+			ei = SyncLoadRenderEffect("Blur.fxml");
+			te = ei->TechniqueByName(x_dir ? "BlurX" : "BlurY");
+		}
+		this->Technique(ei, te);
+
+		src_tex_size_ep_ = effect_->ParameterByName("src_tex_size");
+		color_weight_ep_ = effect_->ParameterByName("color_weight");
+		tex_coord_offset_ep_ = effect_->ParameterByName("tex_coord_offset");
 	}
 
 	SeparableGaussianFilterPostProcess::~SeparableGaussianFilterPostProcess()
@@ -1379,22 +1428,37 @@ namespace KlayGE
 	}
 
 
-	SeparableBilateralFilterPostProcess::SeparableBilateralFilterPostProcess(RenderTechniquePtr const & tech, int kernel_radius, float multiplier, bool x_dir)
+	SeparableBilateralFilterPostProcess::SeparableBilateralFilterPostProcess(RenderEffectPtr const & effect,
+			RenderTechnique* tech, int kernel_radius, float multiplier, bool x_dir)
 		: PostProcess(L"SeparableBilateral"),
 			kernel_radius_(kernel_radius), multiplier_(multiplier), x_dir_(x_dir)
 	{
-		input_pins_.push_back(std::make_pair("src1_tex", TexturePtr()));
-		input_pins_.push_back(std::make_pair("src2_tex", TexturePtr()));
+		input_pins_.emplace_back("src1_tex", TexturePtr());
+		input_pins_.emplace_back("src2_tex", TexturePtr());
 
-		output_pins_.push_back(std::make_pair("out_tex", TexturePtr()));
+		output_pins_.emplace_back("out_tex", TexturePtr());
 
-		this->Technique(tech ? tech : SyncLoadRenderEffect("BilateralBlur.fxml")->TechniqueByName(x_dir ? "BlurX4" : "BlurY4"));
+		RenderEffectPtr ei;
+		RenderTechnique* te;
+		if (tech)
+		{
+			BOOST_ASSERT(effect);
 
-		kernel_radius_ep_ = technique_->Effect().ParameterByName("kernel_radius");
-		src_tex_size_ep_ = technique_->Effect().ParameterByName("src_tex_size");
-		init_g_ep_ = technique_->Effect().ParameterByName("init_g");
-		blur_factor_ep_ = technique_->Effect().ParameterByName("blur_factor");
-		sharpness_factor_ep_ = technique_->Effect().ParameterByName("sharpness_factor");
+			ei = effect;
+			te = tech;
+		}
+		else
+		{
+			ei = SyncLoadRenderEffect("BilateralBlur.fxml");
+			te = ei->TechniqueByName(x_dir ? "BlurX4" : "BlurY4");
+		}
+		this->Technique(ei, te);
+
+		kernel_radius_ep_ = effect_->ParameterByName("kernel_radius");
+		src_tex_size_ep_ = effect_->ParameterByName("src_tex_size");
+		init_g_ep_ = effect_->ParameterByName("init_g");
+		blur_factor_ep_ = effect_->ParameterByName("blur_factor");
+		sharpness_factor_ep_ = effect_->ParameterByName("sharpness_factor");
 	}
 
 	SeparableBilateralFilterPostProcess::~SeparableBilateralFilterPostProcess()
@@ -1456,14 +1520,16 @@ namespace KlayGE
 			kernel_radius_ = std::min(kernel_radius_, 2);
 		}
 
-		params_.push_back(std::make_pair("esm_scale_factor", RenderEffectParameterPtr()));
-		params_.push_back(std::make_pair("near_q_far", RenderEffectParameterPtr()));
-		input_pins_.push_back(std::make_pair("src_tex", TexturePtr()));
-		output_pins_.push_back(std::make_pair("output", TexturePtr()));
-		this->Technique(SyncLoadRenderEffect("Blur.fxml")->TechniqueByName(x_dir ? (linear_depth ? "LogBlurX" : "LogBlurXNLD") : "LogBlurY"));
+		params_.emplace_back("esm_scale_factor", nullptr);
+		params_.emplace_back("near_q_far", nullptr);
+		input_pins_.emplace_back("src_tex", TexturePtr());
+		output_pins_.emplace_back("output", TexturePtr());
 
-		color_weight_ep_ = technique_->Effect().ParameterByName("color_weight");
-		tex_coord_offset_ep_ = technique_->Effect().ParameterByName("tex_coord_offset");
+		auto effect = SyncLoadRenderEffect("Blur.fxml");
+		this->Technique(effect, effect->TechniqueByName(x_dir ? (linear_depth ? "LogBlurX" : "LogBlurXNLD") : "LogBlurY"));
+
+		color_weight_ep_ = effect_->ParameterByName("color_weight");
+		tex_coord_offset_ep_ = effect_->ParameterByName("tex_coord_offset");
 	}
 
 	SeparableLogGaussianFilterPostProcess::~SeparableLogGaussianFilterPostProcess()
@@ -1597,10 +1663,10 @@ namespace KlayGE
 		this->Append(MakeSharedPtr<SeparableLogGaussianFilterPostProcess>(kernel_radius, linear_depth, false));
 	}
 
-	void LogGaussianBlurPostProcess::ESMScaleFactor(float factor, CameraPtr const & camera)
+	void LogGaussianBlurPostProcess::ESMScaleFactor(float factor, Camera const & camera)
 	{
-		float np = camera->NearPlane();
-		float fp = camera->FarPlane();
+		float const np = camera.NearPlane();
+		float const fp = camera.FarPlane();
 
 		float esm_scale_factor = factor / (fp - np);
 		pp_chain_[0]->SetParam(0, esm_scale_factor);

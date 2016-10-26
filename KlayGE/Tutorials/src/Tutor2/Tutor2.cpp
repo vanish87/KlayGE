@@ -44,7 +44,7 @@ class RenderPolygon : public KlayGE::StaticMesh
 public:
 	RenderPolygon(KlayGE::RenderModelPtr const & model, std::wstring const& name);
 
-	void BuildMeshInfo();
+	virtual void DoBuildMeshInfo() override;
 
 	virtual void OnRenderBegin();
 };
@@ -108,7 +108,7 @@ void TutorFramework::OnCreate()
 	meshes[0]->AddIndexStream(&indices1[0], static_cast<KlayGE::uint32_t>(sizeof(indices1[0]) * indices1.size()),
 		KlayGE::EF_R16UI, KlayGE::EAH_GPU_Read);
 
-	meshes[0]->GetRenderLayout()->TopologyType(KlayGE::RenderLayout::TT_TriangleStrip);
+	meshes[0]->GetRenderLayout().TopologyType(KlayGE::RenderLayout::TT_TriangleStrip);
 
 	meshes[0]->PosBound(KlayGE::AABBox(KlayGE::float3(-1, -1, -1), KlayGE::float3(1, 1, 1)));
 
@@ -123,7 +123,7 @@ void TutorFramework::OnCreate()
 		KlayGE::vertex_element(KlayGE::VEU_Position, 0, KlayGE::EF_BGR32F), KlayGE::EAH_GPU_Read);
 	meshes[1]->AddIndexStream(&indices2[0], static_cast<KlayGE::uint32_t>(sizeof(indices2[0]) * indices2.size()),
 		KlayGE::EF_R16UI, KlayGE::EAH_GPU_Read);
-	meshes[1]->GetRenderLayout()->TopologyType(KlayGE::RenderLayout::TT_TriangleList);
+	meshes[1]->GetRenderLayout().TopologyType(KlayGE::RenderLayout::TT_TriangleList);
 	meshes[1]->PosBound(KlayGE::AABBox(KlayGE::float3(-1, -1, -1), KlayGE::float3(1, 1, 1)));
 
 	for (size_t i = 0; i < meshes.size(); ++ i)
@@ -175,16 +175,16 @@ RenderPolygon::RenderPolygon(KlayGE::RenderModelPtr const & model, std::wstring 
 {
 	KlayGE::RenderEffectPtr effect = KlayGE::SyncLoadRenderEffect("RenderableHelper.fxml");
 
-	this->SetRenderTechnique(effect->TechniqueByName("HelperTec"));
+	this->Technique(effect, effect->TechniqueByName("HelperTec"));
 
 	*(effect->ParameterByName("color")) = KlayGE::float4(1.0f, 0.0f, 0.0f, 1.0f);
 }
 
-void RenderPolygon::BuildMeshInfo()
+void RenderPolygon::DoBuildMeshInfo()
 {
 	KlayGE::AABBox const & pos_bb = this->PosBound();
-	*(technique_->Effect().ParameterByName("pos_center")) = pos_bb.Center();
-	*(technique_->Effect().ParameterByName("pos_extent")) = pos_bb.HalfSize();
+	*(effect_->ParameterByName("pos_center")) = pos_bb.Center();
+	*(effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
 }
 
 void RenderPolygon::OnRenderBegin()
@@ -192,5 +192,5 @@ void RenderPolygon::OnRenderBegin()
 	KlayGE::App3DFramework const & app = KlayGE::Context::Instance().AppInstance();
 
 	KlayGE::float4x4 view_proj = model_mat_ * app.ActiveCamera().ViewProjMatrix();
-	*(technique_->Effect().ParameterByName("mvp")) = view_proj;
+	*(effect_->ParameterByName("mvp")) = view_proj;
 }

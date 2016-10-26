@@ -237,51 +237,13 @@ void HWTessGenDPShadowMapDS(HS_CONSTANT_DATA_OUTPUT HSConstantData,
 		]]>
 	</shader>
 
-	<technique name="GenDPShadowMapTess5Tech">
+	<technique name="GenDPShadowMapTessTech">
 		<pass name="p0">
 			<state name="cull_mode" value="none"/>
 
 			<state name="vertex_shader" value="HWTessGenDPShadowMapVS()"/>
 			<state name="hull_shader" value="HWTessGenDPShadowMapHS()"/>
 			<state name="domain_shader" value="HWTessGenDPShadowMapDS()"/>
-			<state name="pixel_shader" value="GenDPShadowMapPS()"/>
-		</pass>
-	</technique>
-
-
-	<parameter type="buffer" elem_type="float4" name="skinned_pos_buf"/>
-	<parameter type="buffer" elem_type="uint" name="index_buf"/>
-
-	<shader type="vertex_shader" version="4">
-		<![CDATA[
-void InstTessGenDPShadowMapVS(float2 barycentric : TEXCOORD1,
-
-					uint instance_id : SV_InstanceID,
-					
-					out float2 oDist : TEXCOORD0,
-					out float4 oPos : SV_Position)
-{
-	uint index0 = index_buf.Load(instance_id * 3 + 0);
-	float3 pos_os0 = skinned_pos_buf.Load(index0).xyz;
-	uint index1 = index_buf.Load(instance_id * 3 + 1);
-	float3 pos_os1 = skinned_pos_buf.Load(index1).xyz;
-	uint index2 = index_buf.Load(instance_id * 3 + 2);
-	float3 pos_os2 = skinned_pos_buf.Load(index2).xyz;
-
-	float4 Position = float4(0, 0, 0, 1);
-	InterpolateFlatAttrs(float3(barycentric, 1 - barycentric.x - barycentric.y),
-				pos_os0, pos_os1, pos_os2, Position.xyz);
-
-	CalcDPSM(Position, oDist, oPos);
-}
-		]]>
-	</shader>
-
-	<technique name="GenDPShadowMapTess4Tech">
-		<pass name="p0">
-			<state name="cull_mode" value="none"/>
-
-			<state name="vertex_shader" value="InstTessGenDPShadowMapVS()"/>
 			<state name="pixel_shader" value="GenDPShadowMapPS()"/>
 		</pass>
 	</technique>
@@ -449,16 +411,16 @@ void GenCubeOneInstanceGSShadowMapGS(triangle float4 in_pos[3] : POSITION, trian
 	
 	<parameter type="float3" name="light_pos"/>
 
-	<parameter type="float4" name="ambient_clr"/>
-	<parameter type="float4" name="diffuse_clr"/>
-	<parameter type="float4" name="specular_clr"/>
-	<parameter type="float2" name="shininess_clr"/>
-	<parameter type="float4" name="emit_clr"/>
+	<parameter type="float4" name="albedo_clr"/>
+	<parameter type="float2" name="metalness_clr"/>
+	<parameter type="float2" name="glossiness_clr"/>
+	<parameter type="float4" name="emissive_clr"/>
+	<parameter type="int" name="albedo_map_enabled"/>
 
-	<parameter type="texture2D" name="diffuse_tex"/>
-	<parameter type="texture2D" name="specular_tex"/>
-	<parameter type="texture2D" name="shininess_tex"/>
-	<parameter type="texture2D" name="emit_tex"/>
+	<parameter type="texture2D" name="albedo_tex"/>
+	<parameter type="texture2D" name="metalness_tex"/>
+	<parameter type="texture2D" name="glossiness_tex"/>
+	<parameter type="texture2D" name="emissive_tex"/>
 
 	<parameter type="textureCUBE" name="light_projective_tex"/>
 	<parameter type="textureCUBE" name="shadow_cube_tex"/>
@@ -502,46 +464,38 @@ void RenderSceneVS(float4 Position : POSITION,
 float4 RenderScenePS(float2 Texcoord : TEXCOORD0, float3 LightWorldPos : TEXCOORD1,
 					float3 LightWorldNormal : TEXCOORD2, float3 LightViewPos : TEXCOORD3) : SV_Target 
 {
-	float3 c_diff, c_spec, emit;
-	float shininess;
-	float opacity;
-	if (diffuse_clr.a > 0.5f)
+	float3 albedo = albedo_clr.rgb;
+	if (albedo_map_enabled)
 	{
-		c_diff = diffuse_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
+		albedo *= albedo_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
 	}
-	else
+	
+	float metalness = metalness_clr.r;
+	if (metalness_clr.y > 0.5f)
 	{
-		c_diff = diffuse_clr.rgb;
+		metalness *= metalness_tex.Sample(linear_wrap_sampler, Texcoord).r;
 	}
-	if (specular_clr.a > 0.5f)
+	
+	float3 c_diff = DiffuseColor(albedo, metalness);
+	float3 c_spec = SpecularColor(albedo, metalness);
+	
+	float glossiness = glossiness_clr.r;
+	if (glossiness_clr.y > 0.5f)
 	{
-		c_spec = specular_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
+		glossiness *= glossiness_tex.Sample(linear_wrap_sampler, Texcoord).r;
 	}
-	else
+	float shininess = Glossiness2Shininess(glossiness);
+	
+	float3 emissive = emissive_clr.rgb;
+	if (emissive_clr.a > 0.5f)
 	{
-		c_spec = specular_clr.rgb;
-	}
-	if (shininess_clr.y > 0.5f)
-	{
-		shininess = shininess_tex.Sample(linear_wrap_sampler, Texcoord).r;
-	}
-	else
-	{
-		shininess = shininess_clr.r;
-	}
-	if (emit_clr.a > 0.5f)
-	{
-		emit = emit_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
-	}
-	else
-	{
-		emit = emit_clr.rgb;
+		emissive *= emissive_tex.Sample(linear_wrap_sampler, Texcoord).rgb;
 	}
 	
 	float3 light_vec = normalize(-LightWorldPos);
 	float3 normal = normalize(LightWorldNormal);
 	float3 halfway = normalize(light_vec + normal);
-	float3 lighting = calc_brdf(c_diff, c_spec, shininess, light_vec, halfway, normal);
+	float3 shading = CalcBRDFShading(c_diff, c_spec, shininess, light_vec, halfway, normal);
 
 	float3 ori_color = light_projective_tex.Sample(linear_clamp_sampler, LightWorldPos).rgb * light_color;
 	float occluder;
@@ -566,11 +520,11 @@ float4 RenderScenePS(float2 Texcoord : TEXCOORD0, float3 LightWorldPos : TEXCOOR
 	occluder = ReadAFloat(shadow_cube_tex.Sample(linear_clamp_sampler, shadow_dir), far_plane.x * esm_scale_factor);
 #endif
 	
-	float atten = attenuation_term(0, LightWorldPos, light_falloff);
+	float atten = AttenuationTerm(0, LightWorldPos, light_falloff);
 	// Exponential shadow mapping
 	atten *= saturate(exp(occluder - esm_scale_factor * dist));
 	
-	float3 clr = ambient_clr.rgb * c_diff + emit + lighting * ori_color * atten;	
+	float3 clr = albedo * 0.2f + emissive + shading * ori_color * atten;	
 	return float4(clr, 1.0f);
 }
 		]]>

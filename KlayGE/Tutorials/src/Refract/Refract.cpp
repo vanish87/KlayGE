@@ -39,35 +39,35 @@ namespace
 		RefractorRenderable(RenderModelPtr model, std::wstring const & /*name*/)
 			: StaticMesh(model, L"Refractor")
 		{
-			RenderEffectPtr effect = SyncLoadRenderEffect("Refract.fxml");
-			front_face_tech_ = effect->TechniqueByName("Refract");
-			back_face_tech_ = effect->TechniqueByName("RefractBackFace");
-			back_face_depth_tech_ = effect->TechniqueByName("RefractBackFaceDepth");
+			effect_ = SyncLoadRenderEffect("Refract.fxml");
+			front_face_tech_ = effect_->TechniqueByName("Refract");
+			back_face_tech_ = effect_->TechniqueByName("RefractBackFace");
+			back_face_depth_tech_ = effect_->TechniqueByName("RefractBackFaceDepth");
 
 			technique_ = back_face_tech_;
-			*(technique_->Effect().ParameterByName("eta_ratio")) = float3(1 / 1.1f, 1 / 1.11f, 1 / 1.12f);
+			*(effect_->ParameterByName("eta_ratio")) = float3(1 / 1.1f, 1 / 1.11f, 1 / 1.12f);
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
 			AABBox const & pos_bb = this->PosBound();
-			*(technique_->Effect().ParameterByName("pos_center")) = pos_bb.Center();
-			*(technique_->Effect().ParameterByName("pos_extent")) = pos_bb.HalfSize();
+			*(effect_->ParameterByName("pos_center")) = pos_bb.Center();
+			*(effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
 
 			AABBox const & tc_bb = this->TexcoordBound();
-			*(technique_->Effect().ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
-			*(technique_->Effect().ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
+			*(effect_->ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
+			*(effect_->ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
 		}
 
 		virtual void Pass(PassType pass)
 		{
 			switch (pass)
 			{
-			case PT_TransparencyBackDepth:
+			case PT_GenShadowMap:
 				technique_ = back_face_depth_tech_;
 				break;
 
-			case PT_TransparencyBackGBufferRT0:
+			case PT_TransparencyBackGBufferMRT:
 				technique_ = back_face_tech_;
 				break;
 
@@ -83,17 +83,17 @@ namespace
 
 		void BackFaceTexture(TexturePtr const & bf_tex)
 		{
-			*(technique_->Effect().ParameterByName("BackFace_tex")) = bf_tex;
+			*(effect_->ParameterByName("BackFace_tex")) = bf_tex;
 		}
 		void BackFaceDepthTexture(TexturePtr const & bf_tex)
 		{
-			*(technique_->Effect().ParameterByName("BackFaceDepth_tex")) = bf_tex;
+			*(effect_->ParameterByName("BackFaceDepth_tex")) = bf_tex;
 		}
 
 		void CompressedCubeMap(TexturePtr const & y_cube, TexturePtr const & c_cube)
 		{
-			*(technique_->Effect().ParameterByName("skybox_Ycube_tex")) = y_cube;
-			*(technique_->Effect().ParameterByName("skybox_Ccube_tex")) = c_cube;
+			*(effect_->ParameterByName("skybox_Ycube_tex")) = y_cube;
+			*(effect_->ParameterByName("skybox_Ccube_tex")) = c_cube;
 		}
 
 		void OnRenderBegin()
@@ -106,22 +106,22 @@ namespace
 			float4x4 const mv = model * camera.ViewMatrix();
 			float4x4 const mvp = model * camera.ViewProjMatrix();
 
-			*(technique_->Effect().ParameterByName("model")) = model;
-			*(technique_->Effect().ParameterByName("mvp")) = mvp;
-			*(technique_->Effect().ParameterByName("mv")) = mv;
-			*(technique_->Effect().ParameterByName("proj")) = camera.ProjMatrix();
-			*(technique_->Effect().ParameterByName("eye_pos")) = camera.EyePos();
+			*(effect_->ParameterByName("model")) = model;
+			*(effect_->ParameterByName("mvp")) = mvp;
+			*(effect_->ParameterByName("mv")) = mv;
+			*(effect_->ParameterByName("proj")) = camera.ProjMatrix();
+			*(effect_->ParameterByName("eye_pos")) = camera.EyePos();
 
-			*(technique_->Effect().ParameterByName("inv_view")) = camera.InverseViewMatrix();
-			*(technique_->Effect().ParameterByName("inv_vp")) = camera.InverseViewProjMatrix();
+			*(effect_->ParameterByName("inv_view")) = camera.InverseViewMatrix();
+			*(effect_->ParameterByName("inv_vp")) = camera.InverseViewProjMatrix();
 
-			*(technique_->Effect().ParameterByName("far_plane")) = float2(camera.FarPlane(), 1 / camera.FarPlane());
+			*(effect_->ParameterByName("far_plane")) = float2(camera.FarPlane(), 1 / camera.FarPlane());
 		}
 
 	private:
-		RenderTechniquePtr back_face_depth_tech_;
-		RenderTechniquePtr back_face_tech_;
-		RenderTechniquePtr front_face_tech_;
+		RenderTechnique* back_face_depth_tech_;
+		RenderTechnique* back_face_tech_;
+		RenderTechnique* front_face_tech_;
 	};
 
 	class RefractorObject : public SceneObjectHelper
@@ -169,11 +169,6 @@ Refract::Refract()
 			: App3DFramework("Refract")
 {
 	ResLoader::Instance().AddPath("../../Tutorials/media/Refract");
-}
-
-bool Refract::ConfirmDevice() const
-{
-	return true;
 }
 
 void Refract::OnCreate()
@@ -347,7 +342,7 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			re.BindFrameBuffer(backface_buffer_);
 			re.CurFrameBuffer()->Attached(FrameBuffer::ATT_DepthStencil)->ClearDepth(0.0f);
 
-			checked_pointer_cast<RefractorObject>(refractor_)->Pass(PT_TransparencyBackGBufferRT0);
+			checked_pointer_cast<RefractorObject>(refractor_)->Pass(PT_TransparencyBackGBufferMRT);
 			sky_box_->Visible(false);
 			return App3DFramework::URV_NeedFlush;
 		}
@@ -357,7 +352,7 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			re.BindFrameBuffer(backface_depth_buffer_);
 			re.CurFrameBuffer()->Attached(FrameBuffer::ATT_DepthStencil)->ClearDepth(0.0f);
 
-			checked_pointer_cast<RefractorObject>(refractor_)->Pass(PT_TransparencyBackDepth);
+			checked_pointer_cast<RefractorObject>(refractor_)->Pass(PT_GenShadowMap);
 			sky_box_->Visible(false);
 			return App3DFramework::URV_NeedFlush;
 		}
@@ -387,7 +382,7 @@ uint32_t Refract::DoUpdate(uint32_t pass)
 			// Pass 1: Render backface's normal and depth
 			re.BindFrameBuffer(backface_buffer_);
 
-			checked_pointer_cast<RefractorObject>(refractor_)->Pass(PT_TransparencyBackGBufferRT0);
+			checked_pointer_cast<RefractorObject>(refractor_)->Pass(PT_TransparencyBackGBufferMRT);
 			sky_box_->Visible(false);
 			return App3DFramework::URV_NeedFlush;
 		}

@@ -41,6 +41,7 @@
 #include <set>
 #include <map>
 #include <unordered_map>
+#include <atomic>
 
 #include <KlayGE/RenderEngine.hpp>
 #include <KlayGE/ShaderObject.hpp>
@@ -76,10 +77,14 @@ namespace KlayGE
 			return true;
 		}
 
-		void BeginFrame() KLAYGE_OVERRIDE;
-		void UpdateGPUTimestampsFrequency() KLAYGE_OVERRIDE;
+		void BeginFrame() override;
+		void EndFrame() override;
+		void UpdateGPUTimestampsFrequency() override;
 
-		IDXGIFactory4Ptr const & DXGIFactory() const;
+		IDXGIFactory4* DXGIFactory4() const;
+		IDXGIFactory5* DXGIFactory5() const;
+		uint8_t DXGISubVer() const;
+
 		ID3D12DevicePtr const & D3DDevice() const;
 		ID3D12CommandQueuePtr const & D3DRenderCmdQueue() const;
 		ID3D12CommandAllocatorPtr const & D3DRenderCmdAllocator() const;
@@ -102,6 +107,9 @@ namespace KlayGE
 		void CommitRenderCmd();
 		void CommitComputeCmd();
 		void CommitCopyCmd();
+		void SyncRenderCmd();
+		void SyncComputeCmd();
+		void SyncCopyCmd();
 		void ResetRenderCmd();
 		void ResetComputeCmd();
 		void ResetCopyCmd();
@@ -110,32 +118,34 @@ namespace KlayGE
 		void ForceFlush();
 		void ForceCPUGPUSync();
 
+		virtual TexturePtr const & ScreenDepthStencilTexture() const override;
+
 		void ScissorRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 
 		bool FullScreen() const;
 		void FullScreen(bool fs);
 
-		std::string const & VertexShaderProfile() const
+		char const * VertexShaderProfile() const
 		{
 			return vs_profile_;
 		}
-		std::string const & PixelShaderProfile() const
+		char const * PixelShaderProfile() const
 		{
 			return ps_profile_;
 		}
-		std::string const & GeometryShaderProfile() const
+		char const * GeometryShaderProfile() const
 		{
 			return gs_profile_;
 		}
-		std::string const & ComputeShaderProfile() const
+		char const * ComputeShaderProfile() const
 		{
 			return cs_profile_;
 		}
-		std::string const & HullShaderProfile() const
+		char const * HullShaderProfile() const
 		{
 			return hs_profile_;
 		}
-		std::string const & DomainShaderProfile() const
+		char const * DomainShaderProfile() const
 		{
 			return ds_profile_;
 		}
@@ -150,11 +160,6 @@ namespace KlayGE
 		void RSSetViewports(UINT NumViewports, D3D12_VIEWPORT const * pViewports);
 		
 		void ResetRenderStates();
-
-		D3D12_SHADER_RESOURCE_VIEW_DESC const & NullSRVDesc() const;
-		D3D12_UNORDERED_ACCESS_VIEW_DESC const & NullUAVDesc() const;
-		D3D12_RENDER_TARGET_VIEW_DESC const & NullRTVDesc() const;
-		D3D12_DEPTH_STENCIL_VIEW_DESC const & NullDSVDesc() const;
 
 		ID3D12DescriptorHeapPtr const & RTVDescHeap() const
 		{
@@ -188,13 +193,13 @@ namespace KlayGE
 		void DeallocDSV(uint32_t offset);
 		void DeallocCBVSRVUAV(uint32_t offset);
 
-		RenderTechniquePtr BilinearBlitTech() const
+		RenderEffectPtr const & BlitEffect() const
+		{
+			return blit_effect_;
+		}
+		RenderTechnique* BilinearBlitTech() const
 		{
 			return bilinear_blit_tech_;
-		}
-		RenderLayoutPtr BlitRL() const
-		{
-			return blit_rl_;
 		}
 
 		ID3D12RootSignaturePtr const & CreateRootSignature(
@@ -204,39 +209,56 @@ namespace KlayGE
 		ID3D12PipelineStatePtr const & CreateComputePSO(D3D12_COMPUTE_PIPELINE_STATE_DESC const & desc);
 		ID3D12DescriptorHeapPtr CreateDynamicCBVSRVUAVDescriptorHeap(uint32_t num);
 
-	private:
-		virtual void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) KLAYGE_OVERRIDE;
-		virtual void DoBindFrameBuffer(FrameBufferPtr const & fb) KLAYGE_OVERRIDE;
-		virtual void DoBindSOBuffers(RenderLayoutPtr const & rl) KLAYGE_OVERRIDE;
-		virtual void DoRender(RenderTechnique const & tech, RenderLayout const & rl) KLAYGE_OVERRIDE;
-		virtual void DoDispatch(RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz) KLAYGE_OVERRIDE;
-		virtual void DoDispatchIndirect(RenderTechnique const & tech,
-			GraphicsBufferPtr const & buff_args, uint32_t offset) KLAYGE_OVERRIDE;
-		virtual void DoResize(uint32_t width, uint32_t height) KLAYGE_OVERRIDE;
-		virtual void DoDestroy() KLAYGE_OVERRIDE;
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
-
-		void FillRenderDeviceCaps();
-
-		virtual void StereoscopicForLCDShutter(int32_t eye) KLAYGE_OVERRIDE;
-
-		bool VertexFormatSupport(ElementFormat elem_fmt);
-		bool TextureFormatSupport(ElementFormat elem_fmt);
-		bool RenderTargetFormatSupport(ElementFormat elem_fmt, uint32_t sample_count, uint32_t sample_quality);
-
-		virtual void CheckConfig(RenderSettings& settings) KLAYGE_OVERRIDE;
-
-		void UpdateRenderPSO(RenderTechnique const & tech, RenderPassPtr const & pass, RenderLayout const & rl);
-		void UpdateComputePSO(RenderPassPtr const & pass);
+		void AddResourceForRecyclingAfterSync(bool* used_mark)
+		{
+			recycle_res_after_sync_.insert(used_mark);
+		}
 
 	private:
 		D3D12AdapterList const & D3DAdapters() const;
 		D3D12AdapterPtr const & ActiveAdapter() const;
 
+		virtual void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) override;
+		virtual void DoBindFrameBuffer(FrameBufferPtr const & fb) override;
+		virtual void DoBindSOBuffers(RenderLayoutPtr const & rl) override;
+		virtual void DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl) override;
+		virtual void DoDispatch(RenderEffect const & effect, RenderTechnique const & tech,
+			uint32_t tgx, uint32_t tgy, uint32_t tgz) override;
+		virtual void DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
+			GraphicsBufferPtr const & buff_args, uint32_t offset) override;
+		virtual void DoResize(uint32_t width, uint32_t height) override;
+		virtual void DoDestroy() override;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
+
+		void FillRenderDeviceCaps();
+
+		virtual void StereoscopicForLCDShutter(int32_t eye) override;
+
+		bool VertexFormatSupport(ElementFormat elem_fmt);
+		bool TextureFormatSupport(ElementFormat elem_fmt);
+		bool RenderTargetFormatSupport(ElementFormat elem_fmt, uint32_t sample_count, uint32_t sample_quality);
+
+		virtual void CheckConfig(RenderSettings& settings) override;
+
+		void UpdateRenderPSO(RenderEffect const & effect, RenderTechnique const & tech,
+			RenderPass const & pass, RenderLayout const & rl);
+		void UpdateComputePSO(RenderEffect const & effect, RenderPass const & pass);
+
+	private:
+		enum EngineType
+		{
+			ET_Render,
+			ET_Compute,
+			ET_Copy
+		};
+
 		// Direct3D rendering device
 		// Only created after top-level window created
-		IDXGIFactory4Ptr gi_factory_;
+		IDXGIFactory4Ptr gi_factory_4_;
+		IDXGIFactory5Ptr gi_factory_5_;
+		uint8_t dxgi_sub_ver_;
+
 		ID3D12DevicePtr d3d_device_;
 		ID3D12CommandQueuePtr d3d_render_cmd_queue_;
 		ID3D12CommandAllocatorPtr d3d_render_cmd_allocator_;
@@ -251,6 +273,7 @@ namespace KlayGE
 		ID3D12GraphicsCommandListPtr d3d_res_cmd_list_;
 		std::mutex res_cmd_list_mutex_;
 		D3D_FEATURE_LEVEL d3d_feature_level_;
+		EngineType last_engine_type_;
 
 		// List of D3D drivers installed (video cards)
 		// Enumerates itself
@@ -262,9 +285,8 @@ namespace KlayGE
 		RenderLayout::topology_type topology_type_cache_;
 		D3D12_VIEWPORT viewport_cache_;
 		D3D12_RECT scissor_rc_cache_;
-		std::vector<ID3D12ResourcePtr> so_buffs_;
-		std::set<ID3D12ResourcePtr> buff_cache_;
-		std::vector<ID3D12PipelineStatePtr> pso_cache_;
+		std::vector<GraphicsBufferPtr> so_buffs_;
+		std::set<bool*> recycle_res_after_sync_;
 		std::vector<ID3D12DescriptorHeapPtr> cbv_srv_uav_heap_cache_;
 		std::unordered_map<size_t, ID3D12RootSignaturePtr> root_signatures_;
 		std::unordered_map<size_t, ID3D12PipelineStatePtr> graphics_psos_;
@@ -284,7 +306,12 @@ namespace KlayGE
 		D3D12_CPU_DESCRIPTOR_HANDLE null_srv_handle_;
 		D3D12_CPU_DESCRIPTOR_HANDLE null_uav_handle_;
 
-		std::string vs_profile_, ps_profile_, gs_profile_, cs_profile_, hs_profile_, ds_profile_;
+		char const * vs_profile_;
+		char const * ps_profile_;
+		char const * gs_profile_;
+		char const * cs_profile_;
+		char const * hs_profile_;
+		char const * ds_profile_;
 
 		enum StereoMethod
 		{
@@ -294,35 +321,25 @@ namespace KlayGE
 
 		StereoMethod stereo_method_;
 
-		std::set<ElementFormat> vertex_format_;
-		std::set<ElementFormat> texture_format_;
+		std::vector<ElementFormat> vertex_format_;
+		std::vector<ElementFormat> texture_format_;
 		std::map<ElementFormat, std::vector<std::pair<uint32_t, uint32_t>>> rendertarget_format_;
 
 		double inv_timestamp_freq_;
 
-		ID3D12FencePtr render_cmd_fence_;
+		FencePtr render_cmd_fence_;
 		uint64_t render_cmd_fence_val_;
-		HANDLE render_cmd_fence_event_;
-
-		ID3D12FencePtr compute_cmd_fence_;
+		FencePtr compute_cmd_fence_;
 		uint64_t compute_cmd_fence_val_;
-		HANDLE compute_cmd_fence_event_;
-
-		ID3D12FencePtr copy_cmd_fence_;
+		FencePtr copy_cmd_fence_;
 		uint64_t copy_cmd_fence_val_;
-		HANDLE copy_cmd_fence_event_;
 
-		ID3D12FencePtr res_cmd_fence_;
+		FencePtr res_cmd_fence_;
 		uint64_t res_cmd_fence_val_;
-		HANDLE res_cmd_fence_event_;
 
 		RenderEffectPtr blit_effect_;
-		RenderTechniquePtr bilinear_blit_tech_;
-		RenderLayoutPtr blit_rl_;
-		GraphicsBufferPtr blit_vb_;
+		RenderTechnique* bilinear_blit_tech_;
 	};
-
-	typedef std::shared_ptr<D3D12RenderEngine> D3D12RenderEnginePtr;
 }
 
 #endif			// _D3D12RENDERENGINE_HPP

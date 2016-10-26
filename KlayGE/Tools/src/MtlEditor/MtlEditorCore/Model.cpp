@@ -6,6 +6,7 @@
 #include <KlayGE/RenderEngine.hpp>
 #include <KlayGE/RenderEffect.hpp>
 #include <KlayGE/RenderFactory.hpp>
+#include <KlayGE/RenderMaterial.hpp>
 #include <KlayGE/ElementFormat.hpp>
 #include <KlayGE/Context.hpp>
 #include <KlayGE/App3D.hpp>
@@ -19,13 +20,13 @@ using namespace KlayGE;
 
 DetailedSkinnedMesh::DetailedSkinnedMesh(RenderModelPtr const & model, std::wstring const & name)
 	: SkinnedMesh(model, name),
-			visualize_(0)
+			visualize_(-1)
 {
 }
 
-void DetailedSkinnedMesh::BuildMeshInfo()
+void DetailedSkinnedMesh::DoBuildMeshInfo()
 {
-	SkinnedMesh::BuildMeshInfo();
+	SkinnedMesh::DoBuildMeshInfo();
 
 	this->BindDeferredEffect(checked_pointer_cast<DetailedSkinnedModel>(model_.lock())->Effect());
 }
@@ -44,7 +45,7 @@ void DetailedSkinnedMesh::OnRenderBegin()
 
 void DetailedSkinnedMesh::VisualizeLighting()
 {
-	visualize_ = 0;
+	visualize_ = -1;
 	this->UpdateTechniques();
 }
 
@@ -52,14 +53,14 @@ void DetailedSkinnedMesh::VisualizeVertex(VertexElementUsage usage, uint8_t usag
 {
 	*(deferred_effect_->ParameterByName("vertex_usage")) = static_cast<int32_t>(usage);
 	*(deferred_effect_->ParameterByName("vertex_usage_index")) = static_cast<int32_t>(usage_index);
-	visualize_ = 1;
+	visualize_ = 0;
 	this->UpdateTechniques();
 }
 
 void DetailedSkinnedMesh::VisualizeTexture(int slot)
 {
 	*(deferred_effect_->ParameterByName("texture_slot")) = static_cast<int32_t>(slot);
-	visualize_ = 2;
+	visualize_ = 1;
 	this->UpdateTechniques();
 }
 
@@ -67,70 +68,55 @@ void DetailedSkinnedMesh::UpdateEffectAttrib()
 {
 	effect_attrs_ &= ~EA_TransparencyBack;
 	effect_attrs_ &= ~EA_TransparencyFront;
+	effect_attrs_ &= ~EA_AlphaTest;
+	effect_attrs_ &= ~EA_SSS;
 	effect_attrs_ &= ~EA_SpecialShading;
 
-	if (!(effect_attrs_ & EA_AlphaTest) && (mtl_->opacity < 1))
+	if (mtl_->transparent)
 	{
 		effect_attrs_ |= EA_TransparencyBack;
 		effect_attrs_ |= EA_TransparencyFront;
 	}
-	if ((mtl_->emit.x() > 0) || (mtl_->emit.y() > 0) || (mtl_->emit.z() > 0) || emit_tl_
+	if (mtl_->alpha_test > 0)
+	{
+		effect_attrs_ |= EA_AlphaTest;
+	}
+	if (mtl_->sss)
+	{
+		effect_attrs_ |= EA_SSS;
+	}
+	if ((mtl_->emissive.x() > 0) || (mtl_->emissive.y() > 0) || (mtl_->emissive.z() > 0) || textures_[RenderMaterial::TS_Emissive]
 		|| (effect_attrs_ & EA_TransparencyBack) || (effect_attrs_ & EA_TransparencyFront)
 		|| (effect_attrs_ & EA_Reflection))
 	{
 		effect_attrs_ |= EA_SpecialShading;
 	}
+
+	this->UpdateTechniques();
 }
 
 void DetailedSkinnedMesh::UpdateMaterial()
 {
-	diffuse_tl_ = std::function<TexturePtr()>();
-	specular_tl_ = std::function<TexturePtr()>();
-	shininess_tl_ = std::function<TexturePtr()>();
-	normal_tl_ = std::function<TexturePtr()>();
-	height_tl_ = std::function<TexturePtr()>();
-	emit_tl_ = std::function<TexturePtr()>();
-
-	diffuse_tex_.reset();
-	specular_tex_.reset();
-	shininess_tex_.reset();
-	normal_tex_.reset();
-	height_tex_.reset();
-	emit_tex_.reset();
+	for (size_t i = 0; i < textures_.size(); ++ i)
+	{
+		textures_[i].reset();
+	}
 
 	StaticMesh::BuildMeshInfo();
 }
 
 void DetailedSkinnedMesh::UpdateTechniques()
 {
-	std::shared_ptr<DetailedSkinnedModel> model = checked_pointer_cast<DetailedSkinnedModel>(model_.lock());
+	SkinnedMesh::UpdateTechniques();
 
-	if (this->AlphaTest())
+	if (visualize_ >= 0)
 	{
-		depth_tech_ = model->depth_alpha_test_techs_[visualize_];
-		gbuffer_rt0_tech_ = model->gbuffer_alpha_test_rt0_techs_[visualize_];
-		gbuffer_rt1_tech_ = model->gbuffer_alpha_test_rt1_techs_[visualize_];
-		gbuffer_mrt_tech_ = model->gbuffer_alpha_test_mrt_techs_[visualize_];
-	}
-	else
-	{
-		depth_tech_ = model->depth_techs_[visualize_];
-		gbuffer_rt0_tech_ = model->gbuffer_rt0_techs_[visualize_];
-		gbuffer_rt1_tech_ = model->gbuffer_rt1_techs_[visualize_];
-		gbuffer_mrt_tech_ = model->gbuffer_mrt_techs_[visualize_];
-	}
+		std::shared_ptr<DetailedSkinnedModel> model = checked_pointer_cast<DetailedSkinnedModel>(model_.lock());
 
-	depth_alpha_blend_back_tech_ = model->depth_alpha_blend_back_techs_[visualize_];
-	depth_alpha_blend_front_tech_ = model->depth_alpha_blend_front_techs_[visualize_];
-	gbuffer_alpha_blend_back_rt0_tech_ = model->gbuffer_alpha_blend_back_rt0_techs_[visualize_];
-	gbuffer_alpha_blend_front_rt0_tech_ = model->gbuffer_alpha_blend_front_rt0_techs_[visualize_];
-	gbuffer_alpha_blend_back_rt1_tech_ = model->gbuffer_alpha_blend_back_rt1_techs_[visualize_];
-	gbuffer_alpha_blend_front_rt1_tech_ = model->gbuffer_alpha_blend_front_rt1_techs_[visualize_];
-	gbuffer_alpha_blend_back_mrt_tech_ = model->gbuffer_alpha_blend_back_mrt_techs_[visualize_];
-	gbuffer_alpha_blend_front_mrt_tech_ = model->gbuffer_alpha_blend_front_mrt_techs_[visualize_];
-	special_shading_tech_ = model->special_shading_techs_[visualize_];
-	special_shading_alpha_blend_back_tech_ = model->special_shading_alpha_blend_back_techs_[visualize_];
-	special_shading_alpha_blend_front_tech_ = model->special_shading_alpha_blend_front_techs_[visualize_];
+		gbuffer_mrt_tech_ = model->visualize_gbuffer_mrt_techs_[visualize_];
+		gbuffer_alpha_blend_back_mrt_tech_ = gbuffer_mrt_tech_;
+		gbuffer_alpha_blend_front_mrt_tech_ = gbuffer_mrt_tech_;
+	}
 }
 
 
@@ -140,16 +126,16 @@ DetailedSkinnedModel::DetailedSkinnedModel(std::wstring const & name)
 {
 }
 
-void DetailedSkinnedModel::BuildModelInfo()
+void DetailedSkinnedModel::DoBuildModelInfo()
 {
 	bool has_tc = false;
 	bool has_normal = false;
 	bool has_tangent_quat = false;
 	bool has_skinned = false;
-	RenderLayoutPtr const & rl = subrenderables_[0]->GetRenderLayout();
-	for (uint32_t i = 0; i < rl->NumVertexStreams(); ++ i)
+	RenderLayout const & rl = subrenderables_[0]->GetRenderLayout();
+	for (uint32_t i = 0; i < rl.NumVertexStreams(); ++ i)
 	{
-		switch (rl->VertexStreamFormat(i)[0].usage)
+		switch (rl.VertexStreamFormat(i)[0].usage)
 		{
 		case VEU_TextureCoord:
 			has_tc = true;
@@ -179,7 +165,7 @@ void DetailedSkinnedModel::BuildModelInfo()
 	{
 		StaticMeshPtr mesh = checked_pointer_cast<StaticMesh>(renderable);
 		total_num_vertices += mesh->NumVertices();
-		total_num_indices += mesh->NumTriangles() * 3;
+		total_num_indices += mesh->NumIndices();
 	}
 
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
@@ -195,10 +181,10 @@ void DetailedSkinnedModel::BuildModelInfo()
 	std::vector<float2> texcoords(total_num_vertices);
 	std::vector<float3> normals(total_num_vertices);
 	std::vector<Quaternion> tangent_quats(total_num_vertices);
-	for (uint32_t i = 0; i < rl->NumVertexStreams(); ++ i)
+	for (uint32_t i = 0; i < rl.NumVertexStreams(); ++ i)
 	{
-		GraphicsBufferPtr const & vb = rl->GetVertexStream(i);
-		switch (rl->VertexStreamFormat(i)[0].usage)
+		GraphicsBufferPtr const & vb = rl.GetVertexStream(i);
+		switch (rl.VertexStreamFormat(i)[0].usage)
 		{
 		case VEU_Position:
 			{
@@ -238,7 +224,7 @@ void DetailedSkinnedModel::BuildModelInfo()
 
 				GraphicsBuffer::Mapper mapper(*vb_cpu, BA_Read_Only);
 				uint32_t const * n_32 = mapper.Pointer<uint32_t>();
-				if (EF_A2BGR10 == rl->VertexStreamFormat(i)[0].format)
+				if (EF_A2BGR10 == rl.VertexStreamFormat(i)[0].format)
 				{
 					for (uint32_t j = 0; j < total_num_vertices; ++ j)
 					{
@@ -247,7 +233,7 @@ void DetailedSkinnedModel::BuildModelInfo()
 						normals[j].z() = ((n_32[j] >> 20) & 0x3FF) / 1023.0f * 2 - 1;
 					}
 				}
-				else if (EF_ABGR8 == rl->VertexStreamFormat(i)[0].format)
+				else if (EF_ABGR8 == rl.VertexStreamFormat(i)[0].format)
 				{
 					for (uint32_t j = 0; j < total_num_vertices; ++ j)
 					{
@@ -258,7 +244,7 @@ void DetailedSkinnedModel::BuildModelInfo()
 				}
 				else
 				{
-					BOOST_ASSERT(EF_ARGB8 == rl->VertexStreamFormat(i)[0].format);
+					BOOST_ASSERT(EF_ARGB8 == rl.VertexStreamFormat(i)[0].format);
 
 					for (uint32_t j = 0; j < total_num_vertices; ++ j)
 					{
@@ -278,7 +264,7 @@ void DetailedSkinnedModel::BuildModelInfo()
 
 				GraphicsBuffer::Mapper mapper(*vb_cpu, BA_Read_Only);
 				uint32_t const * t_32 = mapper.Pointer<uint32_t>();
-				if (EF_ABGR8 == rl->VertexStreamFormat(i)[0].format)
+				if (EF_ABGR8 == rl.VertexStreamFormat(i)[0].format)
 				{
 					for (uint32_t j = 0; j < total_num_vertices; ++ j)
 					{
@@ -290,7 +276,7 @@ void DetailedSkinnedModel::BuildModelInfo()
 				}
 				else
 				{
-					BOOST_ASSERT(EF_ARGB8 == rl->VertexStreamFormat(i)[0].format);
+					BOOST_ASSERT(EF_ARGB8 == rl.VertexStreamFormat(i)[0].format);
 
 					for (uint32_t j = 0; j < total_num_vertices; ++ j)
 					{
@@ -309,104 +295,66 @@ void DetailedSkinnedModel::BuildModelInfo()
 	}
 	std::vector<uint32_t> indices(total_num_indices);
 	{
-		GraphicsBufferPtr ib = rl->GetIndexStream();
+		GraphicsBufferPtr const & ib = rl.GetIndexStream();
 		GraphicsBufferPtr ib_cpu = rf.MakeIndexBuffer(BU_Static, EAH_CPU_Read, ib->Size(), nullptr);
 		ib->CopyToBuffer(*ib_cpu);
 
 		GraphicsBuffer::Mapper mapper(*ib_cpu, BA_Read_Only);
-		if (EF_R16UI == rl->IndexStreamFormat())
+		if (EF_R16UI == rl.IndexStreamFormat())
 		{
 			std::copy(mapper.Pointer<uint16_t>(), mapper.Pointer<uint16_t>() + indices.size(), indices.begin());
 		}
 		else
 		{
-			BOOST_ASSERT(EF_R32UI == rl->IndexStreamFormat());
+			BOOST_ASSERT(EF_R32UI == rl.IndexStreamFormat());
 			std::copy(mapper.Pointer<uint32_t>(), mapper.Pointer<uint32_t>() + indices.size(), indices.begin());
 		}
 	}
 
 	if (!has_tc)
 	{
+		std::vector<int16_t> tcs16(total_num_vertices);
 		texcoords.resize(total_num_vertices);
 		for (size_t i = 0; i < texcoords.size(); ++ i)
 		{
 			texcoords[i] = float2(positions[i].x(), positions[i].y());
+
+			float3 tc16 = float3(texcoords[i].x(), texcoords[i].y(), 0.0f);
+			tc16 = (tc16 - tc_center) / tc_extent * 0.5f + 0.5f;
+			tcs16[i] = static_cast<int16_t>(MathLib::clamp<int32_t>(static_cast<int32_t>(tc16.x() * 65535 - 32768), -32768, 32767));
+			tcs16[i] = static_cast<int16_t>(MathLib::clamp<int32_t>(static_cast<int32_t>(tc16.y() * 65535 - 32768), -32768, 32767));
 		}
 
 		for (auto const & renderable : subrenderables_)
 		{
 			StaticMeshPtr mesh = checked_pointer_cast<StaticMesh>(renderable);
-			mesh->AddVertexStream(&texcoords[0], static_cast<uint32_t>(sizeof(texcoords[0]) * texcoords.size()),
-				vertex_element(VEU_TextureCoord, 0, EF_GR32F), EAH_GPU_Read);
+			mesh->AddVertexStream(&texcoords[0], static_cast<uint32_t>(sizeof(tcs16[0]) * tcs16.size()),
+				vertex_element(VEU_TextureCoord, 0, EF_GR16), EAH_GPU_Read);
 		}
 	}
 
-	if (!has_normal && !has_tc)
+	if (!has_tangent_quat)
 	{
-		for (auto const & renderable : subrenderables_)
+		if (!has_normal)
 		{
-			StaticMeshPtr mesh = checked_pointer_cast<StaticMesh>(renderable);
-			MathLib::compute_normal(normals.begin() + mesh->StartVertexLocation(),
-				indices.begin() + mesh->StartIndexLocation(), indices.begin() + mesh->StartIndexLocation() + mesh->NumTriangles() * 3,
-				positions.begin() + mesh->StartVertexLocation(), positions.begin() + mesh->StartVertexLocation() + mesh->NumVertices());
-		}
-
-		std::vector<uint32_t> compacted(total_num_vertices);
-		ElementFormat fmt;
-		if (rf.RenderEngineInstance().DeviceCaps().vertex_format_support(EF_A2BGR10))
-		{	
-			fmt = EF_A2BGR10;
-			for (size_t j = 0; j < compacted.size(); ++ j)
+			for (auto const & renderable : subrenderables_)
 			{
-				float3 n = MathLib::normalize(normals[j]) * 0.5f + 0.5f;
-				compacted[j] = MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.x() * 1023), 0, 1023)
-					| (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.y() * 1023), 0, 1023) << 10)
-					| (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.z() * 1023), 0, 1023) << 20);
-			}
-		}
-		else if (rf.RenderEngineInstance().DeviceCaps().vertex_format_support(EF_ABGR8))
-		{
-			fmt = EF_ABGR8;
-			for (size_t j = 0; j < compacted.size(); ++ j)
-			{
-				float3 n = MathLib::normalize(normals[j]) * 0.5f + 0.5f;
-				compacted[j] = (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.x() * 255), 0, 255) << 0)
-					| (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.y() * 255), 0, 255) << 8)
-					| (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.z() * 255), 0, 255) << 16);
-			}
-		}
-		else
-		{
-			BOOST_ASSERT(rf.RenderEngineInstance().DeviceCaps().vertex_format_support(EF_ARGB8));
-
-			fmt = EF_ARGB8;
-			for (size_t j = 0; j < compacted.size(); ++ j)
-			{
-				float3 n = MathLib::normalize(normals[j]) * 0.5f + 0.5f;
-				compacted[j] = (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.x() * 255), 0, 255) << 16)
-					| (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.y() * 255), 0, 255) << 8)
-					| (MathLib::clamp<uint32_t>(static_cast<uint32_t>(n.z() * 255), 0, 255) << 0);
+				StaticMeshPtr mesh = checked_pointer_cast<StaticMesh>(renderable);
+				MathLib::compute_normal(normals.begin() + mesh->StartVertexLocation(),
+					indices.begin() + mesh->StartIndexLocation(), indices.begin() + mesh->StartIndexLocation() + mesh->NumIndices(),
+					positions.begin() + mesh->StartVertexLocation(), positions.begin() + mesh->StartVertexLocation() + mesh->NumVertices());
 			}
 		}
 
-		for (auto const & renderable : subrenderables_)
-		{
-			StaticMeshPtr mesh = checked_pointer_cast<StaticMesh>(renderable);
-			mesh->AddVertexStream(&compacted[0], static_cast<uint32_t>(sizeof(compacted[0]) * compacted.size()),
-				vertex_element(VEU_Normal, 0, fmt), EAH_GPU_Read);
-		}
-	}
-	else if (!has_tangent_quat)
-	{
 		std::vector<float3> tangents(total_num_vertices);
 		std::vector<float3> binormals(total_num_vertices);
-		
+
 		// Compute TBN
 		for (auto const & renderable : subrenderables_)
 		{
 			StaticMeshPtr mesh = checked_pointer_cast<StaticMesh>(renderable);
 			MathLib::compute_tangent(tangents.begin() + mesh->StartVertexLocation(), binormals.begin() + mesh->StartVertexLocation(),
-				indices.begin() + mesh->StartIndexLocation(), indices.begin() + mesh->StartIndexLocation() + mesh->NumTriangles() * 3,
+				indices.begin() + mesh->StartIndexLocation(), indices.begin() + mesh->StartIndexLocation() + mesh->NumIndices(),
 				positions.begin() + mesh->StartVertexLocation(), positions.begin() + mesh->StartVertexLocation() + mesh->NumVertices(),
 				texcoords.begin() + mesh->StartVertexLocation(), normals.begin() + mesh->StartVertexLocation());
 		}
@@ -464,102 +412,18 @@ void DetailedSkinnedModel::BuildModelInfo()
 		effect_ = SyncLoadRenderEffect("MtlEditorNoSkinning.fxml");
 	}
 
-	std::string depth_tech_str;
-	std::string depth_alpha_test_tech_str;
-	std::string depth_alpha_blend_back_tech_str;
-	std::string depth_alpha_blend_front_tech_str;
-	std::string g_buffer_tech_str;
-	std::string g_buffer_alpha_test_tech_str;
-	std::string g_buffer_alpha_blend_back_tech_str;
-	std::string g_buffer_alpha_blend_front_tech_str;
 	std::string g_buffer_mrt_tech_str;
-	std::string g_buffer_alpha_test_mrt_tech_str;
-	std::string g_buffer_alpha_blend_back_mrt_tech_str;
-	std::string g_buffer_alpha_blend_front_mrt_tech_str;
-	std::string special_shading_tech_str;
-	std::string special_shading_alpha_blend_back_tech_str;
-	std::string special_shading_alpha_blend_front_tech_str;
-	for (int vis = 0; vis < 3; ++ vis)
+	for (int vis = 0; vis < 2; ++ vis)
 	{
-		switch (vis)
-		{
-		case 0:
-			depth_tech_str = "Depth";
-			g_buffer_tech_str = "GBuffer";
-			special_shading_tech_str = "SpecialShading";
-			break;
-
-		case 1:
-			g_buffer_tech_str = "VisualizeVertex";
-			break;
-
-		default:
-			g_buffer_tech_str = "VisualizeTexture";
-			break;
-		}
-
-		depth_alpha_test_tech_str = depth_tech_str;
-		depth_alpha_blend_back_tech_str = depth_tech_str;
-		depth_alpha_blend_front_tech_str = depth_tech_str;
-		g_buffer_alpha_test_tech_str = g_buffer_tech_str;
-		g_buffer_alpha_blend_back_tech_str = g_buffer_tech_str;
-		g_buffer_alpha_blend_front_tech_str = g_buffer_tech_str;
-		g_buffer_mrt_tech_str = g_buffer_tech_str;
-		g_buffer_alpha_test_mrt_tech_str = g_buffer_mrt_tech_str;
-		g_buffer_alpha_blend_back_mrt_tech_str = g_buffer_mrt_tech_str;
-		g_buffer_alpha_blend_front_mrt_tech_str = g_buffer_mrt_tech_str;
-		special_shading_alpha_blend_back_tech_str = special_shading_tech_str;
-		special_shading_alpha_blend_front_tech_str = special_shading_tech_str;
 		if (0 == vis)
 		{
-			depth_alpha_test_tech_str += "AlphaTest";
-			depth_alpha_blend_back_tech_str += "AlphaBlendBack";
-			depth_alpha_blend_front_tech_str += "AlphaBlendFront";
-
-			g_buffer_alpha_test_tech_str += "AlphaTest";
-			g_buffer_alpha_blend_back_tech_str += "AlphaBlendBack";
-			g_buffer_alpha_blend_front_tech_str += "AlphaBlendFront";
-
-			g_buffer_alpha_test_mrt_tech_str += "AlphaTest";
-			g_buffer_alpha_blend_back_mrt_tech_str += "AlphaBlendBack";
-			g_buffer_alpha_blend_front_mrt_tech_str += "AlphaBlendFront";
-
-			special_shading_alpha_blend_back_tech_str += "AlphaBlendBack";
-			special_shading_alpha_blend_front_tech_str += "AlphaBlendFront";
-		}
-
-		depth_techs_[vis] = effect_->TechniqueByName(depth_tech_str + "Tech");
-		depth_alpha_test_techs_[vis] = effect_->TechniqueByName(depth_alpha_test_tech_str + "Tech");
-		depth_alpha_blend_back_techs_[vis] = effect_->TechniqueByName(depth_alpha_blend_back_tech_str + "Tech");
-		depth_alpha_blend_front_techs_[vis] = effect_->TechniqueByName(depth_alpha_blend_front_tech_str + "Tech");
-
-		gbuffer_rt0_techs_[vis] = effect_->TechniqueByName(g_buffer_tech_str + "RT0Tech");
-		gbuffer_alpha_test_rt0_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_test_tech_str + "RT0Tech");
-		gbuffer_alpha_blend_back_rt0_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_blend_back_tech_str + "RT0Tech");
-		gbuffer_alpha_blend_front_rt0_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_blend_front_tech_str + "RT0Tech");
-
-		gbuffer_rt1_techs_[vis] = effect_->TechniqueByName(g_buffer_tech_str + "RT1Tech");
-		gbuffer_alpha_test_rt1_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_test_tech_str + "RT1Tech");
-		gbuffer_alpha_blend_back_rt1_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_blend_back_tech_str + "RT1Tech");
-		gbuffer_alpha_blend_front_rt1_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_blend_front_tech_str + "RT1Tech");
-
-		gbuffer_mrt_techs_[vis] = effect_->TechniqueByName(g_buffer_mrt_tech_str + "MRTTech");
-		gbuffer_alpha_test_mrt_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_test_mrt_tech_str + "MRTTech");
-		gbuffer_alpha_blend_back_mrt_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_blend_back_mrt_tech_str + "MRTTech");
-		gbuffer_alpha_blend_front_mrt_techs_[vis] = effect_->TechniqueByName(g_buffer_alpha_blend_front_mrt_tech_str + "MRTTech");
-
-		if (0 == vis)
-		{
-			special_shading_techs_[vis] = effect_->TechniqueByName(special_shading_tech_str + "Tech");
-			special_shading_alpha_blend_back_techs_[vis] = effect_->TechniqueByName(special_shading_alpha_blend_back_tech_str + "Tech");
-			special_shading_alpha_blend_front_techs_[vis] = effect_->TechniqueByName(special_shading_alpha_blend_front_tech_str + "Tech");
+			g_buffer_mrt_tech_str = "VisualizeVertexMRTTech";
 		}
 		else
 		{
-			special_shading_techs_[vis] = effect_->TechniqueByName("SpecialShadingTech");
-			special_shading_alpha_blend_back_techs_[vis] = effect_->TechniqueByName("SpecialShadingAlphaBlendBackTech");
-			special_shading_alpha_blend_front_techs_[vis] = effect_->TechniqueByName("SpecialShadingAlphaBlendFrontTech");
+			g_buffer_mrt_tech_str = "VisualizeTextureMRTTech";
 		}
+		visualize_gbuffer_mrt_techs_[vis] = effect_->TechniqueByName(g_buffer_mrt_tech_str);
 	}
 
 	is_skinned_ = has_skinned;
@@ -609,6 +473,18 @@ void DetailedSkinnedModel::UpdateEffectAttrib(KlayGE::uint32_t mtl_index)
 	}
 }
 
+void DetailedSkinnedModel::UpdateTechniques(KlayGE::uint32_t mtl_index)
+{
+	for (auto const & renderable : subrenderables_)
+	{
+		DetailedSkinnedMesh* mesh = checked_cast<DetailedSkinnedMesh*>(renderable.get());
+		if (mesh->MaterialID() == static_cast<int32_t>(mtl_index))
+		{
+			mesh->UpdateTechniques();
+		}
+	}
+}
+
 void DetailedSkinnedModel::UpdateMaterial(uint32_t mtl_index)
 {
 	for (auto const & renderable : subrenderables_)
@@ -619,4 +495,18 @@ void DetailedSkinnedModel::UpdateMaterial(uint32_t mtl_index)
 			mesh->UpdateMaterial();
 		}
 	}
+}
+
+uint32_t DetailedSkinnedModel::CopyMaterial(uint32_t mtl_index)
+{
+	uint32_t new_index = static_cast<uint32_t>(materials_.size());
+	materials_.push_back(MakeSharedPtr<RenderMaterial>(*materials_[mtl_index]));
+	return new_index;
+}
+
+uint32_t DetailedSkinnedModel::ImportMaterial(std::string const & name)
+{
+	uint32_t new_index = static_cast<uint32_t>(materials_.size());
+	materials_.push_back(SyncLoadRenderMaterial(name));
+	return new_index;
 }

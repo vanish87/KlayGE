@@ -366,16 +366,6 @@ def create_source(prefix, extensions, base_dir, quite_mode):
 			if not function.static_link:
 				all_static = False
 
-		if not all_static:
-			if (len(extension.functions) != 0):
-				source_str.write("\t{\n")
-
-				for function in extension.functions:
-					if not function.static_link:
-						source_str.write("\t\t%s = NULL;\n" % function.name)
-
-				source_str.write("\t}\n\n")
-
 		source_str.write("\t_%s = 0;\n" % extension.name)
 		source_str.write("\tif (glloader_is_supported(\"%s\"))\n" % extension.name)
 		source_str.write("\t{\n")
@@ -563,14 +553,14 @@ def auto_gen_glloader_files(base_dir, quite_mode):
 		print("")
 
 	if not quite_mode:
-		print("Creating Header Files...")
+		print("Creating header files...")
 	for features in feature_set.items():
 		create_header(features[0], features[1], base_dir, quite_mode)
 	if not quite_mode:
 		print("")
 
 	if not quite_mode:
-		print("Creating Source Files...")
+		print("Creating source files...")
 	for features in feature_set.items():
 		create_source(features[0], features[1], base_dir, quite_mode)
 	if not quite_mode:
@@ -580,7 +570,9 @@ def auto_gen_glloader_files(base_dir, quite_mode):
 if __name__ == "__main__":
 	import os
 	import sys
-	
+
+	print("Generating glloader files...")
+
 	quite_mode = False
 	if (len(sys.argv) >= 2):
 		if ("-q" == sys.argv[1]):

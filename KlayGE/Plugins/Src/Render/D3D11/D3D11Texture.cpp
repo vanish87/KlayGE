@@ -19,10 +19,10 @@
 #include <KlayGE/RenderEngine.hpp>
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/Texture.hpp>
+#include <KFL/Hash.hpp>
 
 #include <cstring>
 #include <boost/assert.hpp>
-#include <boost/functional/hash.hpp>
 
 #include <KlayGE/SALWrapper.hpp>
 #include <KlayGE/D3D11/D3D11RenderEngine.hpp>
@@ -56,7 +56,7 @@ namespace KlayGE
 
 	uint32_t D3D11Texture::Width(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -64,7 +64,7 @@ namespace KlayGE
 
 	uint32_t D3D11Texture::Height(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -72,7 +72,7 @@ namespace KlayGE
 
 	uint32_t D3D11Texture::Depth(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -106,75 +106,338 @@ namespace KlayGE
 		BOOST_ASSERT(false);
 	}
 
-	ID3D11ShaderResourceViewPtr const & D3D11Texture::RetriveD3DShaderResourceView(uint32_t /*first_array_index*/, uint32_t /*num_items*/, uint32_t /*first_level*/, uint32_t /*num_levels*/)
+	ID3D11ShaderResourceViewPtr const & D3D11Texture::RetriveD3DShaderResourceView(uint32_t first_array_index, uint32_t num_items,
+		uint32_t first_level, uint32_t num_levels)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11ShaderResourceViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Read);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(first_array_index);
+			HashCombine(hash_val, num_items);
+			HashCombine(hash_val, first_level);
+			HashCombine(hash_val, num_levels);
+
+			auto iter = d3d_sr_views_.find(hash_val);
+			if (iter != d3d_sr_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillSRVDesc(first_array_index, num_items, first_level, num_levels);
+				ID3D11ShaderResourceView* d3d_sr_view;
+				d3d_device_->CreateShaderResourceView(this->D3DResource(), &desc, &d3d_sr_view);
+				return d3d_sr_views_.emplace(hash_val, MakeCOMPtr(d3d_sr_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11ShaderResourceViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUnorderedAccessView(uint32_t /*first_array_index*/, uint32_t /*num_items*/, uint32_t /*level*/)
+	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUnorderedAccessView(uint32_t first_array_index, uint32_t num_items,
+		uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11UnorderedAccessViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Unordered);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(first_array_index);
+			HashCombine(hash_val, num_items);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, 0);
+			HashCombine(hash_val, 0);
+
+			auto iter = d3d_ua_views_.find(hash_val);
+			if (iter != d3d_ua_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillUAVDesc(first_array_index, num_items, level);
+				ID3D11UnorderedAccessView* d3d_ua_view;
+				d3d_device_->CreateUnorderedAccessView(this->D3DResource(), &desc, &d3d_ua_view);
+				return d3d_ua_views_.emplace(hash_val, MakeCOMPtr(d3d_ua_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11UnorderedAccessViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUnorderedAccessView(uint32_t /*array_index*/, uint32_t /*first_slice*/, uint32_t /*num_slices*/, uint32_t /*level*/)
+	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUnorderedAccessView(uint32_t array_index, uint32_t first_slice,
+		uint32_t num_slices, uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11UnorderedAccessViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Unordered);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(array_index);
+			HashCombine(hash_val, 1);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, first_slice);
+			HashCombine(hash_val, num_slices);
+
+			auto iter = d3d_ua_views_.find(hash_val);
+			if (iter != d3d_ua_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillUAVDesc(array_index, first_slice, num_slices, level);
+				ID3D11UnorderedAccessView* d3d_ua_view;
+				d3d_device_->CreateUnorderedAccessView(this->D3DResource(), &desc, &d3d_ua_view);
+				return d3d_ua_views_.emplace(hash_val, MakeCOMPtr(d3d_ua_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11UnorderedAccessViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUnorderedAccessView(uint32_t /*first_array_index*/, uint32_t /*num_items*/, CubeFaces /*first_face*/, uint32_t /*num_faces*/,
-		uint32_t /*level*/)
+	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUnorderedAccessView(uint32_t first_array_index, uint32_t num_items,
+		CubeFaces first_face, uint32_t num_faces, uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11UnorderedAccessViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Unordered);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(first_array_index * 6 + first_face);
+			HashCombine(hash_val, num_items * 6 + num_faces);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, 0);
+			HashCombine(hash_val, 0);
+
+			auto iter = d3d_ua_views_.find(hash_val);
+			if (iter != d3d_ua_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillUAVDesc(first_array_index, num_items, first_face, num_faces, level);
+				ID3D11UnorderedAccessView* d3d_ua_view;
+				d3d_device_->CreateUnorderedAccessView(this->D3DResource(), &desc, &d3d_ua_view);
+				return d3d_ua_views_.emplace(hash_val, MakeCOMPtr(d3d_ua_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11UnorderedAccessViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRenderTargetView(uint32_t /*first_array_index*/, uint32_t /*array_size*/, uint32_t /*level*/)
+	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRenderTargetView(uint32_t first_array_index, uint32_t array_size,
+		uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11RenderTargetViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
+		BOOST_ASSERT(first_array_index < this->ArraySize());
+		BOOST_ASSERT(first_array_index + array_size <= this->ArraySize());
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(first_array_index);
+			HashCombine(hash_val, array_size);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, 0);
+			HashCombine(hash_val, 0);
+
+			auto iter = d3d_rt_views_.find(hash_val);
+			if (iter != d3d_rt_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillRTVDesc(first_array_index, array_size, level);
+				ID3D11RenderTargetView* rt_view;
+				d3d_device_->CreateRenderTargetView(this->D3DResource(), &desc, &rt_view);
+				return d3d_rt_views_.emplace(hash_val, MakeCOMPtr(rt_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11RenderTargetViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRenderTargetView(uint32_t /*array_index*/, uint32_t /*first_slice*/, uint32_t /*num_slices*/, uint32_t /*level*/)
+	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRenderTargetView(uint32_t array_index, uint32_t first_slice,
+		uint32_t num_slices, uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11RenderTargetViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
+		BOOST_ASSERT(0 == array_index);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(array_index);
+			HashCombine(hash_val, 1);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, first_slice);
+			HashCombine(hash_val, num_slices);
+
+			auto iter = d3d_rt_views_.find(hash_val);
+			if (iter != d3d_rt_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillRTVDesc(array_index, first_slice, num_slices, level);
+				ID3D11RenderTargetView* rt_view;
+				d3d_device_->CreateRenderTargetView(this->D3DResource(), &desc, &rt_view);
+				return d3d_rt_views_.emplace(hash_val, MakeCOMPtr(rt_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11RenderTargetViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRenderTargetView(uint32_t /*array_index*/, Texture::CubeFaces /*face*/, uint32_t /*level*/)
+	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRenderTargetView(uint32_t array_index, CubeFaces face,
+		uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11RenderTargetViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(array_index * 6 + face);
+			HashCombine(hash_val, 1);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, 0);
+			HashCombine(hash_val, 0);
+
+			auto iter = d3d_rt_views_.find(hash_val);
+			if (iter != d3d_rt_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillRTVDesc(array_index, face, level);
+				ID3D11RenderTargetView* rt_view;
+				d3d_device_->CreateRenderTargetView(this->D3DResource(), &desc, &rt_view);
+				return d3d_rt_views_.emplace(hash_val, MakeCOMPtr(rt_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11RenderTargetViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDepthStencilView(uint32_t /*first_array_index*/, uint32_t /*array_size*/, uint32_t /*level*/)
+	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDepthStencilView(uint32_t first_array_index, uint32_t array_size,
+		uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11DepthStencilViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
+		BOOST_ASSERT(first_array_index < this->ArraySize());
+		BOOST_ASSERT(first_array_index + array_size <= this->ArraySize());
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(first_array_index);
+			HashCombine(hash_val, array_size);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, 0);
+			HashCombine(hash_val, 0);
+
+			auto iter = d3d_ds_views_.find(hash_val);
+			if (iter != d3d_ds_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillDSVDesc(first_array_index, array_size, level);
+				ID3D11DepthStencilView* ds_view;
+				d3d_device_->CreateDepthStencilView(this->D3DResource(), &desc, &ds_view);
+				return d3d_ds_views_.emplace(hash_val, MakeCOMPtr(ds_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11DepthStencilViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDepthStencilView(uint32_t /*array_index*/, uint32_t /*first_slice*/, uint32_t /*num_slices*/, uint32_t /*level*/)
+	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDepthStencilView(uint32_t array_index, uint32_t first_slice, uint32_t num_slices,
+		uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11DepthStencilViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
+		BOOST_ASSERT(0 == array_index);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(array_index);
+			HashCombine(hash_val, 1);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, first_slice);
+			HashCombine(hash_val, num_slices);
+
+			auto iter = d3d_ds_views_.find(hash_val);
+			if (iter != d3d_ds_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillDSVDesc(array_index, first_slice, num_slices, level);
+				ID3D11DepthStencilView* ds_view;
+				d3d_device_->CreateDepthStencilView(this->D3DResource(), &desc, &ds_view);
+				return d3d_ds_views_.emplace(hash_val, MakeCOMPtr(ds_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11DepthStencilViewPtr const view;
+			return view;
+		}
 	}
 
-	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDepthStencilView(uint32_t /*array_index*/, Texture::CubeFaces /*face*/, uint32_t /*level*/)
+	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDepthStencilView(uint32_t array_index, CubeFaces face, uint32_t level)
 	{
-		BOOST_ASSERT(false);
-		static ID3D11DepthStencilViewPtr const ret;
-		return ret;
+		BOOST_ASSERT(this->AccessHint() & EAH_GPU_Write);
+
+		if (this->HWResourceReady())
+		{
+			size_t hash_val = HashValue(array_index * 6 + face);
+			HashCombine(hash_val, 1);
+			HashCombine(hash_val, level);
+			HashCombine(hash_val, 0);
+			HashCombine(hash_val, 0);
+
+			auto iter = d3d_ds_views_.find(hash_val);
+			if (iter != d3d_ds_views_.end())
+			{
+				return iter->second;
+			}
+			else
+			{
+				auto desc = this->FillDSVDesc(array_index, face, level);
+				ID3D11DepthStencilView* ds_view;
+				d3d_device_->CreateDepthStencilView(this->D3DResource(), &desc, &ds_view);
+				return d3d_ds_views_.emplace(hash_val, MakeCOMPtr(ds_view)).first->second;
+			}
+		}
+		else
+		{
+			static ID3D11DepthStencilViewPtr const view;
+			return view;
+		}
 	}
 
 	void D3D11Texture::GetD3DFlags(D3D11_USAGE& usage, UINT& bind_flags, UINT& cpu_access_flags, UINT& misc_flags)
@@ -258,74 +521,6 @@ namespace KlayGE
 		}
 	}
 
-	ID3D11ShaderResourceViewPtr const & D3D11Texture::RetriveD3DSRV(D3D11_SHADER_RESOURCE_VIEW_DESC const & desc)
-	{
-		char const * p = reinterpret_cast<char const *>(&desc);
-		size_t hash_val = 0;
-		boost::hash_range(hash_val, p, p + sizeof(desc));
-
-		auto iter = d3d_sr_views_.find(hash_val);
-		if (iter != d3d_sr_views_.end())
-		{
-			return iter->second;
-		}
-
-		ID3D11ShaderResourceView* d3d_sr_view;
-		d3d_device_->CreateShaderResourceView(this->D3DResource().get(), &desc, &d3d_sr_view);
-		return KLAYGE_EMPLACE(d3d_sr_views_, hash_val, MakeCOMPtr(d3d_sr_view)).first->second;
-	}
-
-	ID3D11UnorderedAccessViewPtr const & D3D11Texture::RetriveD3DUAV(D3D11_UNORDERED_ACCESS_VIEW_DESC const & desc)
-	{
-		char const * p = reinterpret_cast<char const *>(&desc);
-		size_t hash_val = 0;
-		boost::hash_range(hash_val, p, p + sizeof(desc));
-
-		auto iter = d3d_ua_views_.find(hash_val);
-		if (iter != d3d_ua_views_.end())
-		{
-			return iter->second;
-		}
-
-		ID3D11UnorderedAccessView* d3d_ua_view;
-		d3d_device_->CreateUnorderedAccessView(this->D3DResource().get(), &desc, &d3d_ua_view);
-		return KLAYGE_EMPLACE(d3d_ua_views_, hash_val, MakeCOMPtr(d3d_ua_view)).first->second;
-	}
-
-	ID3D11RenderTargetViewPtr const & D3D11Texture::RetriveD3DRTV(D3D11_RENDER_TARGET_VIEW_DESC const & desc)
-	{
-		char const * p = reinterpret_cast<char const *>(&desc);
-		size_t hash_val = 0;
-		boost::hash_range(hash_val, p, p + sizeof(desc));
-
-		auto iter = d3d_rt_views_.find(hash_val);
-		if (iter != d3d_rt_views_.end())
-		{
-			return iter->second;
-		}
-
-		ID3D11RenderTargetView* rt_view;
-		d3d_device_->CreateRenderTargetView(this->D3DResource().get(), &desc, &rt_view);
-		return KLAYGE_EMPLACE(d3d_rt_views_, hash_val, MakeCOMPtr(rt_view)).first->second;
-	}
-
-	ID3D11DepthStencilViewPtr const & D3D11Texture::RetriveD3DDSV(D3D11_DEPTH_STENCIL_VIEW_DESC const & desc)
-	{
-		char const * p = reinterpret_cast<char const *>(&desc);
-		size_t hash_val = 0;
-		boost::hash_range(hash_val, p, p + sizeof(desc));
-
-		auto iter = d3d_ds_views_.find(hash_val);
-		if (iter != d3d_ds_views_.end())
-		{
-			return iter->second;
-		}
-
-		ID3D11DepthStencilView* ds_view;
-		d3d_device_->CreateDepthStencilView(this->D3DResource().get(), &desc, &ds_view);
-		return KLAYGE_EMPLACE(d3d_ds_views_, hash_val, MakeCOMPtr(ds_view)).first->second;
-	}
-
 	void D3D11Texture::Map1D(uint32_t /*array_index*/, uint32_t /*level*/, TextureMapAccess /*tma*/,
 			uint32_t /*x_offset*/, uint32_t /*width*/,
 			void*& /*data*/)
@@ -375,6 +570,114 @@ namespace KlayGE
 		BOOST_ASSERT(false);
 	}
 
+	D3D11_UNORDERED_ACCESS_VIEW_DESC D3D11Texture::FillUAVDesc(uint32_t first_array_index, uint32_t num_items, uint32_t level) const
+	{
+		KFL_UNUSED(first_array_index);
+		KFL_UNUSED(num_items);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_UNORDERED_ACCESS_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC D3D11Texture::FillUAVDesc(uint32_t array_index, uint32_t first_slice, uint32_t num_slices,
+		uint32_t level) const
+	{
+		KFL_UNUSED(array_index);
+		KFL_UNUSED(first_slice);
+		KFL_UNUSED(num_slices);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_UNORDERED_ACCESS_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC D3D11Texture::FillUAVDesc(uint32_t first_array_index, uint32_t num_items,
+		CubeFaces first_face, uint32_t num_faces, uint32_t level) const
+	{
+		KFL_UNUSED(first_array_index);
+		KFL_UNUSED(num_items);
+		KFL_UNUSED(first_face);
+		KFL_UNUSED(num_faces);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_UNORDERED_ACCESS_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_RENDER_TARGET_VIEW_DESC D3D11Texture::FillRTVDesc(uint32_t first_array_index, uint32_t array_size, uint32_t level) const
+	{
+		KFL_UNUSED(first_array_index);
+		KFL_UNUSED(array_size);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_RENDER_TARGET_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_RENDER_TARGET_VIEW_DESC D3D11Texture::FillRTVDesc(uint32_t array_index, uint32_t first_slice, uint32_t num_slices,
+		uint32_t level) const
+	{
+		KFL_UNUSED(array_index);
+		KFL_UNUSED(first_slice);
+		KFL_UNUSED(num_slices);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_RENDER_TARGET_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_RENDER_TARGET_VIEW_DESC D3D11Texture::FillRTVDesc(uint32_t array_index, CubeFaces face, uint32_t level) const
+	{
+		KFL_UNUSED(array_index);
+		KFL_UNUSED(face);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_RENDER_TARGET_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_DEPTH_STENCIL_VIEW_DESC D3D11Texture::FillDSVDesc(uint32_t first_array_index, uint32_t array_size, uint32_t level) const
+	{
+		KFL_UNUSED(first_array_index);
+		KFL_UNUSED(array_size);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_DEPTH_STENCIL_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_DEPTH_STENCIL_VIEW_DESC D3D11Texture::FillDSVDesc(uint32_t array_index, uint32_t first_slice, uint32_t num_slices,
+		uint32_t level) const
+	{
+		KFL_UNUSED(array_index);
+		KFL_UNUSED(first_slice);
+		KFL_UNUSED(num_slices);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_DEPTH_STENCIL_VIEW_DESC const ret = {};
+		return ret;
+	}
+
+	D3D11_DEPTH_STENCIL_VIEW_DESC D3D11Texture::FillDSVDesc(uint32_t array_index, CubeFaces face, uint32_t level) const
+	{
+		KFL_UNUSED(array_index);
+		KFL_UNUSED(face);
+		KFL_UNUSED(level);
+
+		BOOST_ASSERT(false);
+		static D3D11_DEPTH_STENCIL_VIEW_DESC const ret = {};
+		return ret;
+	}
+
 	void D3D11Texture::DeleteHWResource()
 	{
 		d3d_sr_views_.clear();
@@ -382,5 +685,72 @@ namespace KlayGE
 		d3d_rt_views_.clear();
 		d3d_ds_views_.clear();
 		d3d_texture_.reset();
+	}
+
+	bool D3D11Texture::HWResourceReady() const
+	{
+		return d3d_texture_.get() ? true : false;
+	}
+
+	void D3D11Texture::UpdateSubresource1D(uint32_t array_index, uint32_t level,
+		uint32_t x_offset, uint32_t width,
+		void const * data)
+	{
+		D3D11_BOX box;
+		box.left = x_offset;
+		box.top = 0;
+		box.front = 0;
+		box.right = x_offset + width;
+		box.bottom = 1;
+		box.back = 1;
+		uint32_t const texel_size = NumFormatBytes(format_);
+		d3d_imm_ctx_->UpdateSubresource(d3d_texture_.get(), array_index * num_mip_maps_ + level, &box,
+			data, width * texel_size, width * texel_size);
+	}
+
+	void D3D11Texture::UpdateSubresource2D(uint32_t array_index, uint32_t level,
+		uint32_t x_offset, uint32_t y_offset, uint32_t width, uint32_t height,
+		void const * data, uint32_t row_pitch)
+	{
+		D3D11_BOX box;
+		box.left = x_offset;
+		box.top = y_offset;
+		box.front = 0;
+		box.right = x_offset + width;
+		box.bottom = y_offset + height;
+		box.back = 1;
+		d3d_imm_ctx_->UpdateSubresource(d3d_texture_.get(), array_index * num_mip_maps_ + level, &box,
+			data, row_pitch, row_pitch);
+	}
+
+	void D3D11Texture::UpdateSubresource3D(uint32_t array_index, uint32_t level,
+		uint32_t x_offset, uint32_t y_offset, uint32_t z_offset,
+		uint32_t width, uint32_t height, uint32_t depth,
+		void const * data, uint32_t row_pitch, uint32_t slice_pitch)
+	{
+		D3D11_BOX box;
+		box.left = x_offset;
+		box.top = y_offset;
+		box.front = z_offset;
+		box.right = x_offset + width;
+		box.bottom = y_offset + height;
+		box.back = z_offset + depth;
+		d3d_imm_ctx_->UpdateSubresource(d3d_texture_.get(), array_index * num_mip_maps_ + level, &box,
+			data, row_pitch, slice_pitch);
+	}
+
+	void D3D11Texture::UpdateSubresourceCube(uint32_t array_index, Texture::CubeFaces face, uint32_t level,
+		uint32_t x_offset, uint32_t y_offset, uint32_t width, uint32_t height,
+		void const * data, uint32_t row_pitch)
+	{
+		D3D11_BOX box;
+		box.left = x_offset;
+		box.top = y_offset;
+		box.front = 0;
+		box.right = x_offset + width;
+		box.bottom = y_offset + height;
+		box.back = 1;
+		d3d_imm_ctx_->UpdateSubresource(d3d_texture_.get(), (array_index * 6 + face) * num_mip_maps_ + level, &box,
+			data, row_pitch, row_pitch);
 	}
 }

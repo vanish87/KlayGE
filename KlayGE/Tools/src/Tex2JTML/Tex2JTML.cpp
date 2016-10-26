@@ -40,29 +40,14 @@
 		}
 	}
 #endif
-#ifdef KLAYGE_CXX11_LIBRARY_REGEX_SUPPORT
-	#include <regex>
-#else
-	#include <boost/regex.hpp>
-	namespace std
-	{
-		using boost::regex;
-		using boost::regex_match;
-		using boost::smatch;
-	}
-#endif
+#include <regex>
 
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(push)
-#pragma warning(disable: 4512) // boost::program_options::options_description doesn't have assignment operator
-#elif defined(KLAYGE_COMPILER_GCC)
+#if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
 #endif
 #include <boost/program_options.hpp>
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(pop)
-#elif defined(KLAYGE_COMPILER_GCC)
+#if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic pop
 #endif
 #if defined(KLAYGE_COMPILER_GCC)

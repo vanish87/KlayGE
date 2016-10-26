@@ -99,8 +99,6 @@ namespace KlayGE
 		GraphicsBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte);
 		virtual ~GraphicsBuffer();
 
-		static GraphicsBufferPtr NullObject();
-
 		uint32_t Size() const
 		{
 			return size_in_byte_;
@@ -117,6 +115,11 @@ namespace KlayGE
 		}
 
 		virtual void CopyToBuffer(GraphicsBuffer& rhs) = 0;
+
+		virtual void CreateHWResource(void const * init_data) = 0;
+		virtual void DeleteHWResource() = 0;
+
+		virtual void UpdateSubresource(uint32_t offset, uint32_t size, void const * data) = 0;
 
 	private:
 		virtual void* Map(BufferAccess ba) = 0;

@@ -85,7 +85,7 @@ namespace KlayGE
 		std::vector<TexturePtr> const & CacheTexArray() const;
 		TexturePtr const & IndirectTex() const;
 
-		void SetParams(RenderTechniquePtr const tech);
+		void SetParams(RenderEffect const & effect);
 
 		void UpdateCache(std::vector<uint32_t> const & tile_ids);
 
@@ -186,9 +186,7 @@ namespace KlayGE
 		// Cache
 		TexturePtr tex_cache_;
 		std::vector<TexturePtr> tex_cache_array_;
-		TexturePtr tex_a_tile_cache_;
 		TexturePtr tex_indirect_;
-		TexturePtr tex_a_tile_indirect_;
 		uint32_t cache_tile_border_size_;
 		uint32_t cache_tile_size_;
 		TexCompressionPtr tex_codec_;

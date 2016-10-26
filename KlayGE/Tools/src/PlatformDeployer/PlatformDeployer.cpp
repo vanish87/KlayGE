@@ -38,29 +38,14 @@
 		}
 	}
 #endif
-#ifdef KLAYGE_CXX11_LIBRARY_REGEX_SUPPORT
-	#include <regex>
-#else
-	#include <boost/regex.hpp>
-	namespace std
-	{
-		using boost::regex;
-		using boost::regex_match;
-		using boost::smatch;
-	}
-#endif
+#include <regex>
 
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(push)
-#pragma warning(disable: 4512) // boost::program_options::options_description doesn't have assignment operator
-#elif defined(KLAYGE_COMPILER_GCC)
+#if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
 #endif
 #include <boost/program_options.hpp>
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(pop)
-#elif defined(KLAYGE_COMPILER_GCC)
+#if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic pop
 #endif
 #if defined(KLAYGE_COMPILER_GCC)
@@ -206,14 +191,14 @@ void Deploy(std::vector<std::string> const & res_names, std::string const & res_
 {
 	std::ofstream ofs("convert.bat");
 
-	ofs << "@echo off" << std::endl << std::endl;
-	
-	if (("diffuse" == res_type)
-		|| ("specular" == res_type)
-		|| ("emit" == res_type))
+	if (("albedo" == res_type)
+		|| ("emissive" == res_type))
 	{
 		for (size_t i = 0; i < res_names.size(); ++i)
 		{
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
 			if (caps.srgb_support)
 			{
 				ofs << "ForceTexSRGB \"" << res_names[i] << "\" temp.dds" << std::endl;
@@ -240,12 +225,16 @@ void Deploy(std::vector<std::string> const & res_names, std::string const & res_
 				ofs << "copy temp.dds \"" << res_names[i] << "\"" << std::endl;
 			}
 			ofs << "del temp.dds" << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
 		}
 	}
 	else if ("normal" == res_type)
 	{
 		for (size_t i = 0; i < res_names.size(); ++ i)
 		{
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
 			ofs << "Mipmapper \"" << res_names[i] << "\" temp.dds" << std::endl;
 			if (caps.bc5_support)
 			{
@@ -260,12 +249,16 @@ void Deploy(std::vector<std::string> const & res_names, std::string const & res_
 				ofs << "copy temp.dds \"" << res_names[i] << "\"" << std::endl;
 			}
 			ofs << "del temp.dds" << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
 		}
 	}
 	else if ("bump" == res_type)
 	{
 		for (size_t i = 0; i < res_names.size(); ++ i)
 		{
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
 			ofs << "Bump2Normal \"" << res_names[i] << "\" temp.dds 0.4" << std::endl;
 			ofs << "Mipmapper temp.dds" << std::endl; 
 			if (caps.bc5_support)
@@ -281,6 +274,31 @@ void Deploy(std::vector<std::string> const & res_names, std::string const & res_
 				ofs << "copy temp.dds \"" << res_names[i] << "\"" << std::endl;
 			}
 			ofs << "del temp.dds" << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
+		}
+	}
+	else if ("height" == res_type)
+	{
+		for (size_t i = 0; i < res_names.size(); ++i)
+		{
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
+			ofs << "Mipmapper \"" << res_names[i] << "\" temp.dds" << std::endl;
+			if (caps.bc5_support)
+			{
+				ofs << "TexCompressor BC4 temp.dds \"" << res_names[i] << "\"" << std::endl;
+			}
+			else if (caps.bc1_support)
+			{
+				ofs << "TexCompressor BC1 temp.dds \"" << res_names[i] << "\"" << std::endl;
+			}
+			else
+			{
+				ofs << "copy temp.dds \"" << res_names[i] << "\"" << std::endl;
+			}
+			ofs << "del temp.dds" << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
 		}
 	}
 	else if ("cubemap" == res_type)
@@ -306,22 +324,33 @@ void Deploy(std::vector<std::string> const & res_names, std::string const & res_
 
 		for (size_t i = 0; i < res_names.size(); ++ i)
 		{
-			
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
 			ofs << "HDRCompressor \"" << res_names[i] << "\" " << y_fmt << ' ' << c_fmt << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
 		}
 	}
 	else if ("model" == res_type)
 	{
 		for (size_t i = 0; i < res_names.size(); ++ i)
 		{
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
 			ofs << "MeshMLJIT -I \"" << res_names[i] << "\" -P " << caps.platform << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
 		}
 	}
 	else if ("effect" == res_type)
 	{
 		for (size_t i = 0; i < res_names.size(); ++ i)
 		{
+			ofs << "@echo Processing: " << res_names[i] << std::endl;
+
+			ofs << "@echo off" << std::endl << std::endl;
 			ofs << "FXMLJIT " << caps.platform << " \"" << res_names[i] << "\"" << std::endl;
+			ofs << "@echo on" << std::endl << std::endl;
 		}
 	}
 
@@ -357,11 +386,13 @@ int main(int argc, char* argv[])
 	if ((argc <= 1) || (vm.count("help") > 0))
 	{
 		cout << desc << endl;
+		Context::Destroy();
 		return 1;
 	}
 	if (vm.count("version") > 0)
 	{
 		cout << "KlayGE PlatformDeployer, Version 1.0.0" << endl;
+		Context::Destroy();
 		return 1;
 	}
 	if (vm.count("input-name") > 0)
@@ -404,6 +435,7 @@ int main(int argc, char* argv[])
 	else
 	{
 		cout << "Need input resources names." << endl;
+		Context::Destroy();
 		return 1;
 	}
 	if (vm.count("type") > 0)
@@ -419,7 +451,7 @@ int main(int argc, char* argv[])
 #endif
 		if (".dds" == ext_name)
 		{
-			res_type = "diffuse";
+			res_type = "albedo";
 		}
 		else if (".meshml" == ext_name)
 		{
@@ -428,6 +460,7 @@ int main(int argc, char* argv[])
 		else
 		{
 			cout << "Need resource type name." << endl;
+			Context::Destroy();
 			return 1;
 		}
 	}

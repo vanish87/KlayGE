@@ -38,7 +38,8 @@
 #include <KlayGE/D3D12/D3D12RenderEngine.hpp>
 
 #if defined KLAYGE_PLATFORM_WINDOWS_RUNTIME
-#include <agile.h>
+#include <windows.ui.core.h>
+#include <windows.graphics.display.h>
 #endif
 
 #if defined(KLAYGE_COMPILER_MSVC)
@@ -63,13 +64,13 @@ namespace KlayGE
 	class D3D12RenderWindow : public D3D12FrameBuffer
 	{
 	public:
-		D3D12RenderWindow(IDXGIFactory4Ptr const & gi_factory, D3D12AdapterPtr const & adapter,
-			std::string const & name, RenderSettings const & settings);
+		D3D12RenderWindow(D3D12AdapterPtr const & adapter, std::string const & name, RenderSettings const & settings);
 		~D3D12RenderWindow();
 
 		void Destroy();
 
-		void SwapBuffers();
+		void SwapBuffers() override;
+		void WaitOnSwapBuffers() override;
 
 		std::wstring const & Description() const;
 
@@ -84,6 +85,10 @@ namespace KlayGE
 			return *adapter_;
 		}
 
+		TexturePtr const & D3DDepthStencilBuffer() const
+		{
+			return depth_stencil_;
+		}
 		RenderViewPtr const & D3DBackBufferRTV() const
 		{
 			return render_target_render_views_[curr_back_buffer_];
@@ -102,15 +107,18 @@ namespace KlayGE
 		void WindowMovedOrResized();
 
 	private:
-		virtual void OnBind() KLAYGE_OVERRIDE;
-		void OnPaint(Window const & win);
+		virtual void OnBind() override;
 		void OnExitSizeMove(Window const & win);
 		void OnSize(Window const & win, bool active);
-		void OnSetCursor(Window const & win);
+
+#ifdef KLAYGE_PLATFORM_WINDOWS_RUNTIME
+		HRESULT OnStereoEnabledChanged(ABI::Windows::Graphics::Display::IDisplayInformation* sender,
+			IInspectable* args);
+#endif
 
 	private:
 		void UpdateSurfacesPtrs();
-		void ResetDevice();
+		void CreateSwapChain(ID3D12CommandQueue* d3d_cmd_queue);
 		void WaitForGPU();
 
 	private:
@@ -119,32 +127,16 @@ namespace KlayGE
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		HWND	hWnd_;				// Win32 Window handle
 #else
-		Platform::Agile<Windows::UI::Core::CoreWindow> wnd_;
-		Windows::Foundation::EventRegistrationToken stereo_enabled_changed_token_;
-
-		ref class MetroD3D12RenderWindow
-		{
-			friend class D3D12RenderWindow;
-
-		public:
-			void OnStereoEnabledChanged(Windows::Graphics::Display::DisplayInformation^ sender,
-				Platform::Object^ args);
-
-		private:
-			void BindD3D12RenderWindow(D3D12RenderWindow* win);
-
-			D3D12RenderWindow* win_;
-		};
-
-		MetroD3D12RenderWindow^ metro_d3d_render_win_;
+		std::shared_ptr<ABI::Windows::UI::Core::ICoreWindow> wnd_;
+		EventRegistrationToken stereo_enabled_changed_token_;
 #endif
 		bool	isFullScreen_;
 		uint32_t sync_interval_;
 
 		D3D12AdapterPtr			adapter_;
 
-		IDXGIFactory4Ptr gi_factory_;
 		bool dxgi_stereo_support_;
+		bool dxgi_allow_tearing_;
 
 		DXGI_SWAP_CHAIN_DESC1 sc_desc1_;
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
@@ -160,15 +152,6 @@ namespace KlayGE
 
 		TexturePtr depth_stencil_;
 
-		ID3D12FencePtr render_fence_;
-		uint64_t render_fence_value_;
-		HANDLE render_fence_event_;
-		ID3D12FencePtr compute_fence_;
-		uint64_t compute_fence_value_;
-		HANDLE compute_fence_event_;
-		ID3D12FencePtr copy_fence_;
-		uint64_t copy_fence_value_;
-		HANDLE copy_fence_event_;
 		uint32_t curr_back_buffer_;
 
 		DXGI_FORMAT					back_buffer_format_;
@@ -176,10 +159,8 @@ namespace KlayGE
 
 		std::wstring			description_;
 
-		boost::signals2::connection on_paint_connect_;
 		boost::signals2::connection on_exit_size_move_connect_;
 		boost::signals2::connection on_size_connect_;
-		boost::signals2::connection on_set_cursor_connect_;
 	};
 
 	typedef std::shared_ptr<D3D12RenderWindow> D3D12RenderWindowPtr;

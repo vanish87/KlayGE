@@ -21,9 +21,6 @@
 #include <KFL/XMLDom.hpp>
 #include <KlayGE/Camera.hpp>
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/trim.hpp>
-
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/InputFactory.hpp>
 
@@ -51,12 +48,12 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("ParticleEditor.fxml");
-			depth_tech_ = effect->TechniqueByName("TerrainDepth");
-			color_tech_ = effect->TechniqueByName("Terrain");
+			effect_ = SyncLoadRenderEffect("ParticleEditor.fxml");
+			depth_tech_ = effect_->TechniqueByName("TerrainDepth");
+			color_tech_ = effect_->TechniqueByName("Terrain");
 			technique_ = color_tech_;
 
-			*(effect->ParameterByName("grass_tex")) = ASyncLoadTexture("grass.dds", EAH_GPU_Read | EAH_Immutable);
+			*(effect_->ParameterByName("grass_tex")) = ASyncLoadTexture("grass.dds", EAH_GPU_Read | EAH_Immutable);
 
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_TriangleStrip);
@@ -85,18 +82,18 @@ namespace
 			float4x4 view = app.ActiveCamera().ViewMatrix();
 			float4x4 proj = app.ActiveCamera().ProjMatrix();
 
-			*(technique_->Effect().ParameterByName("view")) = view;
-			*(technique_->Effect().ParameterByName("proj")) = proj;
+			*(effect_->ParameterByName("view")) = view;
+			*(effect_->ParameterByName("proj")) = proj;
 
 			Camera const & camera = Context::Instance().AppInstance().ActiveCamera();
-			*(technique_->Effect().ParameterByName("depth_near_far_invfar")) = float3(camera.NearPlane(), camera.FarPlane(), 1.0f / camera.FarPlane());
+			*(effect_->ParameterByName("depth_near_far_invfar")) = float3(camera.NearPlane(), camera.FarPlane(), 1.0f / camera.FarPlane());
 		}
 
-		virtual void Pass(PassType type) KLAYGE_OVERRIDE
+		virtual void Pass(PassType type) override
 		{
 			switch (type)
 			{
-			case PT_OpaqueDepth:
+			case PT_OpaqueGBufferMRT:
 				technique_ = depth_tech_;
 				break;
 
@@ -107,8 +104,8 @@ namespace
 		}
 
 	private:
-		RenderTechniquePtr depth_tech_;
-		RenderTechniquePtr color_tech_;
+		RenderTechnique* depth_tech_;
+		RenderTechnique* color_tech_;
 	};
 
 	class TerrainObject : public SceneObjectHelper
@@ -145,11 +142,6 @@ ParticleEditorApp::ParticleEditorApp()
 					: App3DFramework("Particle Editor")
 {
 	ResLoader::Instance().AddPath("../../Samples/media/ParticleEditor");
-}
-
-bool ParticleEditorApp::ConfirmDevice() const
-{
-	return true;
 }
 
 void ParticleEditorApp::OnCreate()
@@ -930,7 +922,7 @@ uint32_t ParticleEditorApp::DoUpdate(uint32_t pass)
 				checked_pointer_cast<PolylineParticleUpdater>(particle_updater_)->MassOverLife(dialog_->Control<UIPolylineEditBox>(id_mass_over_life_)->GetCtrlPoints());
 				checked_pointer_cast<PolylineParticleUpdater>(particle_updater_)->OpacityOverLife(dialog_->Control<UIPolylineEditBox>(id_opacity_over_life_)->GetCtrlPoints());
 
-				terrain_->Pass(PT_OpaqueDepth);
+				terrain_->Pass(PT_OpaqueGBufferMRT);
 				terrain_->Visible(true);
 				ps_->Visible(false);
 			}

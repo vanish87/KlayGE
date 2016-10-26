@@ -23,6 +23,7 @@
 #include <KlayGE/D3D11/D3D11RenderView.hpp>
 #include <KlayGE/D3D11/D3D11RenderStateObject.hpp>
 #include <KlayGE/D3D11/D3D11ShaderObject.hpp>
+#include <KlayGE/D3D11/D3D11Fence.hpp>
 
 #include <KlayGE/D3D11/D3D11RenderFactory.hpp>
 #include <KlayGE/D3D11/D3D11RenderFactoryInternal.hpp>
@@ -39,25 +40,25 @@ namespace KlayGE
 		return name;
 	}
 
-	TexturePtr D3D11RenderFactory::MakeTexture1D(uint32_t width, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+	TexturePtr D3D11RenderFactory::MakeDelayCreationTexture1D(uint32_t width, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 	{
-		return MakeSharedPtr<D3D11Texture1D>(width, numMipMaps, array_size, format, sample_count, sample_quality, access_hint, init_data);
+		return MakeSharedPtr<D3D11Texture1D>(width, num_mip_maps, array_size, format, sample_count, sample_quality, access_hint);
 	}
-	TexturePtr D3D11RenderFactory::MakeTexture2D(uint32_t width, uint32_t height, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+	TexturePtr D3D11RenderFactory::MakeDelayCreationTexture2D(uint32_t width, uint32_t height, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 	{
-		return MakeSharedPtr<D3D11Texture2D>(width, height, numMipMaps, array_size, format, sample_count, sample_quality, access_hint, init_data);
+		return MakeSharedPtr<D3D11Texture2D>(width, height, num_mip_maps, array_size, format, sample_count, sample_quality, access_hint);
 	}
-	TexturePtr D3D11RenderFactory::MakeTexture3D(uint32_t width, uint32_t height, uint32_t depth, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+	TexturePtr D3D11RenderFactory::MakeDelayCreationTexture3D(uint32_t width, uint32_t height, uint32_t depth, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 	{
-		return MakeSharedPtr<D3D11Texture3D>(width, height, depth, numMipMaps, array_size, format, sample_count, sample_quality, access_hint, init_data);
+		return MakeSharedPtr<D3D11Texture3D>(width, height, depth, num_mip_maps, array_size, format, sample_count, sample_quality, access_hint);
 	}
-	TexturePtr D3D11RenderFactory::MakeTextureCube(uint32_t size, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+	TexturePtr D3D11RenderFactory::MakeDelayCreationTextureCube(uint32_t size, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 	{
-		return MakeSharedPtr<D3D11TextureCube>(size, numMipMaps, array_size, format, sample_count, sample_quality, access_hint, init_data);
+		return MakeSharedPtr<D3D11TextureCube>(size, num_mip_maps, array_size, format, sample_count, sample_quality, access_hint);
 	}
 
 	FrameBufferPtr D3D11RenderFactory::MakeFrameBuffer()
@@ -70,22 +71,22 @@ namespace KlayGE
 		return MakeSharedPtr<D3D11RenderLayout>();
 	}
 
-	GraphicsBufferPtr D3D11RenderFactory::MakeVertexBuffer(BufferUsage usage, uint32_t access_hint,
-			uint32_t size_in_byte, void const * init_data, ElementFormat fmt)
+	GraphicsBufferPtr D3D11RenderFactory::MakeDelayCreationVertexBuffer(BufferUsage usage, uint32_t access_hint,
+			uint32_t size_in_byte, ElementFormat fmt)
 	{
-		return MakeSharedPtr<D3D11GraphicsBuffer>(usage, access_hint, D3D11_BIND_VERTEX_BUFFER, size_in_byte, init_data, fmt);
+		return MakeSharedPtr<D3D11GraphicsBuffer>(usage, access_hint, D3D11_BIND_VERTEX_BUFFER, size_in_byte, fmt);
 	}
 
-	GraphicsBufferPtr D3D11RenderFactory::MakeIndexBuffer(BufferUsage usage, uint32_t access_hint,
-			uint32_t size_in_byte, void const * init_data, ElementFormat fmt)
+	GraphicsBufferPtr D3D11RenderFactory::MakeDelayCreationIndexBuffer(BufferUsage usage, uint32_t access_hint,
+			uint32_t size_in_byte, ElementFormat fmt)
 	{
-		return MakeSharedPtr<D3D11GraphicsBuffer>(usage, access_hint, D3D11_BIND_INDEX_BUFFER, size_in_byte, init_data, fmt);
+		return MakeSharedPtr<D3D11GraphicsBuffer>(usage, access_hint, D3D11_BIND_INDEX_BUFFER, size_in_byte, fmt);
 	}
 
-	GraphicsBufferPtr D3D11RenderFactory::MakeConstantBuffer(BufferUsage usage, uint32_t access_hint,
-			uint32_t size_in_byte, void const * init_data, ElementFormat fmt)
+	GraphicsBufferPtr D3D11RenderFactory::MakeDelayCreationConstantBuffer(BufferUsage usage, uint32_t access_hint,
+			uint32_t size_in_byte, ElementFormat fmt)
 	{
-		return MakeSharedPtr<D3D11GraphicsBuffer>(usage, access_hint, D3D11_BIND_CONSTANT_BUFFER, size_in_byte, init_data, fmt);
+		return MakeSharedPtr<D3D11GraphicsBuffer>(usage, access_hint, D3D11_BIND_CONSTANT_BUFFER, size_in_byte, fmt);
 	}
 
 	QueryPtr D3D11RenderFactory::MakeOcclusionQuery()
@@ -117,6 +118,24 @@ namespace KlayGE
 		{
 			return QueryPtr();
 		}
+	}
+
+	QueryPtr D3D11RenderFactory::MakeSOStatisticsQuery()
+	{
+		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+		if (re.DeviceFeatureLevel() >= D3D_FEATURE_LEVEL_10_0)
+		{
+			return MakeSharedPtr<D3D11SOStatisticsQuery>();
+		}
+		else
+		{
+			return QueryPtr();
+		}
+	}
+
+	FencePtr D3D11RenderFactory::MakeFence()
+	{
+		return MakeSharedPtr<D3D11Fence>();
 	}
 
 	RenderViewPtr D3D11RenderFactory::Make1DRenderView(Texture& texture, int first_array_index, int array_size, int level)
@@ -234,9 +253,9 @@ namespace KlayGE
 		return MakeSharedPtr<D3D11ShaderObject>();
 	}
 
-	RenderEnginePtr D3D11RenderFactory::DoMakeRenderEngine()
+	std::unique_ptr<RenderEngine> D3D11RenderFactory::DoMakeRenderEngine()
 	{
-		return MakeSharedPtr<D3D11RenderEngine>();
+		return MakeUniquePtr<D3D11RenderEngine>();
 	}
 
 	RasterizerStateObjectPtr D3D11RenderFactory::DoMakeRasterizerStateObject(RasterizerStateDesc const & desc)
@@ -270,7 +289,7 @@ namespace KlayGE
 	}
 }
 
-void MakeRenderFactory(KlayGE::RenderFactoryPtr& ptr)
+void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr)
 {
-	ptr = KlayGE::MakeSharedPtr<KlayGE::D3D11RenderFactory>();
+	ptr = KlayGE::MakeUniquePtr<KlayGE::D3D11RenderFactory>();
 }

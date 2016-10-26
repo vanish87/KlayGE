@@ -99,11 +99,12 @@ namespace KlayGE
 		void DoPlay(bool loop);
 		void DoStop();
 
+		bool FillData(uint32_t size);
+
 	private:
 		IDSBufferPtr	buffer_;
 		uint32_t		fillSize_;
 		uint32_t		fillCount_;
-		uint32_t		writePos_;
 
 		std::shared_ptr<IDirectSound3DBuffer> ds3DBuffer_;
 
@@ -137,8 +138,8 @@ namespace KlayGE
 		void SetListenerOri(float3 const & face, float3 const & up);
 
 	private:
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
 
 	private:
 		std::shared_ptr<IDirectSound>				dsound_;
