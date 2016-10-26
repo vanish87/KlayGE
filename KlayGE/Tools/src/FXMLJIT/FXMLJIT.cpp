@@ -71,14 +71,7 @@
 using namespace std;
 using namespace KlayGE;
 
-#ifdef KLAYGE_COMPILER_MSVC
-extern "C"
-{
-	_declspec(dllexport) KlayGE::uint32_t NvOptimusEnablement = 0x00000001;
-}
-#endif
-
-uint32_t const KFX_VERSION = 0x0107;
+uint32_t const KFX_VERSION = 0x0108;
 
 int RetrieveAttrValue(XMLNodePtr node, std::string const & attr_name, int default_value)
 {
@@ -302,7 +295,14 @@ int main(int argc, char* argv[])
 		kfx_path = target_folder / kfx_name;
 	}
 
-	cout << "Compiled kfx has been saved to " << kfx_path << "." << endl;
+	if (filesystem::exists(kfx_path))
+	{
+		cout << "Compiled kfx has been saved to " << kfx_path << "." << endl;
+	}
+	else
+	{
+		cout << "Couldn't find " << fxml_name << "." << endl;
+	}
 
 	Context::Destroy();
 

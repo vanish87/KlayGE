@@ -95,9 +95,9 @@ void PostProcessingApp::OnCreate()
 	this->LookAt(float3(0, 0.5f, -2), float3(0, 0, 0));
 	this->Proj(0.1f, 150.0f);
 
-	std::function<TexturePtr()> c_cube_tl = ASyncLoadTexture("rnl_cross_c.dds", EAH_GPU_Read | EAH_Immutable);
-	std::function<TexturePtr()> y_cube_tl = ASyncLoadTexture("rnl_cross_y.dds", EAH_GPU_Read | EAH_Immutable);
-	std::function<RenderablePtr()> model_ml = ASyncLoadModel("dino50.7z//dino50.meshml", EAH_GPU_Read | EAH_Immutable,
+	TexturePtr c_cube = ASyncLoadTexture("rnl_cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr y_cube = ASyncLoadTexture("rnl_cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
+	RenderablePtr scene_model = ASyncLoadModel("dino50.7z//dino50.meshml", EAH_GPU_Read | EAH_Immutable,
 		CreateModelFactory<RenderModel>(), CreateMeshFactory<StaticMesh>());
 
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
@@ -111,6 +111,11 @@ void PostProcessingApp::OnCreate()
 	re.PPAAEnabled(0);
 	re.ColorGradingEnabled(false);
 
+	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
+	ambient_light->SkylightTex(y_cube, c_cube);
+	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
+	ambient_light->AddToSceneManager();
+
 	point_light_ = MakeSharedPtr<PointLightSource>();
 	point_light_->Attrib(LightSource::LSA_NoShadow);
 	point_light_->Color(float3(18, 18, 18));
@@ -119,7 +124,7 @@ void PostProcessingApp::OnCreate()
 	point_light_->BindUpdateFunc(PointLightSourceUpdate());
 	point_light_->AddToSceneManager();
 
-	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(model_ml, SceneObject::SOA_Cullable | SceneObject::SOA_Moveable, 0);
+	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(scene_model, SceneObject::SOA_Cullable | SceneObject::SOA_Moveable);
 	scene_obj->BindMainThreadUpdateFunc(ObjectUpdate());
 	scene_obj->AddToSceneManager();
 
@@ -139,7 +144,7 @@ void PostProcessingApp::OnCreate()
 	tiling_ = MakeSharedPtr<TilingPostProcess>();
 	hdr_ = MakeSharedPtr<HDRPostProcess>(false);
 	night_vision_ = MakeSharedPtr<NightVisionPostProcess>();
-	old_fashion_ = SyncLoadPostProcess("OldFashion.ppml", "old_fashion");
+	sepia_ = SyncLoadPostProcess("Sepia.ppml", "sepia");
 	cross_stitching_ = SyncLoadPostProcess("CrossStitching.ppml", "cross_stitching");
 	frosted_glass_ = SyncLoadPostProcess("FrostedGlass.ppml", "frosted_glass");
 
@@ -153,7 +158,7 @@ void PostProcessingApp::OnCreate()
 	id_tiling_ = dialog_->IDFromName("TilingPP");
 	id_hdr_ = dialog_->IDFromName("HDRPP");
 	id_night_vision_ = dialog_->IDFromName("NightVisionPP");
-	id_old_fashion_ = dialog_->IDFromName("OldFashionPP");
+	id_old_fashion_ = dialog_->IDFromName("SepiaPP");
 	id_cross_stitching_ = dialog_->IDFromName("CrossStitchingPP");
 	id_frosted_glass_ = dialog_->IDFromName("FrostedGlassPP");
 
@@ -164,13 +169,13 @@ void PostProcessingApp::OnCreate()
 	dialog_->Control<UIRadioButton>(id_tiling_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::TilingHandler, this, std::placeholders::_1));
 	dialog_->Control<UIRadioButton>(id_hdr_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::HDRHandler, this, std::placeholders::_1));
 	dialog_->Control<UIRadioButton>(id_night_vision_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::NightVisionHandler, this, std::placeholders::_1));
-	dialog_->Control<UIRadioButton>(id_old_fashion_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::OldFashionHandler, this, std::placeholders::_1));
+	dialog_->Control<UIRadioButton>(id_old_fashion_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::SepiaHandler, this, std::placeholders::_1));
 	dialog_->Control<UIRadioButton>(id_cross_stitching_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::CrossStitchingHandler, this, std::placeholders::_1));
 	dialog_->Control<UIRadioButton>(id_frosted_glass_)->OnChangedEvent().connect(std::bind(&PostProcessingApp::FrostedGlassHandler, this, std::placeholders::_1));
 	this->CartoonHandler(*dialog_->Control<UIRadioButton>(id_cartoon_));
 	
 	sky_box_ = MakeSharedPtr<SceneObjectSkyBox>();
-	checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube_tl, c_cube_tl);
+	checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube, c_cube);
 	sky_box_->AddToSceneManager();
 
 	color_fb_ = rf.MakeFrameBuffer();
@@ -199,6 +204,7 @@ void PostProcessingApp::OnResize(uint32_t width, uint32_t height)
 	}
 	color_tex_ = rf.MakeTexture2D(width, height, 4, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write | EAH_Generate_Mips, nullptr);
 	color_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*color_tex_, 0, 1, 0));
+	color_fb_->Attach(FrameBuffer::ATT_DepthStencil, rf.Make2DDepthStencilRenderView(width, height, EF_D16, 1, 0));
 
 	deferred_rendering_->SetupViewport(0, color_fb_, 0);
 
@@ -216,7 +222,7 @@ void PostProcessingApp::OnResize(uint32_t width, uint32_t height)
 
 	night_vision_->InputPin(0, color_tex_);
 
-	old_fashion_->InputPin(0, color_tex_);
+	sepia_->InputPin(0, color_tex_);
 
 	cross_stitching_->InputPin(0, color_tex_);
 
@@ -295,11 +301,11 @@ void PostProcessingApp::NightVisionHandler(UIRadioButton const & sender)
 	}
 }
 
-void PostProcessingApp::OldFashionHandler(UIRadioButton const & sender)
+void PostProcessingApp::SepiaHandler(UIRadioButton const & sender)
 {
 	if (sender.GetChecked())
 	{
-		active_pp_ = old_fashion_;
+		active_pp_ = sepia_;
 	}
 }
 

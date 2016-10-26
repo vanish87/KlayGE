@@ -35,10 +35,14 @@ namespace KlayGE
 	class OGLGraphicsBuffer : public GraphicsBuffer
 	{
 	public:
-		explicit OGLGraphicsBuffer(BufferUsage usage, uint32_t access_hint, GLenum target, ElementInitData const * init_data);
+		explicit OGLGraphicsBuffer(BufferUsage usage, uint32_t access_hint, GLenum target,
+			uint32_t size_in_byte);
 		~OGLGraphicsBuffer();
 
 		void CopyToBuffer(GraphicsBuffer& rhs);
+
+		virtual void CreateHWResource(void const * init_data) override;
+		virtual void DeleteHWResource() override;
 
 		void Active(bool force);
 
@@ -52,12 +56,8 @@ namespace KlayGE
 		}
 
 	private:
-		void DoResize();
-
 		void* Map(BufferAccess ba);
 		void Unmap();
-
-		void CreateBuffer(void const * data);
 
 	private:
 		GLuint vb_;

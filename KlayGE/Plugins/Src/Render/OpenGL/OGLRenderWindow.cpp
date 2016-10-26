@@ -34,15 +34,6 @@
 
 #include <map>
 #include <boost/assert.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
-#endif
-#include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
-#endif
-#include <boost/algorithm/string/trim.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include <glloader/glloader.h>
@@ -62,40 +53,29 @@ namespace KlayGE
 		isFullScreen_		= settings.full_screen;
 		color_bits_ = NumFormatBits(settings.color_fmt);
 
-		uint32_t depth_bits	= NumDepthBits(settings.depth_stencil_fmt);
-		uint32_t stencil_bits = NumStencilBits(settings.depth_stencil_fmt);
-
 		WindowPtr const & main_wnd = Context::Instance().AppInstance().MainWnd();
-		on_paint_connect_ = main_wnd->OnPaint().connect(std::bind(&OGLRenderWindow::OnPaint, this,
-			std::placeholders::_1));
 		on_exit_size_move_connect_ = main_wnd->OnExitSizeMove().connect(std::bind(&OGLRenderWindow::OnExitSizeMove, this,
 			std::placeholders::_1));
 		on_size_connect_ = main_wnd->OnSize().connect(std::bind(&OGLRenderWindow::OnSize, this,
 			std::placeholders::_1, std::placeholders::_2));
 
 		std::vector<std::pair<std::string, std::pair<int, int>>> available_versions;
-		available_versions.push_back(std::make_pair("4.5", std::make_pair(4, 5)));
-		available_versions.push_back(std::make_pair("4.4", std::make_pair(4, 4)));
-		available_versions.push_back(std::make_pair("4.3", std::make_pair(4, 3)));
-		available_versions.push_back(std::make_pair("4.2", std::make_pair(4, 2)));
-		available_versions.push_back(std::make_pair("4.1", std::make_pair(4, 1)));
-		available_versions.push_back(std::make_pair("4.0", std::make_pair(4, 0)));
-		available_versions.push_back(std::make_pair("3.3", std::make_pair(3, 3)));
-		available_versions.push_back(std::make_pair("3.2", std::make_pair(3, 2)));
-		available_versions.push_back(std::make_pair("3.1", std::make_pair(3, 1)));
-		available_versions.push_back(std::make_pair("3.0", std::make_pair(3, 0)));
+		available_versions.emplace_back("4.5", std::make_pair(4, 5));
+		available_versions.emplace_back("4.4", std::make_pair(4, 4));
+		available_versions.emplace_back("4.3", std::make_pair(4, 3));
+		available_versions.emplace_back("4.2", std::make_pair(4, 2));
+		available_versions.emplace_back("4.1", std::make_pair(4, 1));
+		available_versions.emplace_back("4.0", std::make_pair(4, 0));
+		available_versions.emplace_back("3.3", std::make_pair(3, 3));
+		available_versions.emplace_back("3.2", std::make_pair(3, 2));
+		available_versions.emplace_back("3.1", std::make_pair(3, 1));
+		available_versions.emplace_back("3.0", std::make_pair(3, 0));
 
-		std::vector<std::string> strs;
-		boost::algorithm::split(strs, settings.options, boost::is_any_of(","));
-		for (size_t index = 0; index < strs.size(); ++ index)
+		for (size_t index = 0; index < settings.options.size(); ++ index)
 		{
-			std::string& opt = strs[index];
-			boost::algorithm::trim(opt);
-			std::string::size_type loc = opt.find(':');
-			std::string opt_name = opt.substr(0, loc);
-			std::string opt_val = opt.substr(loc + 1);
-
-			if ("version" == opt_name)
+			std::string const & opt_name = settings.options[index].first;
+			std::string const & opt_val = settings.options[index].second;
+			if (0 == strcmp("version", opt_name.c_str()))
 			{
 				size_t feature_index = 0;
 				for (size_t i = 0; i < available_versions.size(); ++ i)
@@ -116,6 +96,9 @@ namespace KlayGE
 		}
 
 #if defined KLAYGE_PLATFORM_WINDOWS
+		uint32_t depth_bits	= NumDepthBits(settings.depth_stencil_fmt);
+		uint32_t stencil_bits = NumStencilBits(settings.depth_stencil_fmt);
+
 		hWnd_ = main_wnd->HWnd();
 		hDC_ = ::GetDC(hWnd_);
 
@@ -138,8 +121,8 @@ namespace KlayGE
 		else
 		{
 			// Get colour depth from display
-			top_ = settings.top;
-			left_ = settings.left;
+			left_ = main_wnd->Left();
+			top_ = main_wnd->Top();
 
 			style = WS_OVERLAPPEDWINDOW;
 		}
@@ -271,8 +254,8 @@ namespace KlayGE
 		}
 		else
 		{
-			top_ = settings.top;
-			left_ = settings.left;
+			left_ = main_wnd->Left();
+			top_ = main_wnd->Top();
 		}
 
 		x_display_ = main_wnd->XDisplay();
@@ -313,7 +296,7 @@ namespace KlayGE
 				}
 			}
 		}
-#elif defined KLAYGE_PLATFORM_DARWIN	
+#elif defined KLAYGE_PLATFORM_DARWIN
 		if (isFullScreen_)
 		{
 			left_ = 0;
@@ -321,8 +304,8 @@ namespace KlayGE
 		}
 		else
 		{
-			left_ = settings.left;
-			top_ = settings.top;
+			left_ = main_wnd->Left();
+			top_ = main_wnd->Top();
 		}
 		
 		main_wnd->CreateGLView(settings);
@@ -391,7 +374,6 @@ namespace KlayGE
 
 	OGLRenderWindow::~OGLRenderWindow()
 	{
-		on_paint_connect_.disconnect();
 		on_exit_size_move_connect_.disconnect();
 		on_size_connect_.disconnect();
 
@@ -413,9 +395,6 @@ namespace KlayGE
 		// Notify viewports of resize
 		viewport_->width = width;
 		viewport_->height = height;
-
-		App3DFramework& app = Context::Instance().AppInstance();
-		app.OnResize(width, height);
 	}
 
 	// 改变窗口位置
@@ -557,18 +536,6 @@ namespace KlayGE
 		Context::Instance().AppInstance().MainWnd()->FlushBuffer();
 		re.BindFrameBuffer(re.DefaultFrameBuffer());
 #endif
-	}
-
-	void OGLRenderWindow::OnPaint(Window const & win)
-	{
-		// If we get WM_PAINT messges, it usually means our window was
-		// comvered up, so we need to refresh it by re-showing the contents
-		// of the current frame.
-		if (win.Active() && win.Ready())
-		{
-			Context::Instance().SceneManagerInstance().Update();
-			this->SwapBuffers();
-		}
 	}
 
 	void OGLRenderWindow::OnExitSizeMove(Window const & /*win*/)

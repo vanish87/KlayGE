@@ -10,12 +10,10 @@
 #include "Model.hpp"
 
 #ifdef KLAYGE_MTL_EDITOR_CORE_SOURCE		// Build dll
-#define KLAYGE_MTL_EDITOR_CORE_API __declspec(dllexport)
+#define KLAYGE_MTL_EDITOR_CORE_API KLAYGE_SYMBOL_EXPORT
 #else							// Use dll
-#define KLAYGE_MTL_EDITOR_CORE_API __declspec(dllimport)
+#define KLAYGE_MTL_EDITOR_CORE_API KLAYGE_SYMBOL_IMPORT
 #endif
-
-#include "Commands.hpp"
 
 namespace KlayGE
 {
@@ -24,7 +22,7 @@ namespace KlayGE
 	public:
 		explicit MtlEditorCore(void* native_wnd);
 
-		virtual bool ConfirmDevice() const KLAYGE_OVERRIDE;
+		virtual bool ConfirmDevice() const override;
 
 		void Resize(uint32_t width, uint32_t height);
 
@@ -35,7 +33,10 @@ namespace KlayGE
 		float CurrFrame() const;
 		float ModelFrameRate() const;
 		uint32_t NumMeshes() const;
-		std::wstring const & MeshName(uint32_t index) const;
+		wchar_t const * MeshName(uint32_t index) const;
+		uint32_t NumVertexStreams(uint32_t mesh_id) const;
+		uint32_t NumVertexStreamUsages(uint32_t mesh_id, uint32_t stream_index) const;
+		uint32_t VertexStreamUsage(uint32_t mesh_id, uint32_t stream_index, uint32_t usage_index) const;
 		uint32_t SelectedMesh() const;
 		uint32_t MaterialID(uint32_t mesh_id) const;
 		float3 const & AmbientMaterial(uint32_t mtl_id) const;
@@ -44,16 +45,20 @@ namespace KlayGE
 		float ShininessMaterial(uint32_t mtl_id) const;
 		float3 const & EmitMaterial(uint32_t mtl_id) const;
 		float OpacityMaterial(uint32_t mtl_id) const;
-		std::string const & DiffuseTexture(uint32_t mtl_id) const;
-		std::string const & SpecularTexture(uint32_t mtl_id) const;
-		std::string const & ShininessTexture(uint32_t mtl_id) const;
-		std::string const & NormalTexture(uint32_t mtl_id) const;
-		std::string const & HeightTexture(uint32_t mtl_id) const;
-		std::string const & EmitTexture(uint32_t mtl_id) const;
-		std::string const & OpacityTexture(uint32_t mtl_id) const;
-		uint32_t NumHistroyCmds() const;
-		char const * HistroyCmdName(uint32_t index) const;
-		uint32_t EndCmdIndex() const;
+		char const * DiffuseTexture(uint32_t mtl_id) const;
+		char const * SpecularTexture(uint32_t mtl_id) const;
+		char const * ShininessTexture(uint32_t mtl_id) const;
+		char const * NormalTexture(uint32_t mtl_id) const;
+		char const * HeightTexture(uint32_t mtl_id) const;
+		char const * EmitTexture(uint32_t mtl_id) const;
+		char const * OpacityTexture(uint32_t mtl_id) const;
+		uint32_t DetailMode(uint32_t mtl_id) const;
+		float HeightOffset(uint32_t mtl_id) const;
+		float HeightScale(uint32_t mtl_id) const;
+		float EdgeTessHint(uint32_t mtl_id) const;
+		float InsideTessHint(uint32_t mtl_id) const;
+		float MinTess(uint32_t mtl_id) const;
+		float MaxTess(uint32_t mtl_id) const;
 
 		void CurrFrame(float frame);
 		void SelectMesh(uint32_t mesh_id);
@@ -70,33 +75,45 @@ namespace KlayGE
 		void HeightTexture(uint32_t mtl_id, std::string const & name);
 		void EmitTexture(uint32_t mtl_id, std::string const & name);
 		void OpacityTexture(uint32_t mtl_id, std::string const & name);
+		void DetailMode(uint32_t mtl_id, uint32_t value);
+		void HeightOffset(uint32_t mtl_id, float value);
+		void HeightScale(uint32_t mtl_id, float value);
+		void EdgeTessHint(uint32_t mtl_id, float value);
+		void InsideTessHint(uint32_t mtl_id, float value);
+		void MinTess(uint32_t mtl_id, float value);
+		void MaxTess(uint32_t mtl_id, float value);
 
 		void SkinningOn(bool on);
 		void FPSCameraOn(bool on);
+		void LineModeOn(bool on);
 		void Visualize(int index);
 		void MouseMove(int x, int y, uint32_t button);
 		void MouseUp(int x, int y, uint32_t button);
 		void MouseDown(int x, int y, uint32_t button);
 		void KeyPress(int key);
 
-		void ExecuteCommand(MtlEditorCommandPtr const & cmd);
-		void Undo();
-		void Redo();
-		void ClearHistroy();
+	// Callbacks
+	public:
+		typedef void(__stdcall *UpdateSelectEntityEvent)(uint32_t obj_id);
+
+		void UpdateSelectEntityCallback(UpdateSelectEntityEvent callback)
+		{
+			update_select_entity_event_ = callback;
+		}
 
 	private:
-		virtual void OnCreate() KLAYGE_OVERRIDE;
-		virtual void OnDestroy() KLAYGE_OVERRIDE;
-		virtual void OnResize(uint32_t width, uint32_t height) KLAYGE_OVERRIDE;
-		virtual void DoUpdateOverlay() KLAYGE_OVERRIDE;
-		virtual uint32_t DoUpdate(uint32_t pass) KLAYGE_OVERRIDE;
+		virtual void OnCreate() override;
+		virtual void OnDestroy() override;
+		virtual void OnResize(uint32_t width, uint32_t height) override;
+		virtual void DoUpdateOverlay() override;
+		virtual uint32_t DoUpdate(uint32_t pass) override;
 
 		void UpdateSelectedMesh();
 
 	private:
 		FontPtr font_;
 
-		PointLightSourcePtr point_light_;
+		LightSourcePtr light_;
 
 		SceneObjectPtr model_;
 		SceneObjectPtr axis_;
@@ -107,7 +124,7 @@ namespace KlayGE
 		TrackballCameraController tb_controller_;
 		bool is_fps_camera_;
 
-		DeferredRenderingLayerPtr deferred_rendering_;
+		DeferredRenderingLayer* deferred_rendering_;
 
 		bool skinning_;
 		float curr_frame_;
@@ -125,8 +142,7 @@ namespace KlayGE
 		uint32_t selected_obj_;
 		SceneObjectPtr selected_bb_;
 
-		std::vector<MtlEditorCommandPtr> command_history_;
-		uint32_t end_command_index_;
+		UpdateSelectEntityEvent update_select_entity_event_;
 	};
 }
 

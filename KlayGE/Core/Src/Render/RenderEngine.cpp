@@ -61,79 +61,6 @@
 
 namespace KlayGE
 {
-	class NullRenderEngine : public RenderEngine
-	{
-	public:
-		std::wstring const & Name() const
-		{
-			static std::wstring const name(L"Null Render Engine");
-			return name;
-		}
-
-		bool RequiresFlipping() const
-		{
-			return false;
-		}
-
-		void ForceFlush()
-		{
-		}
-
-		void ScissorRect(uint32_t /*x*/, uint32_t /*y*/, uint32_t /*width*/, uint32_t /*height*/)
-		{
-		}
-
-		bool FullScreen() const
-		{
-			return false;
-		}
-
-		void FullScreen(bool /*fs*/)
-		{
-		}
-
-	private:
-		virtual void DoCreateRenderWindow(std::string const & /*name*/, RenderSettings const & /*settings*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoBindFrameBuffer(FrameBufferPtr const & /*fb*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoBindSOBuffers(RenderLayoutPtr const & /*rl*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoRender(RenderTechnique const & /*tech*/, RenderLayout const & /*rl*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoDispatch(RenderTechnique const & /*tech*/, uint32_t /*tgx*/, uint32_t /*tgy*/, uint32_t /*tgz*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoDispatchIndirect(RenderTechnique const & /*tech*/,
-			GraphicsBufferPtr const & /*buff_args*/, uint32_t /*offset*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoResize(uint32_t /*width*/, uint32_t /*height*/) KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoDestroy() KLAYGE_OVERRIDE
-		{
-		}
-
-		virtual void DoSuspend() KLAYGE_OVERRIDE
-		{
-		}
-		virtual void DoResume() KLAYGE_OVERRIDE
-		{
-		}
-	};
-
 	// 构造函数
 	/////////////////////////////////////////////////////////////////////////////////
 	RenderEngine::RenderEngine()
@@ -168,16 +95,9 @@ namespace KlayGE
 		this->DoResume();
 	}
 
-	// 返回空对象
-	/////////////////////////////////////////////////////////////////////////////////
-	RenderEnginePtr RenderEngine::NullObject()
-	{
-		static RenderEnginePtr obj = MakeSharedPtr<NullRenderEngine>();
-		return obj;
-	}
-
 	void RenderEngine::BeginFrame()
 	{
+		this->BindFrameBuffer(default_frame_buffers_[0]);
 	}
 
 	void RenderEngine::BeginPass()
@@ -190,7 +110,6 @@ namespace KlayGE
 
 	void RenderEngine::EndFrame()
 	{
-		this->BindFrameBuffer(default_frame_buffers_[0]);
 	}
 
 	void RenderEngine::UpdateGPUTimestampsFrequency()
@@ -218,6 +137,21 @@ namespace KlayGE
 		{
 			settings.width = static_cast<uint32_t>(settings.height * screen_aspect + 0.5f);
 		}
+
+		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+
+		pp_rl_ = rf.MakeRenderLayout();
+		pp_rl_->TopologyType(RenderLayout::TT_TriangleStrip);
+
+		float2 pos[] =
+		{
+			float2(-1, +1),
+			float2(+1, +1),
+			float2(-1, -1),
+			float2(+1, -1)
+		};
+		GraphicsBufferPtr pp_pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(pos), &pos[0]);
+		pp_rl_->BindVertexStream(pp_pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 
 		uint32_t const render_width = static_cast<uint32_t>(settings.width * default_render_width_scale_ + 0.5f);
 		uint32_t const render_height = static_cast<uint32_t>(settings.height * default_render_height_scale_ + 0.5f);
@@ -277,44 +211,50 @@ namespace KlayGE
 			default_frame_buffers_[i] = screen_frame_buffer_;
 		}
 
-		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-
 		RenderViewPtr ds_view;
 		if (hdr_pp_ || ldr_pp_ || (settings.stereo_method != STM_None))
 		{
-			if (caps.texture_format_support(EF_D32F) || caps.texture_format_support(EF_D24S8)
-				|| caps.texture_format_support(EF_D16))
+			ds_tex_ = this->ScreenDepthStencilTexture();
+			if (ds_tex_ && (screen_width == render_width) && (screen_height == render_height))
 			{
-				ElementFormat fmt;
-				if ((settings.depth_stencil_fmt != EF_Unknown)
-					&& caps.texture_format_support(settings.depth_stencil_fmt))
-				{
-					fmt = settings.depth_stencil_fmt;
-				}
-				else
-				{
-					BOOST_ASSERT(caps.texture_format_support(EF_D16));
-
-					fmt = EF_D16;
-				}
-				ds_tex_ = rf.MakeTexture2D(render_width, render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 				ds_view = rf.Make2DDepthStencilRenderView(*ds_tex_, 0, 1, 0);
 			}
 			else
 			{
-				ElementFormat fmt;
-				if ((settings.depth_stencil_fmt != EF_Unknown)
-					&& caps.rendertarget_format_support(settings.depth_stencil_fmt, 1, 0))
+				if (caps.texture_format_support(EF_D32F) || caps.texture_format_support(EF_D24S8)
+					|| caps.texture_format_support(EF_D16))
 				{
-					fmt = settings.depth_stencil_fmt;
+					ElementFormat fmt;
+					if ((settings.depth_stencil_fmt != EF_Unknown)
+						&& caps.texture_format_support(settings.depth_stencil_fmt))
+					{
+						fmt = settings.depth_stencil_fmt;
+					}
+					else
+					{
+						BOOST_ASSERT(caps.texture_format_support(EF_D16));
+
+						fmt = EF_D16;
+					}
+					ds_tex_ = rf.MakeTexture2D(render_width, render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
+					ds_view = rf.Make2DDepthStencilRenderView(*ds_tex_, 0, 1, 0);
 				}
 				else
 				{
-					BOOST_ASSERT(caps.rendertarget_format_support(EF_D16, 1, 0));
+					ElementFormat fmt;
+					if ((settings.depth_stencil_fmt != EF_Unknown)
+						&& caps.rendertarget_format_support(settings.depth_stencil_fmt, 1, 0))
+					{
+						fmt = settings.depth_stencil_fmt;
+					}
+					else
+					{
+						BOOST_ASSERT(caps.rendertarget_format_support(EF_D16, 1, 0));
 
-					fmt = EF_D16;
+						fmt = EF_D16;
+					}
+					ds_view = rf.Make2DDepthStencilRenderView(render_width, render_height, fmt, 1, 0);
 				}
-				ds_view = rf.Make2DDepthStencilRenderView(render_width, render_height, fmt, 1, 0);
 			}
 		}
 
@@ -389,6 +329,20 @@ namespace KlayGE
 				resize_tex_ = rf.MakeTexture2D(render_width, render_height, 1, 1,
 					fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 				resize_frame_buffer_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*resize_tex_, 0, 1, 0));
+
+				ElementFormat ds_fmt;
+				if ((settings.depth_stencil_fmt != EF_Unknown) && caps.rendertarget_format_support(settings.depth_stencil_fmt, 1, 0))
+				{
+					ds_fmt = settings.depth_stencil_fmt;
+				}
+				else
+				{
+					BOOST_ASSERT(caps.rendertarget_format_support(EF_D16, 1, 0));
+
+					ds_fmt = EF_D16;
+				}
+				resize_frame_buffer_->Attach(FrameBuffer::ATT_DepthStencil,
+					rf.Make2DDepthStencilRenderView(render_width, render_height, ds_fmt, 1, 0));
 
 				default_frame_buffers_[0] = default_frame_buffers_[1]
 					= default_frame_buffers_[2] = resize_frame_buffer_;
@@ -626,20 +580,20 @@ namespace KlayGE
 
 	// 渲染一个vb
 	/////////////////////////////////////////////////////////////////////////////////
-	void RenderEngine::Render(RenderTechnique const & tech, RenderLayout const & rl)
+	void RenderEngine::Render(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl)
 	{
-		this->DoRender(tech, rl);
+		this->DoRender(effect, tech, rl);
 	}
 
-	void RenderEngine::Dispatch(RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz)
+	void RenderEngine::Dispatch(RenderEffect const & effect, RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz)
 	{
-		this->DoDispatch(tech, tgx, tgy, tgz);
+		this->DoDispatch(effect, tech, tgx, tgy, tgz);
 	}
 
-	void RenderEngine::DispatchIndirect(RenderTechnique const & tech,
+	void RenderEngine::DispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
 		GraphicsBufferPtr const & buff_args, uint32_t offset)
 	{
-		this->DoDispatchIndirect(tech, buff_args, offset);
+		this->DoDispatchIndirect(effect, tech, buff_args, offset);
 	}
 
 	// 上次Render()所渲染的图元数
@@ -693,16 +647,14 @@ namespace KlayGE
 	{
 		uint32_t const old_screen_width = default_frame_buffers_[3]->Width();
 		uint32_t const old_screen_height = default_frame_buffers_[3]->Height();
-		uint32_t const old_render_width = default_frame_buffers_[0]->Width();
-		uint32_t const old_render_height = default_frame_buffers_[0]->Height();
-		float const old_scale = std::min(static_cast<float>(old_screen_width) / old_render_width,
-			static_cast<float>(old_screen_height) / old_render_height);
 		uint32_t const new_screen_width = width;
 		uint32_t const new_screen_height = height;
-		uint32_t const new_render_width = static_cast<uint32_t>(new_screen_width * old_scale + 0.5f);
-		uint32_t const new_render_height = static_cast<uint32_t>(new_screen_height * old_scale + 0.5f);
+		uint32_t const new_render_width = static_cast<uint32_t>(new_screen_width * default_render_height_scale_ + 0.5f);
+		uint32_t const new_render_height = static_cast<uint32_t>(new_screen_height * default_render_height_scale_ + 0.5f);
 		if ((old_screen_width != new_screen_width) || (old_screen_height != new_screen_height))
 		{
+			this->DoResize(new_screen_width, new_screen_height);
+
 			RenderSettings const & settings = Context::Instance().Config().graphics_cfg;
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
@@ -710,45 +662,95 @@ namespace KlayGE
 			RenderViewPtr ds_view;
 			if (hdr_pp_ || ldr_pp_ || (stereo_method_ != STM_None))
 			{
-				if (caps.texture_format_support(EF_D32F) || caps.texture_format_support(EF_D24S8)
-					|| caps.texture_format_support(EF_D16))
+				ElementFormat fmt = ds_tex_->Format();
+				ds_tex_ = this->ScreenDepthStencilTexture();
+				if (ds_tex_ && (new_screen_width == new_render_width) && (new_screen_height == new_render_height))
 				{
-					ElementFormat fmt = ds_tex_->Format();
-					ds_tex_ = rf.MakeTexture2D(new_render_width, new_render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 					ds_view = rf.Make2DDepthStencilRenderView(*ds_tex_, 0, 1, 0);
 				}
 				else
 				{
-					ElementFormat fmt;
-					if ((settings.depth_stencil_fmt != EF_Unknown)
-						&& caps.rendertarget_format_support(settings.depth_stencil_fmt, 1, 0))
+					if (caps.texture_format_support(EF_D32F) || caps.texture_format_support(EF_D24S8)
+						|| caps.texture_format_support(EF_D16))
 					{
-						fmt = settings.depth_stencil_fmt;
+						ds_tex_ = rf.MakeTexture2D(new_render_width, new_render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
+						ds_view = rf.Make2DDepthStencilRenderView(*ds_tex_, 0, 1, 0);
 					}
 					else
 					{
-						BOOST_ASSERT(caps.rendertarget_format_support(EF_D16, 1, 0));
+						if ((settings.depth_stencil_fmt != EF_Unknown)
+							&& caps.rendertarget_format_support(settings.depth_stencil_fmt, 1, 0))
+						{
+							fmt = settings.depth_stencil_fmt;
+						}
+						else
+						{
+							BOOST_ASSERT(caps.rendertarget_format_support(EF_D16, 1, 0));
 
-						fmt = EF_D16;
+							fmt = EF_D16;
+						}
+						ds_view = rf.Make2DDepthStencilRenderView(new_render_width, new_render_height, fmt, 1, 0);
 					}
-					ds_view = rf.Make2DDepthStencilRenderView(new_render_width, new_render_height, fmt, 1, 0);
 				}
 			}
+
+			default_frame_buffers_[0] = default_frame_buffers_[1] = default_frame_buffers_[2] = default_frame_buffers_[3]
+				= screen_frame_buffer_;
 
 			if (stereo_method_ != STM_None)
 			{
 				ElementFormat fmt = mono_tex_->Format();
 				mono_tex_ = rf.MakeTexture2D(new_render_width, new_render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 				mono_frame_buffer_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*mono_tex_, 0, 1, 0));
+
+				default_frame_buffers_[0] = default_frame_buffers_[1] = default_frame_buffers_[2] = mono_frame_buffer_;
 			}
 			else
 			{
 				bool need_resize = ((new_render_width != new_screen_width) || (new_render_height != new_screen_height));
 				if (need_resize)
 				{
-					ElementFormat fmt = resize_tex_->Format();
+					if (!resize_frame_buffer_)
+					{
+						resize_frame_buffer_ = rf.MakeFrameBuffer();
+						resize_frame_buffer_->GetViewport()->camera = cur_frame_buffer_->GetViewport()->camera;
+					}
+
+					ElementFormat fmt;
+					if (resize_tex_)
+					{
+						fmt = resize_tex_->Format();
+					}
+					else
+					{
+						if (caps.texture_format_support(EF_ABGR8) && caps.rendertarget_format_support(EF_ABGR8, 1, 0))
+						{
+							fmt = EF_ABGR8;
+						}
+						else
+						{
+							BOOST_ASSERT(caps.texture_format_support(EF_ARGB8) && caps.rendertarget_format_support(EF_ARGB8, 1, 0));
+
+							fmt = EF_ARGB8;
+						}
+					}
+
 					resize_tex_ = rf.MakeTexture2D(new_render_width, new_render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 					resize_frame_buffer_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*resize_tex_, 0, 1, 0));
+
+					ElementFormat ds_fmt;
+					if ((settings.depth_stencil_fmt != EF_Unknown) && caps.rendertarget_format_support(settings.depth_stencil_fmt, 1, 0))
+					{
+						ds_fmt = settings.depth_stencil_fmt;
+					}
+					else
+					{
+						BOOST_ASSERT(caps.rendertarget_format_support(EF_D16, 1, 0));
+
+						ds_fmt = EF_D16;
+					}
+					resize_frame_buffer_->Attach(FrameBuffer::ATT_DepthStencil,
+						rf.Make2DDepthStencilRenderView(new_render_width, new_render_height, ds_fmt, 1, 0));
 
 					float const scale_x = static_cast<float>(new_screen_width) / new_render_width;
 					float const scale_y = static_cast<float>(new_screen_height) / new_render_height;
@@ -769,6 +771,8 @@ namespace KlayGE
 					{
 						resize_pps_[i]->SetParam(0, pos_scale);
 					}
+
+					default_frame_buffers_[0] = default_frame_buffers_[1] = default_frame_buffers_[2] = resize_frame_buffer_;
 				}
 			}
 			if (ldr_pp_)
@@ -777,6 +781,8 @@ namespace KlayGE
 				ldr_tex_ = rf.MakeTexture2D(new_render_width, new_render_height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 				ldr_frame_buffer_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*ldr_tex_, 0, 1, 0));
 				ldr_frame_buffer_->Attach(FrameBuffer::ATT_DepthStencil, ds_view);
+
+				default_frame_buffers_[0] = default_frame_buffers_[1] = ldr_frame_buffer_;
 			}
 			if (hdr_pp_)
 			{
@@ -784,16 +790,21 @@ namespace KlayGE
 				hdr_tex_ = rf.MakeTexture2D(new_render_width, new_render_height, 4, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write | EAH_Generate_Mips, nullptr);
 				hdr_frame_buffer_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*hdr_tex_, 0, 1, 0));
 				hdr_frame_buffer_->Attach(FrameBuffer::ATT_DepthStencil, ds_view);
+
+				default_frame_buffers_[0] = hdr_frame_buffer_;
 			}
 
 			pp_chain_dirty_ = true;
-
-			this->DoResize(new_screen_width, new_screen_height);
 		}
 		else
 		{
 			this->DoResize(old_screen_width, old_screen_height);
 		}
+
+		this->BindFrameBuffer(default_frame_buffers_[0]);
+
+		App3DFramework& app = Context::Instance().AppInstance();
+		app.OnResize(width, height);
 	}
 
 	void RenderEngine::PostProcess(bool skip)
@@ -861,13 +872,13 @@ namespace KlayGE
 
 		fb_stage_ = 3;
 
+		uint32_t const screen_width = default_frame_buffers_[3]->Width();
+		uint32_t const screen_height = default_frame_buffers_[3]->Height();
+		uint32_t const render_width = default_frame_buffers_[0]->Width();
+		uint32_t const render_height = default_frame_buffers_[0]->Height();
+		bool const need_resize = ((render_width != screen_width) || (render_height != screen_height));
 		if (resize_pps_[0])
 		{
-			uint32_t const screen_width = default_frame_buffers_[3]->Width();
-			uint32_t const screen_height = default_frame_buffers_[3]->Height();
-			uint32_t const render_width = default_frame_buffers_[0]->Width();
-			uint32_t const render_height = default_frame_buffers_[0]->Height();
-			bool need_resize = ((render_width != screen_width) || (render_height != screen_height));
 			if ((STM_None == stereo_method_) && need_resize)
 			{
 #ifndef KLAYGE_SHIP
@@ -895,10 +906,13 @@ namespace KlayGE
 			}
 		}
 
-		RenderViewPtr const & ds_view = this->DefaultFrameBuffer()->Attached(FrameBuffer::ATT_DepthStencil);
-		if (ds_view)
+		if (!this->ScreenDepthStencilTexture() || need_resize)
 		{
-			ds_view->ClearDepth(1.0f);
+			RenderViewPtr const & ds_view = this->DefaultFrameBuffer()->Attached(FrameBuffer::ATT_DepthStencil);
+			if (ds_view)
+			{
+				ds_view->ClearDepth(1.0f);
+			}
 		}
 
 		fb_stage_ = 0;
@@ -970,12 +984,13 @@ namespace KlayGE
 			this->BindFrameBuffer(screen_frame_buffer_);
 			if (stereoscopic_pp_)
 			{
-				stereoscopic_pp_->SetParam(0, stereo_separation_);
-				stereoscopic_pp_->SetParam(1, screen_frame_buffer_->GetViewport()->camera->NearPlane());
+				Camera const & camera = *screen_frame_buffer_->GetViewport()->camera;
 
-				CameraPtr const & camera = screen_frame_buffer_->GetViewport()->camera;
-				float q = camera->FarPlane() / (camera->FarPlane() - camera->NearPlane());
-				float2 near_q(camera->NearPlane() * q, q);
+				stereoscopic_pp_->SetParam(0, stereo_separation_);
+				stereoscopic_pp_->SetParam(1, camera.NearPlane());
+
+				float const q = camera.FarPlane() / (camera.FarPlane() - camera.NearPlane());
+				float2 near_q(camera.NearPlane() * q, q);
 				stereoscopic_pp_->SetParam(2, near_q);
 			}
 			if (stereo_method_ != STM_LCDShutter)
@@ -1226,6 +1241,8 @@ namespace KlayGE
 		cur_line_rs_obj_.reset();
 		cur_dss_obj_.reset();
 		cur_bs_obj_.reset();
+
+		pp_rl_.reset();
 
 		hdr_pp_.reset();
 		skip_hdr_pp_.reset();

@@ -41,16 +41,17 @@ namespace KlayGE
 	SSVOPostProcess::SSVOPostProcess()
 			: PostProcess(L"SSVO")
 	{
-		input_pins_.push_back(std::make_pair("g_buffer_tex", TexturePtr()));
-		input_pins_.push_back(std::make_pair("depth_tex", TexturePtr()));
+		input_pins_.emplace_back("g_buffer_tex", TexturePtr());
+		input_pins_.emplace_back("depth_tex", TexturePtr());
 
-		output_pins_.push_back(std::make_pair("out_tex", TexturePtr()));
+		output_pins_.emplace_back("out_tex", TexturePtr());
 
-		this->Technique(SyncLoadRenderEffect("SSVO.fxml")->TechniqueByName("SSVO"));
+		auto effect = SyncLoadRenderEffect("SSVO.fxml");
+		this->Technique(effect, effect->TechniqueByName("SSVO"));
 
-		proj_param_ = technique_->Effect().ParameterByName("proj");
-		inv_proj_param_ = technique_->Effect().ParameterByName("inv_proj");
-		far_plane_param_ = technique_->Effect().ParameterByName("far_plane");
+		proj_param_ = effect->ParameterByName("proj");
+		inv_proj_param_ = effect->ParameterByName("inv_proj");
+		far_plane_param_ = effect->ParameterByName("far_plane");
 	}
 
 	void SSVOPostProcess::OnRenderBegin()

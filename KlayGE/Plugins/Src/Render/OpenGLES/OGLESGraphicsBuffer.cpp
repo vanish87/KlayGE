@@ -24,45 +24,26 @@
 
 namespace KlayGE
 {
-	OGLESGraphicsBuffer::OGLESGraphicsBuffer(BufferUsage usage, uint32_t access_hint, GLenum target, ElementInitData const * init_data)
-			: GraphicsBuffer(usage, access_hint),
-				target_(target)
+	OGLESGraphicsBuffer::OGLESGraphicsBuffer(BufferUsage usage, uint32_t access_hint, GLenum target,
+				uint32_t size_in_byte)
+			: GraphicsBuffer(usage, access_hint, size_in_byte),
+				vb_(0), target_(target)
 	{
 		BOOST_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target)
 			|| (GL_UNIFORM_BUFFER == target));
-
-		glGenBuffers(1, &vb_);
-
-		if (init_data != nullptr)
-		{
-			size_in_byte_ = init_data->row_pitch;
-			this->CreateBuffer(init_data->data);
-			hw_buff_size_ = size_in_byte_;
-		}
 	}
 
 	OGLESGraphicsBuffer::~OGLESGraphicsBuffer()
 	{
-		if (Context::Instance().RenderFactoryValid())
-		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-			re.DeleteBuffers(1, &vb_);
-		}
-		else
-		{
-			glDeleteBuffers(1, &vb_);
-		}
+		this->DeleteHWResource();
 	}
 
-	void OGLESGraphicsBuffer::DoResize()
+	void OGLESGraphicsBuffer::CreateHWResource(void const * data)
 	{
-		BOOST_ASSERT(size_in_byte_ != 0);
+		BOOST_ASSERT(0 == vb_);
 
-		this->CreateBuffer(nullptr);
-	}
+		glGenBuffers(1, &vb_);
 
-	void OGLESGraphicsBuffer::CreateBuffer(void const * data)
-	{
 		OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		re.BindBuffer(target_, vb_);
 		glBufferData(target_,
@@ -76,6 +57,24 @@ namespace KlayGE
 		else
 		{
 			buf_data_.resize(size_in_byte_);
+		}
+	}
+
+	void OGLESGraphicsBuffer::DeleteHWResource()
+	{
+		if (vb_ != 0)
+		{
+			if (Context::Instance().RenderFactoryValid())
+			{
+				OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+				re.DeleteBuffers(1, &vb_);
+			}
+			else
+			{
+				glDeleteBuffers(1, &vb_);
+			}
+
+			vb_ = 0;
 		}
 	}
 

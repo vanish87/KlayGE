@@ -5,10 +5,18 @@
 #include <KlayGE/RenderEngine.hpp>
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/ResLoader.hpp>
+#include <kfont/kfont.hpp>
 
 #include <numeric>
 #include <boost/assert.hpp>
+#ifdef KLAYGE_COMPILER_CLANG
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter" // Ignore unused parameter in boost
+#endif
 #include <boost/container/flat_map.hpp>
+#ifdef KLAYGE_COMPILER_CLANG
+#pragma clang diagnostic pop
+#endif
 
 #include "AsciiArtsPP.hpp"
 
@@ -20,42 +28,51 @@ int const INPUT_NUM_ASCII = 128;
 size_t const ASCII_WIDTH = 16;
 size_t const ASCII_HEIGHT = 16;
 
-size_t const OUTPUT_NUM_ASCII = 32;
+size_t const OUTPUT_NUM_ASCII = 64;
 
 namespace
 {
 	typedef std::vector<uint8_t> ascii_tile_type;
 	typedef std::vector<ascii_tile_type> ascii_tiles_type;
 
-	std::vector<ascii_tile_type> LoadFromTexture(std::string const & tex_name)
+	std::vector<ascii_tile_type> LoadFromKFont(std::string const & font_name)
 	{
-		int const ASCII_IN_A_ROW = 16;
+		ResIdentifierPtr kfont_input = ResLoader::Instance().Open(font_name);
+		std::shared_ptr<KFont> kfont_loader = MakeSharedPtr<KFont>();
+		kfont_loader->Load(kfont_input);
 
-		Texture::TextureType type;
-		uint32_t width, height, depth;
-		uint32_t num_mipmaps;
-		uint32_t array_size;
-		ElementFormat format;
-		std::vector<ElementInitData> init_data;
-		std::vector<uint8_t> data_block;
-		LoadTexture(tex_name, type, width, height, depth, num_mipmaps, array_size,
-			format, init_data, data_block);
-
-		BOOST_ASSERT(EF_R8 == format);
+		float const dist_base = kfont_loader->DistBase() / 32768.0f * 32 + 1;
+		float const dist_scale = (kfont_loader->DistScale() / 32768.0f + 1.0f) * 32;
+		uint32_t const char_size = kfont_loader->CharSize();
 
 		std::vector<ascii_tile_type> ret(INPUT_NUM_ASCII);
 
-		for (size_t i = 0; i < ret.size(); ++ i)
+		std::vector<uint8_t> char_data(char_size * char_size);
+		for (int ch = 0; ch < INPUT_NUM_ASCII; ++ ch)
 		{
-			ret[i].resize(ASCII_WIDTH * ASCII_HEIGHT);
-			for (size_t y = 0; y < ASCII_HEIGHT; ++ y)
+			ret[ch].resize(ASCII_WIDTH * ASCII_HEIGHT);
+
+			int32_t index = kfont_loader->CharIndex(static_cast<wchar_t>(ch));
+			if (index >= 0)
 			{
-				for (size_t x = 0; x < ASCII_WIDTH; ++ x)
+				kfont_loader->GetDistanceData(&char_data[0], char_size, index);
+				for (size_t dy = 0; dy < char_size; ++ dy)
 				{
-					ret[i][y * ASCII_WIDTH + x]
-						= data_block[((i / ASCII_IN_A_ROW) * ASCII_HEIGHT + y) * ASCII_IN_A_ROW * ASCII_WIDTH
-							+ (i % ASCII_IN_A_ROW) * ASCII_WIDTH + x];
+					for (size_t dx = 0; dx < char_size; ++ dx)
+					{
+						float texel = char_data[dy * char_size + dx] / 255.0f;
+						texel = texel * dist_scale + dist_base;
+						char_data[dy * char_size + dx]
+							= static_cast<uint8_t>(MathLib::clamp<int>(static_cast<int>(texel * 255.0f + 0.5f), 0, 255));
+					}
 				}
+
+				ResizeTexture(&ret[ch][0], ASCII_WIDTH, ASCII_WIDTH * ASCII_HEIGHT, EF_R8, ASCII_WIDTH, ASCII_HEIGHT, 1,
+					&char_data[char_size / 6], char_size, char_size * char_size, EF_R8, char_size * 2 / 3, char_size, 1, true);
+			}
+			else
+			{
+				memset(&ret[ch][0], 0, ret[ch].size());
 			}
 		}
 
@@ -101,6 +118,8 @@ namespace
 						output_num_ascii_(output_num_ascii),
 						ascii_width_(ascii_width), ascii_height_(ascii_height)
 		{
+			KFL_UNUSED(ascii_width_);
+			KFL_UNUSED(ascii_height_);
 		}
 
 		ascii_tiles_type build(ascii_tiles_type const & ascii_data)
@@ -180,7 +199,7 @@ namespace
 					diff_lum = iter->first;
 				}
 
-				diff_lum_to_iter.push_back(std::make_pair(diff_lum, iter));
+				diff_lum_to_iter.emplace_back(diff_lum, iter);
 			}
 			BOOST_ASSERT(diff_lum_to_iter.size() >= output_num_ascii_);
 
@@ -222,14 +241,17 @@ AsciiArtsPostProcess::AsciiArtsPostProcess()
 			std::vector<std::string>(),
 			std::vector<std::string>(1, "src_tex"),
 			std::vector<std::string>(1, "output"),
-			SyncLoadRenderEffect("AsciiArtsPP.fxml")->TechniqueByName("AsciiArts"))
+			RenderEffectPtr(), nullptr)
 {
+	auto effect = SyncLoadRenderEffect("AsciiArtsPP.fxml");
+	this->Technique(effect, effect->TechniqueByName("AsciiArts"));
+
 	ascii_lums_builder builder(INPUT_NUM_ASCII, OUTPUT_NUM_ASCII, ASCII_WIDTH, ASCII_HEIGHT);
 
 	downsampler_ = SyncLoadPostProcess("Copy.ppml", "bilinear_copy");
 
-	cell_per_row_line_ep_ = technique_->Effect().ParameterByName("cell_per_row_line");
-	*(technique_->Effect().ParameterByName("lums_tex")) = FillTexture(builder.build(LoadFromTexture("font.dds")));
+	cell_per_row_line_ep_ = effect->ParameterByName("cell_per_row_line");
+	*(effect->ParameterByName("lums_tex")) = FillTexture(builder.build(LoadFromKFont("gkai00mp.kfont")));
 }
 
 void AsciiArtsPostProcess::InputPin(uint32_t index, TexturePtr const & tex)

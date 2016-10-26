@@ -39,7 +39,8 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			technique_ = SyncLoadRenderEffect("Fractal.fxml")->TechniqueByName("Mandelbrot");
+			effect_ = SyncLoadRenderEffect("Fractal.fxml");
+			technique_ = effect_->TechniqueByName("Mandelbrot");
 
 			float2 pos[] =
 			{
@@ -52,11 +53,7 @@ namespace
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_TriangleStrip);
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(pos);
-			init_data.slice_pitch = 0;
-			init_data.data = pos;
-			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(pos), pos);
 
 			rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 
@@ -73,8 +70,8 @@ namespace
 				clr1.z() = MathLib::srgb_to_linear(clr1.z());
 			}
 
-			*(technique_->Effect().ParameterByName("clr0")) = clr0;
-			*(technique_->Effect().ParameterByName("clr1")) = clr1;
+			*(effect_->ParameterByName("clr0")) = clr0;
+			*(effect_->ParameterByName("clr1")) = clr1;
 		}
 	};
 

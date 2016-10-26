@@ -33,13 +33,13 @@ namespace KlayGE
 	{
 	}
 
-	ID3D11InputLayoutPtr const & D3D11RenderLayout::InputLayout(size_t signature, std::vector<uint8_t> const & vs_code) const
+	ID3D11InputLayout* D3D11RenderLayout::InputLayout(size_t signature, std::vector<uint8_t> const & vs_code) const
 	{
 		for (size_t i = 0; i < input_layouts_.size(); ++ i)
 		{
 			if (input_layouts_[i].first == signature)
 			{
-				return input_layouts_[i].second;
+				return input_layouts_[i].second.get();
 			}
 		}
 
@@ -61,8 +61,8 @@ namespace KlayGE
 
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		ID3D11InputLayoutPtr const & ret = re.CreateD3D11InputLayout(elems, signature, vs_code);
-		input_layouts_.push_back(std::make_pair(signature, ret));
+		input_layouts_.emplace_back(signature, ret);
 
-		return input_layouts_.back().second;
+		return input_layouts_.back().second.get();
 	}
 }

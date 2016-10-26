@@ -41,57 +41,40 @@ namespace KlayGE
 	{
 	}
 
-	ID3D11RenderTargetViewPtr D3D11FrameBuffer::D3DRTView(uint32_t n) const
+	ID3D11RenderTargetView* D3D11FrameBuffer::D3DRTView(uint32_t n) const
 	{
 		if (n < clr_views_.size())
 		{
 			if (clr_views_[n])
 			{
-				D3D11RenderTargetRenderView const & d3d_view(*checked_pointer_cast<D3D11RenderTargetRenderView>(clr_views_[n]));
-				return d3d_view.D3DRenderTargetView();
-			}
-			else
-			{
-				return ID3D11RenderTargetViewPtr();
+				return checked_cast<D3D11RenderTargetRenderView*>(clr_views_[n].get())->D3DRenderTargetView();
 			}
 		}
-		else
-		{
-			return ID3D11RenderTargetViewPtr();
-		}
+
+		return nullptr;
 	}
 
-	ID3D11DepthStencilViewPtr D3D11FrameBuffer::D3DDSView() const
+	ID3D11DepthStencilView* D3D11FrameBuffer::D3DDSView() const
 	{
 		if (rs_view_)
 		{
-			D3D11DepthStencilRenderView const & d3d_view(*checked_pointer_cast<D3D11DepthStencilRenderView>(rs_view_));
-			return d3d_view.D3DDepthStencilView();
+			return checked_cast<D3D11DepthStencilRenderView*>(rs_view_.get())->D3DDepthStencilView();
 		}
-		else
-		{
-			return ID3D11DepthStencilViewPtr();
-		}
+
+		return nullptr;
 	}
 
-	ID3D11UnorderedAccessViewPtr D3D11FrameBuffer::D3DUAView(uint32_t n) const
+	ID3D11UnorderedAccessView* D3D11FrameBuffer::D3DUAView(uint32_t n) const
 	{
 		if (n < ua_views_.size())
 		{
 			if (ua_views_[n])
 			{
-				D3D11UnorderedAccessView const & d3d_view(*checked_pointer_cast<D3D11UnorderedAccessView>(ua_views_[n]));
-				return d3d_view.D3DUnorderedAccessView();
-			}
-			else
-			{
-				return ID3D11UnorderedAccessViewPtr();
+				return checked_cast<D3D11UnorderedAccessView*>(ua_views_[n].get())->D3DUnorderedAccessView();
 			}
 		}
-		else
-		{
-			return ID3D11UnorderedAccessViewPtr();
-		}
+
+		return nullptr;
 	}
 
 	std::wstring const & D3D11FrameBuffer::Description() const
@@ -103,7 +86,6 @@ namespace KlayGE
 	void D3D11FrameBuffer::OnBind()
 	{
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-		ID3D11DeviceContextPtr const & d3d_imm_ctx = re.D3DDeviceImmContext();
 
 		std::vector<void*> rt_src;
 		std::vector<uint32_t> rt_first_subres;
@@ -117,7 +99,7 @@ namespace KlayGE
 				rt_src.push_back(p->RTSrc());
 				rt_first_subres.push_back(p->RTFirstSubRes());
 				rt_num_subres.push_back(p->RTNumSubRes());
-				rt_view[i] = this->D3DRTView(i).get();
+				rt_view[i] = this->D3DRTView(i);
 			}
 			else
 			{
@@ -141,7 +123,7 @@ namespace KlayGE
 				rt_src.push_back(p->UASrc());
 				rt_first_subres.push_back(p->UAFirstSubRes());
 				rt_num_subres.push_back(p->UANumSubRes());
-				ua_view[i] = this->D3DUAView(i).get();
+				ua_view[i] = this->D3DUAView(i);
 				ua_init_count[i] = ua_views_[i]->InitCount();
 			}
 			else
@@ -158,23 +140,20 @@ namespace KlayGE
 
 		if (ua_views_.empty())
 		{
-			d3d_imm_ctx->OMSetRenderTargets(static_cast<UINT>(rt_view.size()), &rt_view[0], this->D3DDSView().get());
+			re.OMSetRenderTargets(static_cast<UINT>(rt_view.size()), &rt_view[0], this->D3DDSView());
 		}
 		else
 		{
 			ID3D11RenderTargetView** rts = rt_view.empty() ? nullptr : &rt_view[0];
-			d3d_imm_ctx->OMSetRenderTargetsAndUnorderedAccessViews(static_cast<UINT>(rt_view.size()), rts, this->D3DDSView().get(),
+			re.OMSetRenderTargetsAndUnorderedAccessViews(static_cast<UINT>(rt_view.size()), rts, this->D3DDSView(),
 				0, static_cast<UINT>(ua_view.size()), &ua_view[0], &ua_init_count[0]);
 		}
 	
-		if (!rt_view.empty())
-		{
-			d3d_viewport_.TopLeftX = static_cast<float>(viewport_->left);
-			d3d_viewport_.TopLeftY = static_cast<float>(viewport_->top);
-			d3d_viewport_.Width = static_cast<float>(viewport_->width);
-			d3d_viewport_.Height = static_cast<float>(viewport_->height);
-			re.RSSetViewports(1, &d3d_viewport_);
-		}
+		d3d_viewport_.TopLeftX = static_cast<float>(viewport_->left);
+		d3d_viewport_.TopLeftY = static_cast<float>(viewport_->top);
+		d3d_viewport_.Width = static_cast<float>(viewport_->width);
+		d3d_viewport_.Height = static_cast<float>(viewport_->height);
+		re.RSSetViewports(1, &d3d_viewport_);
 	}
 
 	void D3D11FrameBuffer::OnUnbind()

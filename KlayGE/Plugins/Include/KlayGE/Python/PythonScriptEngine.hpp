@@ -41,19 +41,23 @@
 
 #if defined(KLAYGE_COMPILER_MSVC)
 #pragma warning(push)
-#pragma warning(disable: 4273) // 'round' in pymath.h inconsistent dll linkage
 #pragma warning(disable: 4510) // No default constructor for PyHash_FuncDef
 #pragma warning(disable: 4512) // No assignment operator for PyHash_FuncDef
 #pragma warning(disable: 4610) // No user-defined constructor for PyHash_FuncDef in vc12
 #elif defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers" // Some uninitializers in python.h
+#elif defined(KLAYGE_COMPILER_CLANG)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmacro-redefined" // 'Py_USING_UNICODE' redefined
 #endif
 #include <Python.h>
 #ifdef KLAYGE_COMPILER_MSVC
 #pragma warning(pop)
 #elif defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic pop
+#elif defined(KLAYGE_COMPILER_CLANG)
+#pragma clang diagnostic pop
 #endif
 #include <vector>
 #include <string>
@@ -114,8 +118,8 @@ namespace KlayGE
 		virtual ScriptModulePtr CreateModule(std::string const & name);
 
 	private:
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
 	};
 }
 

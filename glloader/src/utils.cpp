@@ -17,20 +17,29 @@
 
 #include <glloader/glloader.h>
 
-#ifdef GLLOADER_AGL
-	#include <Carbon/Carbon.h>
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+	#define GLLOADER_WINDOWS_PLATFORM
+#elif defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__)
+	#define GLLOADER_LINUX_PLATFORM
+#elif defined(__ANDROID__) || defined(ANDROID)
+	#define GLLOADER_ANDROID_PLATFORM
+#elif defined(__APPLE__) || defined(__APPLE_CC__)
+	#define GLLOADER_APPLE_PLATFORM
 #endif
-#ifdef GLLOADER_EAGL
+
+#if defined(GLLOADER_AGL)
+	#include <Carbon/Carbon.h>
+#elif defined(GLLOADER_EAGL)
 	#include <CoreFoundation/CoreFoundation.h>
 #endif
 
-#if defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__) || defined(__CYGWIN__) || defined(__ANDROID__) || defined(ANDROID) || defined(__APPLE__) || defined(__APPLE_CC__)
-#include <dlfcn.h>
+#if defined(GLLOADER_LINUX_PLATFORM) || defined(GLLOADER_ANDROID_PLATFORM) || defined(GLLOADER_APPLE_PLATFORM)
+	#include <dlfcn.h>
 #endif
 
-#if defined(__ANDROID__) || defined(ANDROID)
-#include <android/log.h>
-#define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN, "glloader", __VA_ARGS__))
+#if defined(GLLOADER_ANDROID_PLATFORM)
+	#include <android/log.h>
+	#define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN, "glloader", __VA_ARGS__))
 #endif
 
 #if (defined(__GNUC__) && !defined(__clang__)) || (defined(__clang__) && defined(__MINGW32__))
@@ -51,7 +60,7 @@
 #include <sstream>
 
 #ifdef GLLOADER_DEBUG
-#include <iostream>
+	#include <iostream>
 #endif
 
 #include "utils.h"
@@ -118,20 +127,24 @@ namespace glloader
 		{
 			return gl_dlls_;
 		}
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if defined(GLLOADER_WINDOWS_PLATFORM)
 		std::vector<std::map<std::string, std::string>> const & gl_dll_entries() const
 		{
 			return gl_dll_entries_;
+		}
+#elif defined(GLLOADER_AGL) || defined(GLLOADER_EAGL)
+		CFBundleRef gl_bundle() const
+		{
+			return gl_bundle_;
 		}
 #endif
 
 	private:
 		gl_dll_container()
 		{
-			void* ogl_dll;
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
-#ifdef GLLOADER_GLES
-			ogl_dll = ::LoadLibraryExA("libEGL.dll", NULL, 0);
+#if defined(GLLOADER_WINDOWS_PLATFORM)
+	#ifdef GLLOADER_GLES
+			void* ogl_dll = ::LoadLibraryExA("libEGL.dll", NULL, 0);
 			if (ogl_dll != NULL)
 			{
 				gl_dlls_.push_back(ogl_dll);
@@ -171,39 +184,44 @@ namespace glloader
 					}
 				}
 			}
-#else
-			ogl_dll = ::LoadLibraryExA("opengl32.dll", NULL, 0);
+	#else
+			void* ogl_dll = ::LoadLibraryExA("opengl32.dll", NULL, 0);
 			if (ogl_dll != NULL)
 			{
 				gl_dlls_.push_back(ogl_dll);
 				this->DumpEntries("opengl32.dll");
 			}
-#endif
-#endif
-#if defined(__APPLE__) || defined(__APPLE_CC__)
-	#ifdef GLLOADER_GLES
-		// http://forum.imgtec.com/discussion/comment/18323#Comment_18323
-		// For PowerVR_SDK, we need to load libGLESv2 before libEGL
-		ogl_dll = ::dlopen("libGLESv2.dylib", RTLD_LAZY);
-		if (ogl_dll != NULL)
-		{
-			gl_dlls_.push_back(ogl_dll);
-		}
-		ogl_dll = ::dlopen("libGLESv3.dylib", RTLD_LAZY);
-		if (ogl_dll != NULL)
-		{
-			gl_dlls_.push_back(ogl_dll);
-		}
-		ogl_dll = ::dlopen("libEGL.dylib", RTLD_LAZY);
-		if (ogl_dll != NULL)
-		{
-			gl_dlls_.push_back(ogl_dll);
-		}
 	#endif
-#endif
-#if defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__) || defined(__CYGWIN__) || defined(__ANDROID__) || defined(ANDROID)
-#ifdef GLLOADER_GLES
-			ogl_dll = ::dlopen("libEGL.so", RTLD_LAZY);
+#elif defined(GLLOADER_APPLE_PLATFORM)
+	#ifdef GLLOADER_GLES
+			// http://forum.imgtec.com/discussion/comment/18323#Comment_18323
+			// For PowerVR_SDK, we need to load libGLESv2 before libEGL
+			void* ogl_dll = ::dlopen("libGLESv2.dylib", RTLD_LAZY);
+			if (ogl_dll != NULL)
+			{
+				gl_dlls_.push_back(ogl_dll);
+			}
+			ogl_dll = ::dlopen("libGLESv3.dylib", RTLD_LAZY);
+			if (ogl_dll != NULL)
+			{
+				gl_dlls_.push_back(ogl_dll);
+			}
+			ogl_dll = ::dlopen("libEGL.dylib", RTLD_LAZY);
+			if (ogl_dll != NULL)
+			{
+				gl_dlls_.push_back(ogl_dll);
+			}
+	#endif
+
+	#ifdef GLLOADER_AGL
+			gl_bundle_ = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengl"));
+	#else
+			gl_bundle_ = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengles"));
+	#endif
+			assert(gl_bundle_ != NULL);
+#elif defined(GLLOADER_LINUX_PLATFORM) || defined(GLLOADER_ANDROID_PLATFORM)
+	#ifdef GLLOADER_GLES
+			void* ogl_dll = ::dlopen("libEGL.so", RTLD_LAZY);
 			if (ogl_dll != NULL)
 			{
 				gl_dlls_.push_back(ogl_dll);
@@ -221,13 +239,13 @@ namespace glloader
 					}
 				}
 			}
-#else
-			ogl_dll = ::dlopen("libGL.so", RTLD_LAZY);
+	#else
+			void* ogl_dll = ::dlopen("libGL.so", RTLD_LAZY);
 			if (ogl_dll != NULL)
 			{
 				gl_dlls_.push_back(ogl_dll);
 			}
-#endif
+	#endif
 #endif
 		}
 
@@ -235,16 +253,18 @@ namespace glloader
 		{
 			for (size_t i = 0; i < gl_dlls_.size(); ++ i)
 			{
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if defined(GLLOADER_WINDOWS_PLATFORM)
 				::FreeLibrary(static_cast<HMODULE>(gl_dlls_[i]));
-#endif
-#if defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__) || defined(__CYGWIN__) || defined(__ANDROID__) || defined(ANDROID) || defined(__APPLE__) || defined(__APPLE_CC__)
+#elif defined(GLLOADER_LINUX_PLATFORM) || defined(GLLOADER_ANDROID_PLATFORM) || defined(GLLOADER_APPLE_PLATFORM)
 				::dlclose(gl_dlls_[i]);
 #endif
 			}
+#if defined(GLLOADER_APPLE_PLATFORM)
+			CFRelease(gl_bundle_);
+#endif
 		}
 
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if defined(GLLOADER_WINDOWS_PLATFORM)
 		void DumpEntries(char const * name)
 		{
 			HMODULE dll = ::LoadLibraryExA(name, NULL, DONT_RESOLVE_DLL_REFERENCES);
@@ -296,8 +316,10 @@ namespace glloader
 
 	private:
 		std::vector<void*> gl_dlls_;
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if defined(GLLOADER_WINDOWS_PLATFORM)
 		std::vector<std::map<std::string, std::string>> gl_dll_entries_;
+#elif defined(GLLOADER_APPLE_PLATFORM)
+		CFBundleRef gl_bundle_;
 #endif
 
 		static gl_dll_container* inst_;
@@ -539,6 +561,10 @@ namespace glloader
 				{
 					features_.push_back("GLES_VERSION_3_1");
 				}
+				if (ver_code >= 32)
+				{
+					features_.push_back("GLES_VERSION_3_2");
+				}
 #endif
 			}
 		}
@@ -675,6 +701,10 @@ namespace glloader
 				{
 					features_.push_back("EGL_VERSION_1_4");
 				}
+				if (ver_code >= 15)
+				{
+					features_.push_back("EGL_VERSION_1_5");
+				}
 			}
 #endif		// GLLOADER_EGL
 		}
@@ -724,13 +754,19 @@ void glloader_init()
 #endif
 }
 
+void glloader_uninit()
+{
+	glloader::gl_features_extractor::delete_instance();
+	glloader::gl_dll_container::delete_instance();
+}
+
 void* get_gl_proc_address_by_dll(const char* name)
 {
 	void* ret = NULL;
 
 	std::vector<void*> const & gl_dlls = glloader::gl_dll_container::instance().gl_dlls();
 
-#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if defined(GLLOADER_WINDOWS_PLATFORM)
 	std::vector<std::map<std::string, std::string>> const & gl_dll_entries = glloader::gl_dll_container::instance().gl_dll_entries();
 	for (size_t i = 0; (i < gl_dlls.size()) && (NULL == ret); ++ i)
 	{
@@ -748,8 +784,7 @@ void* get_gl_proc_address_by_dll(const char* name)
 			}
 		}
 	}
-#endif
-#if defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__) || defined(__CYGWIN__) || defined(__ANDROID__) || defined(ANDROID) || defined(__APPLE__) || defined(__APPLE_CC__)
+#elif defined(GLLOADER_LINUX_PLATFORM) || defined(GLLOADER_ANDROID_PLATFORM) || defined(GLLOADER_APPLE_PLATFORM)
 	for (size_t i = 0; (i < gl_dlls.size()) && (NULL == ret); ++ i)
 	{
 		ret = ::dlsym(gl_dlls[i], name);
@@ -765,26 +800,15 @@ void* get_gl_proc_address_by_api(const char* name)
 
 #if defined(GLLOADER_GLES) && !defined(GLLOADER_EAGL)
 	ret = (void*)(eglGetProcAddress(name));
-#endif
-#ifdef GLLOADER_WGL
+#elif defined(GLLOADER_WGL)
 	ret = (void*)(DynamicWglGetProcAddress(name));
-#endif
-#if defined(GLLOADER_AGL) || defined(GLLOADER_EAGL)
-#ifdef GLLOADER_AGL
-	CFBundleRef bundle = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengl"));
-#else
-	CFBundleRef bundle = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengles"));
-#endif
-	assert(bundle != NULL);
+#elif defined(GLLOADER_AGL) || defined(GLLOADER_EAGL)
+	CFBundleRef bundle = glloader::gl_dll_container::instance().gl_bundle();
 
-	CFStringRef functionName = CFStringCreateWithCString(kCFAllocatorDefault, name, kCFStringEncodingASCII);
-
-	ret = CFBundleGetFunctionPointerForName(bundle, functionName);
-
-	CFRelease(bundle);
-	CFRelease(functionName);
-#endif
-#ifdef GLLOADER_GLX
+	CFStringRef function_name = CFStringCreateWithCString(kCFAllocatorDefault, name, kCFStringEncodingASCII);
+	ret = CFBundleGetFunctionPointerForName(bundle, function_name);
+	CFRelease(function_name);
+#elif defined(GLLOADER_GLX)
 	ret = (void*)(glXGetProcAddressARB(reinterpret_cast<const GLubyte*>(name)));
 #endif
 
@@ -802,7 +826,7 @@ void* glloader_get_gl_proc_address(const char* name)
 #ifdef GLLOADER_DEBUG
 	if (NULL == ret)
 	{
-#if defined(__ANDROID__) || defined(ANDROID)
+#if defined(GLLOADER_ANDROID_PLATFORM)
 		LOGW("%s is missing!\n", name);
 #else
 		std::cerr << name << " is missing!" << std::endl;

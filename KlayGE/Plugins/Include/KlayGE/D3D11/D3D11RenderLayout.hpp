@@ -17,9 +17,6 @@
 
 #include <vector>
 
-#include <KlayGE/D3D11/D3D11MinGWDefs.hpp>
-#include <D3D11Shader.h>
-
 #include <KlayGE/RenderLayout.hpp>
 #include <KlayGE/D3D11/D3D11Typedefs.hpp>
 
@@ -30,7 +27,7 @@ namespace KlayGE
 	public:
 		D3D11RenderLayout();
 
-		ID3D11InputLayoutPtr const & InputLayout(size_t signature, std::vector<uint8_t> const & vs_code) const;
+		ID3D11InputLayout* InputLayout(size_t signature, std::vector<uint8_t> const & vs_code) const;
 
 	private:
 		std::vector<D3D11_INPUT_ELEMENT_DESC> vertex_elems_;

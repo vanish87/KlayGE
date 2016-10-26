@@ -85,6 +85,10 @@ class build_info:
 			cfg_build.target
 		except:
 			cfg_build.target = "auto"
+		try:
+			cfg_build.shader_platform_name
+		except:
+			cfg_build.shader_platform_name = "auto"
 			
 		env = os.environ
 		
@@ -104,7 +108,9 @@ class build_info:
 				if space_place != -1:
 					android_ver = target_platform[space_place + 1:]
 					target_platform = target_platform[0:space_place]
-					if "5.0" == android_ver:
+					if "5.1" == android_ver:
+						target_api_level = 22
+					elif "5.0" == android_ver:
 						target_api_level = 21
 					elif "4.4w" == android_ver:
 						target_api_level = 20
@@ -149,7 +155,7 @@ class build_info:
 					else:
 						log_error("Unsupported android version\n")
 				else:
-					target_api_level = "10"
+					target_api_level = 10
 				self.target_api_level = target_api_level
 			elif (0 == target_platform.find("win_store")) or (0 == target_platform.find("win_phone")):
 				space_place = target_platform.find(' ')
@@ -164,8 +170,13 @@ class build_info:
 		else:
 			prefer_static = False
 
+		shader_platform_name = cfg_build.shader_platform_name
+		if 0 == len(shader_platform_name):
+			shader_platform_name = "auto"
+
 		self.host_platform = host_platform
 		self.target_platform = target_platform
+		self.shader_platform_name = shader_platform_name
 		self.prefer_static = prefer_static
 
 		if "" == compiler:
@@ -175,8 +186,6 @@ class build_info:
 						compiler = "vc140"
 					elif "VS120COMNTOOLS" in env:
 						compiler = "vc120"
-					elif "VS110COMNTOOLS" in env:
-						compiler = "vc110"
 					elif 0 == os.system("where clang++"):
 						compiler = "clang"
 					elif os.path.exists("C:/MinGW/bin/g++.exe") or (0 == os.system("where g++")):
@@ -203,13 +212,11 @@ class build_info:
 					toolset = "v140"
 				elif "vc120" == compiler:
 					toolset = "v120"
-				elif "vc110" == compiler:
-					toolset = "v110"
 			elif "android" == target_platform:
 				if target_api_level >= 21:
 					toolset = "4.9"
 				else:
-					toolset = "4.6"
+					toolset = "4.8"
 				
 		if "" == archs:
 			archs = cfg_build.arch
@@ -246,18 +253,6 @@ class build_info:
 					gen_name = "Visual Studio 12 ARM"
 				elif "x64" == arch:
 					gen_name = "Visual Studio 12 Win64"
-				compilers.append(compiler_info(arch, gen_name, toolset, target_platform))
-		elif "vc110" == compiler:
-			compiler_name = "vc"
-			compiler_version = 110
-			multi_config = True
-			for arch in archs:
-				if "x86" == arch:
-					gen_name = "Visual Studio 11"
-				elif "arm" == arch:
-					gen_name = "Visual Studio 11 ARM"
-				elif "x64" == arch:
-					gen_name = "Visual Studio 11 Win64"
 				compilers.append(compiler_info(arch, gen_name, toolset, target_platform))
 		elif "clang" == compiler:
 			compiler_name = "clang"
@@ -358,7 +353,10 @@ class batch_command:
 
 def log_error(message):
 	print("[E] %s" % message)
-	os.system("pause")
+	if 0 == sys.platform.find("win"):
+		os.system("pause")
+	else:
+		os.system("read")
 	sys.exit(1)
 
 def log_info(message):

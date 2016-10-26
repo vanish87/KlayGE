@@ -649,11 +649,11 @@ struct ShaderParser
 		uint32_t shader_model = KlayGE::LE2Native(*res_token);
 		++ res_token;
 		// TODO: check here, shader_model is unused.
-		UNREF_PARAM(shader_model);
+		KFL_UNUSED(shader_model);
 		uint32_t compile_flags = KlayGE::LE2Native(*res_token);
 		++ res_token;
 		// TODO: check here, compile_flags is unused.
-		UNREF_PARAM(compile_flags);
+		KFL_UNUSED(compile_flags);
 
 		uint32_t const * resource_binding_tokens = reinterpret_cast<uint32_t const *>(reinterpret_cast<char const *>(first_token) + resource_binding_offset);
 		program->resource_bindings.resize(num_resource_bindings);
@@ -781,12 +781,11 @@ struct ShaderParser
 
 	uint32_t GetCBBindPoint(char const * name) const
 	{
-		for (std::vector<DXBCInputBindDesc>::const_iterator itr = program->resource_bindings.begin();
-			itr != program->resource_bindings.end(); ++ itr)
+		for (auto const & ibd : program->resource_bindings)
 		{
-			if (0 == strcmp(itr->name, name))
+			if (0 == strcmp(ibd.name, name))
 			{
-				return itr->bind_point;
+				return ibd.bind_point;
 			}
 		}
 
@@ -892,11 +891,11 @@ struct ShaderParser
 
 	void SortCBVars()
 	{
-		for (std::vector<DXBCConstantBuffer>::iterator itr = program->cbuffers.begin(); itr != program->cbuffers.end(); ++ itr)
+		for (auto& cb : program->cbuffers)
 		{
-			if (SCBT_CBUFFER == itr->desc.type)
+			if (SCBT_CBUFFER == cb.desc.type)
 			{
-				std::sort(itr->vars.begin(), itr->vars.end(), SortFuncLess);
+				std::sort(cb.vars.begin(), cb.vars.end(), SortFuncLess);
 			}
 		}
 	}

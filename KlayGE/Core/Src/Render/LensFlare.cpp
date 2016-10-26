@@ -41,11 +41,8 @@ namespace KlayGE
 			vertices.push_back(float3(+1, -1, i + 0.1f));
 		}
 
-		ElementInitData init_data;
-		init_data.data = &vertices[0];
-		init_data.slice_pitch = init_data.row_pitch = static_cast<uint32_t>(vertices.size() * sizeof(vertices[0]));
-
-		GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+			static_cast<uint32_t>(vertices.size() * sizeof(vertices[0])), &vertices[0]);
 		rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_BGR32F)));
 
 		std::vector<uint32_t> indices;
@@ -60,13 +57,12 @@ namespace KlayGE
 			indices.push_back(i * 4 + 2);
 		}
 
-		init_data.data = &indices[0];
-		init_data.slice_pitch = init_data.row_pitch = static_cast<uint32_t>(indices.size() * sizeof(indices[0]));
-
-		GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+			static_cast<uint32_t>(indices.size() * sizeof(indices[0])), &indices[0]);
 		rl_->BindIndexStream(ib, EF_R32UI);
 
-		simple_forward_tech_ = SyncLoadRenderEffect("LensFlare.fxml")->TechniqueByName("LensFlare");
+		effect_ = SyncLoadRenderEffect("LensFlare.fxml");
+		simple_forward_tech_ = effect_->TechniqueByName("LensFlare");
 		technique_ = simple_forward_tech_;
 
 		effect_attrs_ |= EA_SimpleForward;
@@ -74,8 +70,8 @@ namespace KlayGE
 
 	void LensFlareRenderable::FlareParam(std::vector<float3> const & param, float alpha_fac)
 	{
-		*(technique_->Effect().ParameterByName("flare_param")) = param;
-		*(technique_->Effect().ParameterByName("alpha_fac")) = alpha_fac;
+		*(effect_->ParameterByName("flare_param")) = param;
+		*(effect_->ParameterByName("alpha_fac")) = alpha_fac;
 	}
 
 	void LensFlareRenderable::OnRenderBegin()
@@ -83,10 +79,10 @@ namespace KlayGE
 		App3DFramework const & app = Context::Instance().AppInstance();
 		Camera const & camera = app.ActiveCamera();
 			
-		*(technique_->Effect().ParameterByName("eye_pos")) = camera.EyePos();
+		*(effect_->ParameterByName("eye_pos")) = camera.EyePos();
 
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-		*(technique_->Effect().ParameterByName("scale")) = static_cast<float>(re.CurFrameBuffer()->Width()) / re.CurFrameBuffer()->Height();
+		*(effect_->ParameterByName("scale")) = static_cast<float>(re.CurFrameBuffer()->Width()) / re.CurFrameBuffer()->Height();
 	}
 
 	

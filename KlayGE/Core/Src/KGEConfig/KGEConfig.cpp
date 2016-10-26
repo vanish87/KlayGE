@@ -82,13 +82,19 @@ INT_PTR CALLBACK Graphics_Tab_DlgProc(HWND hDlg, UINT uMsg, WPARAM /*wParam*/, L
 	case WM_INITDIALOG:
 		{
 			HWND hFactoryCombo = GetDlgItem(hDlg, IDC_FACTORY_COMBO);
-			HMODULE mod_d3d11 = LoadLibraryEx(TEXT("D3D11.dll"), nullptr, 0);
+			HMODULE mod_d3d11 = LoadLibraryEx(TEXT("d3d11.dll"), nullptr, 0);
 			if (mod_d3d11)
 			{
 				SendMessage(hFactoryCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("D3D11")));
 				FreeLibrary(mod_d3d11);
 			}
-			HMODULE mod_gl = LoadLibraryEx(TEXT("OpenGL32.dll"), nullptr, 0);
+			HMODULE mod_d3d12 = LoadLibraryEx(TEXT("d3d12.dll"), nullptr, 0);
+			if (mod_d3d12)
+			{
+				SendMessage(hFactoryCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("D3D12")));
+				FreeLibrary(mod_d3d12);
+			}
+			HMODULE mod_gl = LoadLibraryEx(TEXT("opengl32.dll"), nullptr, 0);
 			if (mod_gl)
 			{
 				SendMessage(hFactoryCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("OpenGL")));
@@ -129,6 +135,7 @@ INT_PTR CALLBACK Graphics_Tab_DlgProc(HWND hDlg, UINT uMsg, WPARAM /*wParam*/, L
 			HWND hResCombo = GetDlgItem(hDlg, IDC_RES_COMBO);
 			SendMessage(hResCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("4096x2304 (16:9)")));
 			SendMessage(hResCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("3200x2000 (16:10)")));
+			SendMessage(hResCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("3000x2000 (3:2)")));
 			SendMessage(hResCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("2560x1600 (16:10)")));
 			SendMessage(hResCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("2160x1440 (3:2)")));
 			SendMessage(hResCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(TEXT("1920x1280 (3:2)")));
@@ -480,7 +487,7 @@ INT_PTR CreateTabDialogs(HWND hWnd, HINSTANCE hInstance)
 	RECT rc;
 	GetClientRect(hTab, &rc);
 	int ret = TabCtrl_AdjustRect(hTab, false, &rc);
-	UNREF_PARAM(ret);
+	KFL_UNUSED(ret);
 	rc.top += 20;
 
 	for (int i = 0; i < NTABS; ++ i)
@@ -488,7 +495,7 @@ INT_PTR CreateTabDialogs(HWND hWnd, HINSTANCE hInstance)
 		tci.pszText    = const_cast<TCHAR*>(tab_dlg_titles[i].c_str());
 		tci.cchTextMax = static_cast<int>(tab_dlg_titles[i].size());
 		ret = TabCtrl_InsertItem(hTab, i, &tci);
-		UNREF_PARAM(ret);
+		KFL_UNUSED(ret);
 
 		hTabDlg[i] = CreateDialogParam(hInstance, tab_dlg_ids[i].c_str(), hTab, tab_dlg_procs[i], 0);
 		MoveWindow(hTabDlg[i], rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, FALSE);
@@ -783,8 +790,7 @@ bool UIConfiguration(HINSTANCE hInstance)
 	CreateTabDialogs(hWnd, hInstance);
 	CreateButtons(hWnd, hInstance);
 
-	MSG msg;
-	memset(&msg, 0, sizeof(msg));
+	MSG msg = {};
 	while (::GetMessage(&msg, nullptr, 0, 0))
 	{
 		::TranslateMessage(&msg);
@@ -795,7 +801,7 @@ bool UIConfiguration(HINSTANCE hInstance)
 }
 
 #if defined(KLAYGE_COMPILER_MSVC)
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_ HINSTANCE /*hPrevInstance*/, _In_ LPSTR /*lpszCmdLine*/, _In_ int /*nCmdShow*/)
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance*/, _In_ LPSTR /*lpszCmdLine*/, _In_ int /*nCmdShow*/)
 #else
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR /*lpszCmdLine*/, int /*nCmdShow*/)
 #endif

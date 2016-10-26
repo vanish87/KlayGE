@@ -15,54 +15,39 @@
 
 #pragma once
 
-#include <KlayGE/D3D11/D3D11MinGWDefs.hpp>
-#if (_WIN32_WINNT < _WIN32_WINNT_WIN8)
-	#if defined(KLAYGE_COMPILER_MSVC)
-	#pragma warning(push)
-	#pragma warning(disable: 4005) // Macro redefinition
-	#elif defined(KLAYGE_COMPILER_GCC)
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wsign-compare" // Ignore comparison between int and uint
-	#endif
-	#include <d3d11.h>
-	#if defined(KLAYGE_COMPILER_MSVC)
-	#pragma warning(pop)
-	#elif defined(KLAYGE_COMPILER_GCC)
-	#pragma GCC diagnostic pop
-	#endif
-
-	#define DXGI_FORMAT_B4G4R4A4_UNORM static_cast<DXGI_FORMAT>(115)
-	#define D3D_FEATURE_LEVEL_11_1 0xb100
-#elif (_WIN32_WINNT < _WIN32_WINNT_WINBLUE)
-	#include <d3d11_1.h>
-#else
-	#include <d3d11_2.h>
+#include <KlayGE/SALWrapper.hpp>
+#include <dxgi1_5.h>
+#if defined(KLAYGE_COMPILER_GCC)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare" // Ignore comparison between int and uint
+#endif
+#include <d3d11_3.h>
+#if defined(KLAYGE_COMPILER_GCC)
+#pragma GCC diagnostic pop
 #endif
 
 namespace KlayGE
 {
 	typedef std::shared_ptr<IDXGIFactory1>				IDXGIFactory1Ptr;
-	typedef std::shared_ptr<IDXGIAdapter1>				IDXGIAdapter1Ptr;
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 	typedef std::shared_ptr<IDXGIFactory2>				IDXGIFactory2Ptr;
-	typedef std::shared_ptr<IDXGIAdapter2>				IDXGIAdapter2Ptr;
-#endif
-#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
 	typedef std::shared_ptr<IDXGIFactory3>				IDXGIFactory3Ptr;
-#endif
+	typedef std::shared_ptr<IDXGIFactory4>				IDXGIFactory4Ptr;
+	typedef std::shared_ptr<IDXGIFactory5>				IDXGIFactory5Ptr;
+	typedef std::shared_ptr<IDXGIAdapter1>				IDXGIAdapter1Ptr;
+	typedef std::shared_ptr<IDXGIAdapter2>				IDXGIAdapter2Ptr;
 	typedef std::shared_ptr<IDXGISwapChain>				IDXGISwapChainPtr;
-	typedef std::shared_ptr<ID3D11Device>				ID3D11DevicePtr;
-	typedef std::shared_ptr<ID3D11DeviceContext>		ID3D11DeviceContextPtr;
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 	typedef std::shared_ptr<IDXGISwapChain1>			IDXGISwapChain1Ptr;
-	typedef std::shared_ptr<ID3D11Device1>				ID3D11Device1Ptr;
-	typedef std::shared_ptr<ID3D11DeviceContext1>		ID3D11DeviceContext1Ptr;
-#endif
-#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
 	typedef std::shared_ptr<IDXGISwapChain2>			IDXGISwapChain2Ptr;
+	typedef std::shared_ptr<IDXGISwapChain3>			IDXGISwapChain3Ptr;
+	typedef std::shared_ptr<IDXGISwapChain4>			IDXGISwapChain4Ptr;
+	typedef std::shared_ptr<ID3D11Device>				ID3D11DevicePtr;
+	typedef std::shared_ptr<ID3D11Device1>				ID3D11Device1Ptr;
 	typedef std::shared_ptr<ID3D11Device2>				ID3D11Device2Ptr;
+	typedef std::shared_ptr<ID3D11Device3>				ID3D11Device3Ptr;
+	typedef std::shared_ptr<ID3D11DeviceContext>		ID3D11DeviceContextPtr;
+	typedef std::shared_ptr<ID3D11DeviceContext1>		ID3D11DeviceContext1Ptr;
 	typedef std::shared_ptr<ID3D11DeviceContext2>		ID3D11DeviceContext2Ptr;
-#endif
+	typedef std::shared_ptr<ID3D11DeviceContext3>		ID3D11DeviceContext3Ptr;
 	typedef std::shared_ptr<ID3D11Resource>				ID3D11ResourcePtr;
 	typedef std::shared_ptr<ID3D11Texture1D>			ID3D11Texture1DPtr;
 	typedef std::shared_ptr<ID3D11Texture2D>			ID3D11Texture2DPtr;
@@ -82,14 +67,10 @@ namespace KlayGE
 	typedef std::shared_ptr<ID3D11DepthStencilView>		ID3D11DepthStencilViewPtr;
 	typedef std::shared_ptr<ID3D11UnorderedAccessView>	ID3D11UnorderedAccessViewPtr;
 	typedef std::shared_ptr<ID3D11RasterizerState>		ID3D11RasterizerStatePtr;
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 	typedef std::shared_ptr<ID3D11RasterizerState1>		ID3D11RasterizerState1Ptr;
-#endif
 	typedef std::shared_ptr<ID3D11DepthStencilState>	ID3D11DepthStencilStatePtr;
 	typedef std::shared_ptr<ID3D11BlendState>			ID3D11BlendStatePtr;
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 	typedef std::shared_ptr<ID3D11BlendState1>			ID3D11BlendState1Ptr;
-#endif
 	typedef std::shared_ptr<ID3D11SamplerState>			ID3D11SamplerStatePtr;
 	typedef std::shared_ptr<ID3D11ShaderResourceView>	ID3D11ShaderResourceViewPtr;
 }

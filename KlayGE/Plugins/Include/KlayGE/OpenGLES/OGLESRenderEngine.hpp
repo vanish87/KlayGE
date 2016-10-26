@@ -44,9 +44,11 @@ namespace KlayGE
 			return false;
 		}
 
-		void UpdateGPUTimestampsFrequency() KLAYGE_OVERRIDE;
+		void UpdateGPUTimestampsFrequency() override;
 
 		void ForceFlush();
+
+		virtual TexturePtr const & ScreenDepthStencilTexture() const override;
 
 		void ScissorRect(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 
@@ -132,17 +134,18 @@ namespace KlayGE
 		}
 
 	private:
-		virtual void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) KLAYGE_OVERRIDE;
-		virtual void DoBindFrameBuffer(FrameBufferPtr const & fb) KLAYGE_OVERRIDE;
-		virtual void DoBindSOBuffers(RenderLayoutPtr const & rl) KLAYGE_OVERRIDE;
-		virtual void DoRender(RenderTechnique const & tech, RenderLayout const & rl) KLAYGE_OVERRIDE;
-		virtual void DoDispatch(RenderTechnique const & tech, uint32_t tgx, uint32_t tgy, uint32_t tgz) KLAYGE_OVERRIDE;
-		virtual void DoDispatchIndirect(RenderTechnique const & tech,
-			GraphicsBufferPtr const & buff_args, uint32_t offset) KLAYGE_OVERRIDE;
-		virtual void DoResize(uint32_t width, uint32_t height) KLAYGE_OVERRIDE;
-		virtual void DoDestroy() KLAYGE_OVERRIDE;
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
+		virtual void DoCreateRenderWindow(std::string const & name, RenderSettings const & settings) override;
+		virtual void DoBindFrameBuffer(FrameBufferPtr const & fb) override;
+		virtual void DoBindSOBuffers(RenderLayoutPtr const & rl) override;
+		virtual void DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl) override;
+		virtual void DoDispatch(RenderEffect const & effect, RenderTechnique const & tech,
+			uint32_t tgx, uint32_t tgy, uint32_t tgz) override;
+		virtual void DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
+			GraphicsBufferPtr const & buff_args, uint32_t offset) override;
+		virtual void DoResize(uint32_t width, uint32_t height) override;
+		virtual void DoDestroy() override;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
 
 		void FillRenderDeviceCaps();
 		void InitRenderStates();
@@ -151,7 +154,7 @@ namespace KlayGE
 		bool TextureFormatSupport(ElementFormat elem_fmt);
 		bool RenderTargetFormatSupport(ElementFormat elem_fmt, uint32_t sample_count, uint32_t sample_quality);
 
-		virtual void CheckConfig(RenderSettings& settings) KLAYGE_OVERRIDE;
+		virtual void CheckConfig(RenderSettings& settings) override;
 
 	private:
 		GLuint fbo_blit_src_;
@@ -173,6 +176,7 @@ namespace KlayGE
 		std::vector<std::string> so_vars_;
 		std::vector<char const *> so_vars_ptrs_;
 		std::vector<GLuint> so_buffs_;
+		GLenum so_buffer_mode_;
 
 		GLenum active_tex_unit_;
 		std::vector<GLuint> binded_targets_;
@@ -197,8 +201,6 @@ namespace KlayGE
 
 		bool gpu_disjoint_occurred_;
 	};
-
-	typedef std::shared_ptr<OGLESRenderEngine> OGLESRenderEnginePtr;
 }
 
 #endif			// _OGLESRENDERENGINE_HPP

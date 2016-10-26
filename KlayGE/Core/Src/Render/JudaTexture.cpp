@@ -668,8 +668,7 @@ namespace KlayGE
 					memset(&(*data)[0], 0, full_tile_bytes);
 				}
 
-				auto p = decoded_block_cache_.emplace(data_index, DecodedBlockInfo(data, decode_tick_));
-				iter = p.first;
+				iter = decoded_block_cache_.emplace(data_index, DecodedBlockInfo(data, decode_tick_)).first;
 			}
 
 			return &(*iter->second.data)[0];
@@ -1147,7 +1146,7 @@ namespace KlayGE
 			uint32_t const scale = tile_size_ / cache_tile_size_;
 			BOOST_ASSERT(scale * cache_tile_size_ == tile_size_);
 			BOOST_ASSERT(0 == (scale & (scale - 1)));
-			UNREF_PARAM(scale);
+			KFL_UNUSED(scale);
 
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
@@ -1192,7 +1191,8 @@ namespace KlayGE
 			uint32_t array_size = std::min(std::min((pages + s * s - 1) / (s * s), static_cast<uint32_t>(caps.max_pixel_texture_units - 1)), 7U);
 			if (caps.max_texture_array_length > array_size)
 			{
-				tex_cache_ = rf.MakeTexture2D(tile_with_border_size * s, tile_with_border_size * s, mipmap, array_size, format, 1, 0, EAH_GPU_Read, nullptr);
+				tex_cache_ = rf.MakeTexture2D(tile_with_border_size * s, tile_with_border_size * s, mipmap,
+					std::max(array_size, 2U), format, 1, 0, EAH_GPU_Read, nullptr);
 			}
 			else
 			{
@@ -1207,7 +1207,7 @@ namespace KlayGE
 			tex_indirect_ = rf.MakeTexture2D(num_tiles_, num_tiles_, 1, 1, EF_ABGR8, 1, 0, EAH_GPU_Read, nullptr);
 			tex_a_tile_indirect_ = rf.MakeTexture2D(1, 1, 1, 1, EF_ABGR8, 1, 0, EAH_CPU_Write, nullptr);
 
-			tile_free_list_.push_back(std::make_pair(0, pages));
+			tile_free_list_.emplace_back(0, pages);
 		}
 	}
 
@@ -1226,9 +1226,8 @@ namespace KlayGE
 		return tex_indirect_;
 	}
 
-	void JudaTexture::SetParams(RenderTechniquePtr const tech)
+	void JudaTexture::SetParams(RenderEffect const & effect)
 	{
-		RenderEffect& effect = tech->Effect();
 		if (tex_cache_)
 		{
 			*(effect.ParameterByName("juda_tex_cache")) = tex_cache_;
@@ -1445,7 +1444,7 @@ namespace KlayGE
 						{
 							++ freeiter;
 						}
-						tile_free_list_.insert(freeiter, std::make_pair(id, id + 1));
+						tile_free_list_.emplace(freeiter, id, id + 1);
 
 						tileiter = tim.erase(tileiter);
 					}
@@ -1472,7 +1471,7 @@ namespace KlayGE
 				}
 			}
 
-			std::array<uint32_t, 9> index_with_neighbors;
+			std::array<uint32_t, 9> index_with_neighbors = { { 0 } };
 			for (size_t j = 0; j < index_with_neighbors.size(); ++ j)
 			{
 				if (all_neighbor_ids[i + j] != 0xFFFFFFFF)
@@ -1493,7 +1492,11 @@ namespace KlayGE
 			uint32_t mip_border_size = cache_tile_border_size_;
 			for (uint32_t l = 0; l < mipmaps; ++ l)
 			{
+#if defined(KLAYGE_COMPILER_MSVC)
+				std::array<uint8_t const *, 9> neighbor_data_ptr{};
+#else
 				std::array<uint8_t const *, 9> neighbor_data_ptr;
+#endif
 				for (uint32_t j = 0; j < neighbor_data_ptr.size(); ++ j)
 				{
 					if (index_with_neighbors[j] != 0xFFFFFFFF)

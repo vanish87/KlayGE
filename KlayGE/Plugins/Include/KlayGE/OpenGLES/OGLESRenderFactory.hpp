@@ -17,19 +17,15 @@
 
 #include <KlayGE/PreDeclare.hpp>
 
-#ifdef KLAYGE_HAS_DECLSPEC
-	#ifdef KLAYGE_OGLES_RE_SOURCE				// Build dll
-		#define KLAYGE_OGLES_RE_API __declspec(dllexport)
-	#else										// Use dll
-		#define KLAYGE_OGLES_RE_API __declspec(dllimport)
-	#endif
-#else
-	#define KLAYGE_OGLES_RE_API
-#endif // KLAYGE_HAS_DECLSPEC
+#ifdef KLAYGE_OGLES_RE_SOURCE				// Build dll
+	#define KLAYGE_OGLES_RE_API KLAYGE_SYMBOL_EXPORT
+#else										// Use dll
+	#define KLAYGE_OGLES_RE_API KLAYGE_SYMBOL_IMPORT
+#endif
 
 extern "C"
 {
-	KLAYGE_OGLES_RE_API void MakeRenderFactory(KlayGE::RenderFactoryPtr& ptr);
+	KLAYGE_OGLES_RE_API void MakeRenderFactory(std::unique_ptr<KlayGE::RenderFactory>& ptr);
 }
 
 #endif			// _OGLESRENDERFACTORY_HPP

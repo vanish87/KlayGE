@@ -46,7 +46,7 @@ namespace
 {
 	using namespace KlayGE;
 
-	uint32_t const MODEL_BIN_VERSION = 9;
+	uint32_t const MODEL_BIN_VERSION = 11;
 
 	class RenderModelLoadingDesc : public ResLoadingDesc
 	{
@@ -65,6 +65,8 @@ namespace
 				char all_is_index_16_bit;
 				std::vector<std::vector<uint8_t>> merged_buff;
 				std::vector<uint8_t> merged_indices;
+				std::vector<GraphicsBufferPtr> merged_vbs;
+				GraphicsBufferPtr merged_ib;
 				std::vector<std::string> mesh_names;
 				std::vector<int32_t> mtl_ids;
 				std::vector<AABBox> pos_bbs;
@@ -109,6 +111,13 @@ namespace
 			return false;
 		}
 
+		virtual std::shared_ptr<void> CreateResource() override
+		{
+			RenderModelPtr model = model_desc_.CreateModelFactoryFunc(L"Model");
+			*model_desc_.model = model;
+			return model;
+		}
+
 		void SubThreadStage()
 		{
 			LoadModel(model_desc_.res_name, model_desc_.model_data->mtls, model_desc_.model_data->merged_ves,
@@ -132,10 +141,18 @@ namespace
 
 		std::shared_ptr<void> MainThreadStage()
 		{
-			if (!*model_desc_.model)
+			RenderModelPtr const & model = *model_desc_.model;
+			if (!model || !model->HWResourceReady())
 			{
-				RenderModelPtr model = this->CreateModel();
-				*model_desc_.model = model;
+				this->FillModel();
+
+				for (size_t i = 0; i < model_desc_.model_data->merged_buff.size(); ++i)
+				{
+					model_desc_.model_data->merged_vbs[i]->CreateHWResource(&model_desc_.model_data->merged_buff[i][0]);
+				}
+				model_desc_.model_data->merged_ib->CreateHWResource(&model_desc_.model_data->merged_indices[0]);
+
+				this->AddsSubPath();
 
 				model->BuildModelInfo();
 				for (uint32_t i = 0; i < model->NumSubrenderables(); ++ i)
@@ -145,7 +162,7 @@ namespace
 
 				model_desc_.model_data.reset();
 			}
-			return std::static_pointer_cast<void>(*model_desc_.model);
+			return std::static_pointer_cast<void>(model);
 		}
 
 		bool HasSubThreadStage() const
@@ -190,7 +207,7 @@ namespace
 
 			if (rhs_model->NumSubrenderables() > 0)
 			{
-				RenderLayoutPtr rhs_rl = rhs_model->Subrenderable(0)->GetRenderLayout();
+				RenderLayout const & rhs_rl = rhs_model->Subrenderable(0)->GetRenderLayout();
 			
 				std::vector<StaticMeshPtr> meshes(rhs_model->NumSubrenderables());
 				for (uint32_t mesh_index = 0; mesh_index < rhs_model->NumSubrenderables(); ++ mesh_index)
@@ -204,12 +221,12 @@ namespace
 					mesh->PosBound(rhs_mesh->PosBound());
 					mesh->TexcoordBound(rhs_mesh->TexcoordBound());
 
-					for (uint32_t ve_index = 0; ve_index < rhs_rl->NumVertexStreams(); ++ ve_index)
+					for (uint32_t ve_index = 0; ve_index < rhs_rl.NumVertexStreams(); ++ ve_index)
 					{
-						mesh->AddVertexStream(rhs_rl->GetVertexStream(ve_index),
-							rhs_rl->VertexStreamFormat(ve_index)[0]);
+						mesh->AddVertexStream(rhs_rl.GetVertexStream(ve_index),
+							rhs_rl.VertexStreamFormat(ve_index)[0]);
 					}
-					mesh->AddIndexStream(rhs_rl->GetIndexStream(), rhs_rl->IndexStreamFormat());
+					mesh->AddIndexStream(rhs_rl.GetIndexStream(), rhs_rl.IndexStreamFormat());
 
 					mesh->NumVertices(rhs_mesh->NumVertices());
 					mesh->NumTriangles(rhs_mesh->NumTriangles());
@@ -246,6 +263,8 @@ namespace
 				model->AssignSubrenderables(meshes.begin(), meshes.end());
 			}
 
+			this->AddsSubPath();
+
 			model->BuildModelInfo();
 			for (uint32_t i = 0; i < model->NumSubrenderables(); ++ i)
 			{
@@ -255,19 +274,15 @@ namespace
 			return std::static_pointer_cast<void>(model);
 		}
 
-	private:
-		RenderModelPtr CreateModel()
+		virtual std::shared_ptr<void> Resource() const override
 		{
-			std::wstring model_name;
-			if (model_desc_.model_data->joints.empty())
-			{
-				model_name = L"Mesh";
-			}
-			else
-			{
-				model_name = L"SkinnedMesh";
-			}
-			RenderModelPtr model = model_desc_.CreateModelFactoryFunc(model_name);
+			return *model_desc_.model;
+		}
+
+	private:
+		void FillModel()
+		{
+			RenderModelPtr const & model = *model_desc_.model;
 
 			model->NumMaterials(model_desc_.model_data->mtls.size());
 			for (uint32_t mtl_index = 0; mtl_index < model_desc_.model_data->mtls.size(); ++ mtl_index)
@@ -277,23 +292,14 @@ namespace
 
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			ElementInitData init_data;
-			std::vector<GraphicsBufferPtr> merged_vbs(model_desc_.model_data->merged_buff.size());
-			for (size_t i = 0; i < model_desc_.model_data->merged_buff.size(); ++ i)
+			model_desc_.model_data->merged_vbs.resize(model_desc_.model_data->merged_buff.size());
+			for (size_t i = 0; i < model_desc_.model_data->merged_buff.size(); ++i)
 			{
-				init_data.data = &model_desc_.model_data->merged_buff[i][0];
-				init_data.row_pitch = static_cast<uint32_t>(model_desc_.model_data->merged_buff[i].size());
-				init_data.slice_pitch = 0;
-				merged_vbs[i] = rf.MakeVertexBuffer(BU_Static, model_desc_.access_hint, &init_data);
+				model_desc_.model_data->merged_vbs[i] = rf.MakeDelayCreationVertexBuffer(BU_Static, model_desc_.access_hint,
+					static_cast<uint32_t>(model_desc_.model_data->merged_buff[i].size()));
 			}
-
-			GraphicsBufferPtr merged_ib;
-			{
-				init_data.data = &model_desc_.model_data->merged_indices[0];
-				init_data.row_pitch = static_cast<uint32_t>(model_desc_.model_data->merged_indices.size());
-				init_data.slice_pitch = 0;
-				merged_ib = rf.MakeIndexBuffer(BU_Static, model_desc_.access_hint, &init_data);
-			}
+			model_desc_.model_data->merged_ib = rf.MakeDelayCreationIndexBuffer(BU_Static, model_desc_.access_hint,
+				static_cast<uint32_t>(model_desc_.model_data->merged_indices.size()));
 
 			std::vector<StaticMeshPtr> meshes(model_desc_.model_data->mesh_names.size());
 			for (uint32_t mesh_index = 0; mesh_index < model_desc_.model_data->mesh_names.size(); ++ mesh_index)
@@ -310,9 +316,9 @@ namespace
 
 				for (uint32_t ve_index = 0; ve_index < model_desc_.model_data->merged_buff.size(); ++ ve_index)
 				{
-					mesh->AddVertexStream(merged_vbs[ve_index], model_desc_.model_data->merged_ves[ve_index]);
+					mesh->AddVertexStream(model_desc_.model_data->merged_vbs[ve_index], model_desc_.model_data->merged_ves[ve_index]);
 				}
-				mesh->AddIndexStream(merged_ib, model_desc_.model_data->all_is_index_16_bit ? EF_R16UI : EF_R32UI);
+				mesh->AddIndexStream(model_desc_.model_data->merged_ib, model_desc_.model_data->all_is_index_16_bit ? EF_R16UI : EF_R32UI);
 
 				mesh->NumVertices(model_desc_.model_data->mesh_num_vertices[mesh_index]);
 				mesh->NumTriangles(model_desc_.model_data->mesh_num_indices[mesh_index] / 3);
@@ -322,7 +328,7 @@ namespace
 
 			if (model_desc_.model_data->kfs && !model_desc_.model_data->kfs->empty())
 			{
-				if (model->IsSkinned())
+				if (!model_desc_.model_data->joints.empty())
 				{
 					SkinnedModelPtr skinned_model = checked_pointer_cast<SkinnedModel>(model);
 
@@ -341,8 +347,20 @@ namespace
 			}
 
 			model->AssignSubrenderables(meshes.begin(), meshes.end());
+		}
 
-			return model;
+		void AddsSubPath()
+		{
+			std::string sub_path;
+			auto sub_path_loc = model_desc_.res_name.find_last_of('/');
+			if (sub_path_loc != std::string::npos)
+			{
+				sub_path = ResLoader::Instance().Locate(model_desc_.res_name.substr(0, sub_path_loc));
+				if (!sub_path.empty())
+				{
+					ResLoader::Instance().AddPath(sub_path);
+				}
+			}
 		}
 
 	private:
@@ -353,7 +371,8 @@ namespace
 namespace KlayGE
 {
 	RenderModel::RenderModel(std::wstring const & name)
-		: name_(name)
+		: name_(name),
+			hw_res_ready_(false)
 	{
 	}
 
@@ -461,9 +480,27 @@ namespace KlayGE
 		return ab;
 	}
 
+	bool RenderModel::HWResourceReady() const
+	{
+		bool ready = hw_res_ready_;
+		if (ready)
+		{
+			for (uint32_t i = 0; i < this->NumSubrenderables(); ++i)
+			{
+				ready &= checked_pointer_cast<StaticMesh>(this->Subrenderable(i))->HWResourceReady();
+				if (!ready)
+				{
+					break;
+				}
+			}
+		}
+		return ready;
+	}
+
 
 	StaticMesh::StaticMesh(RenderModelPtr const & model, std::wstring const & name)
-		: name_(name), model_(model)
+		: name_(name), model_(model),
+			hw_res_ready_(false)
 	{
 		rl_ = Context::Instance().RenderFactoryInstance().MakeRenderLayout();
 		rl_->TopologyType(RenderLayout::TT_TriangleList);
@@ -473,7 +510,7 @@ namespace KlayGE
 	{
 	}
 
-	void StaticMesh::BuildMeshInfo()
+	void StaticMesh::DoBuildMeshInfo()
 	{
 		opacity_map_enabled_ = false;
 
@@ -482,10 +519,10 @@ namespace KlayGE
 		mtl_ = model->GetMaterial(this->MaterialID());
 		for (auto const & texture_slot : mtl_->texture_slots)
 		{
-			std::function<TexturePtr()> tl;
+			TexturePtr tex;
 			if (!ResLoader::Instance().Locate(texture_slot.second).empty())
 			{
-				tl = ASyncLoadTexture(texture_slot.second, EAH_GPU_Read | EAH_Immutable);
+				tex = ASyncLoadTexture(texture_slot.second, EAH_GPU_Read | EAH_Immutable);
 			}
 
 			size_t const slot_type_hash = RT_HASH(texture_slot.first.c_str());
@@ -493,27 +530,27 @@ namespace KlayGE
 			if ((CT_HASH("Color") == slot_type_hash) || (CT_HASH("Diffuse Color") == slot_type_hash)
 				|| (CT_HASH("Diffuse Color Map") == slot_type_hash))
 			{
-				diffuse_tl_ = tl;
+				diffuse_tex_ = tex;
 			}
 			else if ((CT_HASH("Specular Level") == slot_type_hash) || (CT_HASH("Specular Color") == slot_type_hash))
 			{
-				specular_tl_ = tl;
+				specular_tex_ = tex;
 			}
 			else if ((CT_HASH("Glossiness") == slot_type_hash) || (CT_HASH("Reflection Glossiness Map") == slot_type_hash))
 			{
-				shininess_tl_ = tl;
+				shininess_tex_ = tex;
 			}
 			else if ((CT_HASH("Bump") == slot_type_hash) || (CT_HASH("Bump Map") == slot_type_hash))
 			{
-				normal_tl_ = tl;
+				normal_tex_ = tex;
 			}
 			else if ((CT_HASH("Height") == slot_type_hash) || (CT_HASH("Height Map") == slot_type_hash))
 			{
-				height_tl_ = tl;
+				height_tex_ = tex;
 			}
 			else if (CT_HASH("Self-Illumination") == slot_type_hash)
 			{
-				emit_tl_ = tl;
+				emit_tex_ = tex;
 			}
 			else if (CT_HASH("Opacity") == slot_type_hash)
 			{
@@ -549,14 +586,19 @@ namespace KlayGE
 			effect_attrs_ |= EA_TransparencyBack;
 			effect_attrs_ |= EA_TransparencyFront;
 		}
-		if ((mtl_->emit.x() > 0) || (mtl_->emit.y() > 0) || (mtl_->emit.z() > 0) || emit_tl_
+		if ((mtl_->emit.x() > 0) || (mtl_->emit.y() > 0) || (mtl_->emit.z() > 0) || emit_tex_
 			|| (effect_attrs_ & EA_TransparencyBack) || (effect_attrs_ & EA_TransparencyFront)
 			|| (effect_attrs_ & EA_Reflection))
 		{
 			effect_attrs_ |= EA_SpecialShading;
 		}
 
-		DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+		if (mtl_->sss)
+		{
+			effect_attrs_ |= EA_SSS;
+		}
+
+		auto drl = Context::Instance().DeferredRenderingLayerInstance();
 		if (drl)
 		{
 			this->UpdateTechniques();
@@ -566,36 +608,6 @@ namespace KlayGE
 	std::wstring const & StaticMesh::Name() const
 	{
 		return name_;
-	}
-
-	void StaticMesh::OnRenderBegin()
-	{
-		if (diffuse_tl_ && !diffuse_tex_)
-		{
-			diffuse_tex_ = diffuse_tl_();
-		}
-		if (specular_tl_ && !specular_tex_)
-		{
-			specular_tex_ = specular_tl_();
-		}
-		if (shininess_tl_ && !shininess_tex_)
-		{
-			shininess_tex_ = shininess_tl_();
-		}
-		if (normal_tl_ && !normal_tex_)
-		{
-			normal_tex_ = normal_tl_();
-		}
-		if (height_tl_ && !height_tex_)
-		{
-			height_tex_ = height_tl_();
-		}
-		if (emit_tl_ && !emit_tex_)
-		{
-			emit_tex_ = emit_tl_();
-		}
-
-		Renderable::OnRenderBegin();
 	}
 
 	AABBox const & StaticMesh::PosBound() const
@@ -621,11 +633,7 @@ namespace KlayGE
 	void StaticMesh::AddVertexStream(void const * buf, uint32_t size, vertex_element const & ve, uint32_t access_hint)
 	{
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-		ElementInitData init_data;
-		init_data.data = buf;
-		init_data.row_pitch = size;
-		init_data.slice_pitch = 0;
-		GraphicsBufferPtr vb = rf.MakeVertexBuffer(BU_Static, access_hint, &init_data);
+		GraphicsBufferPtr vb = rf.MakeVertexBuffer(BU_Static, access_hint, size, buf);
 		this->AddVertexStream(vb, ve);
 	}
 
@@ -638,11 +646,7 @@ namespace KlayGE
 	{
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-		ElementInitData init_data;
-		init_data.data = buf;
-		init_data.row_pitch = size;
-		init_data.slice_pitch = 0;
-		GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, access_hint, &init_data);
+		GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, access_hint, size, buf);
 		this->AddIndexStream(ib, format);
 	}
 
@@ -1015,6 +1019,7 @@ namespace KlayGE
 		}
 #else
 		BOOST_ASSERT(!jit);
+		KFL_UNUSED(jit);
 #endif
 	}
 
@@ -1136,6 +1141,10 @@ namespace KlayGE
 			decoded->read(&mtl->shininess, sizeof(float));
 			mtl->shininess = LE2Native(mtl->shininess);
 
+			uint8_t sss;
+			decoded->read(&sss, sizeof(sss));
+			mtl->sss = sss ? true : false;
+
 			if (Context::Instance().Config().graphics_cfg.gamma)
 			{
 				mtl->ambient.x() = MathLib::srgb_to_linear(mtl->ambient.x());
@@ -1154,8 +1163,29 @@ namespace KlayGE
 			{
 				std::string type = ReadShortString(decoded);
 				std::string name = ReadShortString(decoded);
-				mtl->texture_slots.push_back(std::make_pair(type, name));
+				mtl->texture_slots.emplace_back(type, name);
 			}
+
+			uint8_t detail_mode;
+			decoded->read(&detail_mode, sizeof(detail_mode));
+			mtl->detail_mode = static_cast<RenderMaterial::SurfaceDetailMode>(detail_mode);
+
+			float height_offset;
+			decoded->read(&height_offset, sizeof(height_offset));
+			mtl->height_offset_scale.x() = LE2Native(height_offset);
+			float height_scale;
+			decoded->read(&height_scale, sizeof(height_scale));
+			mtl->height_offset_scale.y() = LE2Native(height_scale);
+
+			float tess_factor;
+			decoded->read(&tess_factor, sizeof(tess_factor));
+			mtl->tess_factors.x() = LE2Native(tess_factor);
+			decoded->read(&tess_factor, sizeof(tess_factor));
+			mtl->tess_factors.y() = LE2Native(tess_factor);
+			decoded->read(&tess_factor, sizeof(tess_factor));
+			mtl->tess_factors.z() = LE2Native(tess_factor);
+			decoded->read(&tess_factor, sizeof(tess_factor));
+			mtl->tess_factors.w() = LE2Native(tess_factor);
 		}
 
 		uint32_t num_merged_ves;
@@ -1439,7 +1469,7 @@ namespace KlayGE
 			access_hint, CreateModelFactoryFunc, CreateMeshFactoryFunc));
 	}
 
-	std::function<RenderModelPtr()> ASyncLoadModel(std::string const & meshml_name, uint32_t access_hint,
+	RenderModelPtr ASyncLoadModel(std::string const & meshml_name, uint32_t access_hint,
 		std::function<RenderModelPtr(std::wstring const &)> CreateModelFactoryFunc,
 		std::function<StaticMeshPtr(RenderModelPtr const &, std::wstring const &)> CreateMeshFactoryFunc)
 	{
@@ -1498,13 +1528,17 @@ namespace KlayGE
 			}
 
 			obj.SetMaterial(mtl_id, ambient, diffuse, mtls[i]->specular, mtls[i]->emit,
-				mtls[i]->opacity, mtls[i]->shininess);
+				mtls[i]->opacity, mtls[i]->shininess, mtls[i]->sss);
 
 			for (size_t ts = 0; ts < mtls[i]->texture_slots.size(); ++ ts)
 			{
 				int slot_id = obj.AllocTextureSlot(mtl_id);
 				obj.SetTextureSlot(mtl_id, slot_id, mtls[i]->texture_slots[ts].first, mtls[i]->texture_slots[ts].second);
 			}
+
+			obj.SetDetailMaterial(mtl_id, static_cast<MeshMLObj::Material::SurfaceDetailMode>(mtls[i]->detail_mode),
+				mtls[i]->height_offset_scale.x(), mtls[i]->height_offset_scale.y(),
+				mtls[i]->tess_factors.x(), mtls[i]->tess_factors.y(), mtls[i]->tess_factors.z(), mtls[i]->tess_factors.w());
 		}
 
 		for (size_t i = 0; i < mesh_names.size(); ++ i)
@@ -1804,20 +1838,19 @@ namespace KlayGE
 			{
 				StaticMesh const & mesh = *checked_pointer_cast<StaticMesh>(model->Subrenderable(0));
 
-				RenderLayoutPtr const & rl = mesh.GetRenderLayout();
-				merged_ves.resize(rl->NumVertexStreams());
-				for (uint32_t j = 0; j < rl->NumVertexStreams(); ++ j)
+				RenderLayout const & rl = mesh.GetRenderLayout();
+				merged_ves.resize(rl.NumVertexStreams());
+				for (uint32_t j = 0; j < rl.NumVertexStreams(); ++ j)
 				{
-					merged_ves[j] = rl->VertexStreamFormat(j)[0];
+					merged_ves[j] = rl.VertexStreamFormat(j)[0];
 				}
 
 				merged_buffs.resize(merged_ves.size());
-				for (uint32_t j = 0; j < rl->NumVertexStreams(); ++ j)
+				for (uint32_t j = 0; j < rl.NumVertexStreams(); ++ j)
 				{
-					GraphicsBufferPtr const & vb = rl->GetVertexStream(j);
-					GraphicsBufferPtr vb_cpu = rf.MakeVertexBuffer(BU_Static, EAH_CPU_Read, nullptr);
+					GraphicsBufferPtr const & vb = rl.GetVertexStream(j);
 					uint32_t size = vb->Size();
-					vb_cpu->Resize(size);
+					GraphicsBufferPtr vb_cpu = rf.MakeVertexBuffer(BU_Static, EAH_CPU_Read, size, nullptr);
 					vb->CopyToBuffer(*vb_cpu);
 
 					merged_buffs[j].resize(size);
@@ -1826,21 +1859,20 @@ namespace KlayGE
 					std::memcpy(&merged_buffs[j][0], mapper.Pointer<uint8_t>(), size);
 				}
 
-				if (EF_R16UI == rl->IndexStreamFormat())
+				if (EF_R16UI == rl.IndexStreamFormat())
 				{
 					all_is_index_16_bit = true;
 				}
 				else
 				{
-					BOOST_ASSERT(EF_R32UI == rl->IndexStreamFormat());
+					BOOST_ASSERT(EF_R32UI == rl.IndexStreamFormat());
 					all_is_index_16_bit = false;
 				}
 
 				{
-					GraphicsBufferPtr ib = rl->GetIndexStream();
-					GraphicsBufferPtr ib_cpu = rf.MakeIndexBuffer(BU_Static, EAH_CPU_Read, nullptr);
+					GraphicsBufferPtr ib = rl.GetIndexStream();
 					uint32_t size = ib->Size();
-					ib_cpu->Resize(size);
+					GraphicsBufferPtr ib_cpu = rf.MakeIndexBuffer(BU_Static, EAH_CPU_Read, size, nullptr);
 					ib->CopyToBuffer(*ib_cpu);
 
 					merged_indices.resize(size);
@@ -1932,26 +1964,32 @@ namespace KlayGE
 	RenderableLightSourceProxy::RenderableLightSourceProxy(RenderModelPtr const & model, std::wstring const & name)
 			: StaticMesh(model, name)
 	{
-		this->Technique(SyncLoadRenderEffect("LightSourceProxy.fxml")->TechniqueByName("LightSourceProxy"));
+		auto effect = SyncLoadRenderEffect("LightSourceProxy.fxml");
+		this->Technique(effect, effect->TechniqueByName("LightSourceProxy"));
 		effect_attrs_ |= EA_SimpleForward;
 	}
 
-	void RenderableLightSourceProxy::Technique(RenderTechniquePtr const & tech)
+	void RenderableLightSourceProxy::Technique(RenderEffectPtr const & effect, RenderTechnique* tech)
 	{
-		technique_ = simple_forward_tech_ = tech;
+		StaticMesh::Technique(effect, tech);
+
+		simple_forward_tech_ = tech;
 		if (tech)
 		{
-			mvp_param_ = technique_->Effect().ParameterByName("mvp");
-			model_param_ = technique_->Effect().ParameterByName("model");
-			pos_center_param_ = technique_->Effect().ParameterByName("pos_center");
-			pos_extent_param_ = technique_->Effect().ParameterByName("pos_extent");
-			tc_center_param_ = technique_->Effect().ParameterByName("tc_center");
-			tc_extent_param_ = technique_->Effect().ParameterByName("tc_extent");
+			mvp_param_ = effect_->ParameterByName("mvp");
+			model_param_ = effect_->ParameterByName("model");
+			pos_center_param_ = effect_->ParameterByName("pos_center");
+			pos_extent_param_ = effect_->ParameterByName("pos_extent");
+			tc_center_param_ = effect_->ParameterByName("tc_center");
+			tc_extent_param_ = effect_->ParameterByName("tc_extent");
 
-			light_color_param_ = technique_->Effect().ParameterByName("light_color");
-			light_is_projective_param_ = technique_->Effect().ParameterByName("light_is_projective");
-			projective_map_2d_tex_param_ = technique_->Effect().ParameterByName("projective_map_2d_tex");
-			projective_map_cube_tex_param_ = technique_->Effect().ParameterByName("projective_map_cube_tex");
+			light_color_param_ = effect_->ParameterByName("light_color");
+			light_is_projective_param_ = effect_->ParameterByName("light_is_projective");
+			projective_map_2d_tex_param_ = effect_->ParameterByName("projective_map_2d_tex");
+			projective_map_cube_tex_param_ = effect_->ParameterByName("projective_map_cube_tex");
+
+			select_mode_object_id_param_ = effect_->ParameterByName("object_id");
+			select_mode_tech_ = effect_->TechniqueByName("SelectModeTech");
 		}
 	}
 
@@ -2013,20 +2051,26 @@ namespace KlayGE
 	RenderableCameraProxy::RenderableCameraProxy(RenderModelPtr const & model, std::wstring const & name)
 			: StaticMesh(model, name)
 	{
-		this->Technique(SyncLoadRenderEffect("CameraProxy.fxml")->TechniqueByName("CameraProxy"));
+		auto effect = SyncLoadRenderEffect("CameraProxy.fxml");
+		this->Technique(effect, effect->TechniqueByName("CameraProxy"));
 		effect_attrs_ |= EA_SimpleForward;
 	}
 
-	void RenderableCameraProxy::Technique(RenderTechniquePtr const & tech)
+	void RenderableCameraProxy::Technique(RenderEffectPtr const & effect, RenderTechnique* tech)
 	{
-		technique_ = simple_forward_tech_ = tech;
+		StaticMesh::Technique(effect, tech);
+
+		simple_forward_tech_ = tech;
 		if (tech)
 		{
-			mvp_param_ = technique_->Effect().ParameterByName("mvp");
-			pos_center_param_ = technique_->Effect().ParameterByName("pos_center");
-			pos_extent_param_ = technique_->Effect().ParameterByName("pos_extent");
-			tc_center_param_ = technique_->Effect().ParameterByName("tc_center");
-			tc_extent_param_ = technique_->Effect().ParameterByName("tc_extent");
+			mvp_param_ = effect_->ParameterByName("mvp");
+			pos_center_param_ = effect_->ParameterByName("pos_center");
+			pos_extent_param_ = effect_->ParameterByName("pos_extent");
+			tc_center_param_ = effect_->ParameterByName("tc_center");
+			tc_extent_param_ = effect_->ParameterByName("tc_extent");
+
+			select_mode_object_id_param_ = effect_->ParameterByName("object_id");
+			select_mode_tech_ = effect_->TechniqueByName("SelectModeTech");
 		}
 	}
 

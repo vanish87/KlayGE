@@ -52,9 +52,6 @@
 #include <KlayGE/PostProcess.hpp>
 
 #include <glloader/glloader.h>
-#ifdef Bool
-#undef Bool		// for boost::foreach
-#endif
 
 #include <algorithm>
 #include <cstring>
@@ -175,10 +172,10 @@ namespace
 	}
 
 	void GLLOADER_APIENTRY DebugOutputProc(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
-		GLchar const * message, GLvoid* user_param)
+			GLchar const * message, void const * user_param)
 	{
-		UNREF_PARAM(length);
-		UNREF_PARAM(user_param);
+		KFL_UNUSED(length);
+		KFL_UNUSED(user_param);
 
 		std::string dbg = std::string("OpenGL debug output: source: ") + DebugSourceString(source) + "; "
 			+ "type: " + DebugTypeString(type) + "; "
@@ -245,6 +242,51 @@ namespace KlayGE
 		motion_frames_ = settings.motion_frames;
 
 		FrameBufferPtr win = MakeSharedPtr<OGLRenderWindow>(name, settings);
+
+		if (glloader_GL_VERSION_4_5())
+		{
+			native_shader_platform_name_ = "gl_4_5";
+		}
+		else if (glloader_GL_VERSION_4_4())
+		{
+			native_shader_platform_name_ = "gl_4_4";
+		}
+		else if (glloader_GL_VERSION_4_3())
+		{
+			native_shader_platform_name_ = "gl_4_3";
+		}
+		else if (glloader_GL_VERSION_4_2())
+		{
+			native_shader_platform_name_ = "gl_4_2";
+		}
+		else if (glloader_GL_VERSION_4_1())
+		{
+			native_shader_platform_name_ = "gl_4_1";
+		}
+		else if (glloader_GL_VERSION_4_0())
+		{
+			native_shader_platform_name_ = "gl_4_0";
+		}
+		else if (glloader_GL_VERSION_3_3())
+		{
+			native_shader_platform_name_ = "gl_3_3";
+		}
+		else if (glloader_GL_VERSION_3_2())
+		{
+			native_shader_platform_name_ = "gl_3_2";
+		}
+		else if (glloader_GL_VERSION_3_1())
+		{
+			native_shader_platform_name_ = "gl_3_1";
+		}
+		else if (glloader_GL_VERSION_3_0())
+		{
+			native_shader_platform_name_ = "gl_3_0";
+		}
+		else //if (glloader_GL_VERSION_2_1())
+		{
+			native_shader_platform_name_ = "gl_2_1";
+		}
 
 		this->FillRenderDeviceCaps();
 		this->InitRenderStates();
@@ -532,7 +574,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformi_cache_.emplace(cur_program_, std::map<GLint, int4>()).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		auto iter_v = iter_p->second.find(location);
 		if (iter_v == iter_p->second.end())
@@ -567,7 +609,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformf_cache_.emplace(cur_program_, std::map<GLint, float4>()).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		auto iter_v = iter_p->second.find(location);
 		if (iter_v == iter_p->second.end())
@@ -597,7 +639,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformi_cache_.emplace(cur_program_, std::map<GLint, int4>()).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -635,7 +677,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformf_cache_.emplace(cur_program_, std::map<GLint, float4>()).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -668,7 +710,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformi_cache_.emplace(cur_program_, std::map<GLint, int4>()).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -707,7 +749,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformf_cache_.emplace(cur_program_, std::map<GLint, float4>()).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -741,7 +783,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformi_cache_.emplace(cur_program_, std::map<GLint, int4>()).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -782,7 +824,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformf_cache_.emplace(cur_program_, std::map<GLint, float4>()).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -818,7 +860,7 @@ namespace KlayGE
 		if (iter_p == uniformi_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformi_cache_.emplace(cur_program_, std::map<GLint, int4>()).first;
+			iter_p = uniformi_cache_.emplace(cur_program_, (std::map<GLint, int4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -861,7 +903,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformf_cache_.emplace(cur_program_, std::map<GLint, float4>()).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count; ++ i)
 		{
@@ -899,7 +941,7 @@ namespace KlayGE
 		if (iter_p == uniformf_cache_.end())
 		{
 			dirty = true;
-			iter_p = uniformf_cache_.emplace(cur_program_, std::map<GLint, float4>()).first;
+			iter_p = uniformf_cache_.emplace(cur_program_, (std::map<GLint, float4>())).first;
 		}
 		for (GLsizei i = 0; i < count * 4; ++ i)
 		{
@@ -1026,55 +1068,66 @@ namespace KlayGE
 				break;
 			}
 
+			so_buffer_mode_ = GL_SEPARATE_ATTRIBS;
+
 			so_vars_.resize(0);
 			for (uint32_t i = 0; i < so_rl_->NumVertexStreams(); ++ i)
 			{
 				so_buffs_.push_back(checked_pointer_cast<OGLGraphicsBuffer>(so_rl_->GetVertexStream(i))->GLvbo());
 
-				vertex_element const & ve = so_rl_->VertexStreamFormat(i)[0];
-				switch (ve.usage)
+				auto const & streams = so_rl_->VertexStreamFormat(i);
+				for (size_t j = 0; j < streams.size(); ++ j)
 				{
-				case VEU_Position:
-					so_vars_.push_back("gl_Position");
-					break;
+					vertex_element const & ve = streams[j];
+					switch (ve.usage)
+					{
+					case VEU_Position:
+						so_vars_.push_back("gl_Position");
+						break;
 
-				case VEU_Normal:
-					so_vars_.push_back("gl_Normal");
-					break;
+					case VEU_Normal:
+						so_vars_.push_back("gl_Normal");
+						break;
 
-				case VEU_Diffuse:
-					so_vars_.push_back("gl_FrontColor");
-					break;
+					case VEU_Diffuse:
+						so_vars_.push_back("gl_FrontColor");
+						break;
 
-				case VEU_Specular:
-					so_vars_.push_back("gl_FrontSecondaryColor");
-					break;
+					case VEU_Specular:
+						so_vars_.push_back("gl_FrontSecondaryColor");
+						break;
 
-				case VEU_BlendWeight:
-					so_vars_.push_back("_BLENDWEIGHT");
-					break;
-					
-				case VEU_BlendIndex:
-					so_vars_.push_back("_BLENDINDEX");
-					break;
+					case VEU_BlendWeight:
+						so_vars_.push_back("_BLENDWEIGHT");
+						break;
 
-				case VEU_TextureCoord:
-					so_vars_.push_back("glTexCoord["
-						+ boost::lexical_cast<std::string>(static_cast<int>(ve.usage_index)) + "]");
-					break;
+					case VEU_BlendIndex:
+						so_vars_.push_back("_BLENDINDEX");
+						break;
 
-				case VEU_Tangent:
-					so_vars_.push_back("_TANGENT");
-					break;
-					
-				case VEU_Binormal:
-					so_vars_.push_back("_BINORMAL");
-					break;
+					case VEU_TextureCoord:
+						so_vars_.push_back("glTexCoord["
+							+ boost::lexical_cast<std::string>(static_cast<int>(ve.usage_index)) + "]");
+						break;
+
+					case VEU_Tangent:
+						so_vars_.push_back("_TANGENT");
+						break;
+
+					case VEU_Binormal:
+						so_vars_.push_back("_BINORMAL");
+						break;
+					}
+				}
+
+				if (streams.size() > 1)
+				{
+					so_buffer_mode_ = GL_INTERLEAVED_ATTRIBS;
 				}
 			}
 
 			so_vars_ptrs_.resize(so_vars_.size());
-			for (size_t i = 0; i < so_rl_->NumVertexStreams(); ++ i)
+			for (size_t i = 0; i < so_vars_.size(); ++ i)
 			{
 				so_vars_ptrs_[i] = so_vars_[i].c_str();
 			}
@@ -1083,12 +1136,12 @@ namespace KlayGE
 
 	// ‰÷»æ
 	/////////////////////////////////////////////////////////////////////////////////
-	void OGLRenderEngine::DoRender(RenderTechnique const & tech, RenderLayout const & rl)
+	void OGLRenderEngine::DoRender(RenderEffect const & effect, RenderTechnique const & tech, RenderLayout const & rl)
 	{
 		uint32_t const num_instances = rl.NumInstances();
 		BOOST_ASSERT(num_instances != 0);
 
-		OGLShaderObjectPtr cur_shader = checked_pointer_cast<OGLShaderObject>(tech.Pass(0)->GetShaderObject());
+		OGLShaderObjectPtr cur_shader = checked_pointer_cast<OGLShaderObject>(tech.Pass(0).GetShaderObject(effect));
 		checked_cast<OGLRenderLayout const *>(&rl)->Active(cur_shader);
 
 		uint32_t const vertex_count = rl.UseIndices() ? rl.NumIndices() : rl.NumVertices();
@@ -1148,14 +1201,14 @@ namespace KlayGE
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
+						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], so_buffer_mode_);
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
@@ -1163,21 +1216,21 @@ namespace KlayGE
 					}
 
 					glDrawElementsIndirect(mode, index_type, args_offset);
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 			else
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
+						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], so_buffer_mode_);
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
@@ -1185,7 +1238,7 @@ namespace KlayGE
 					}
 
 					glDrawArraysIndirect(mode, args_offset);
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 
@@ -1207,14 +1260,14 @@ namespace KlayGE
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
+						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], so_buffer_mode_);
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
@@ -1231,21 +1284,21 @@ namespace KlayGE
 						glDrawElementsInstancedARB(mode, static_cast<GLsizei>(rl.NumIndices()),
 							index_type, index_offset, num_instances);
 					}
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 			else
 			{
 				for (uint32_t i = 0; i < num_passes; ++ i)
 				{
-					RenderPassPtr const & pass = tech.Pass(i);
+					auto& pass = tech.Pass(i);
 
-					pass->Bind();
+					pass.Bind(effect);
 
 					if (so_rl_)
 					{
-						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+						OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
+						glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], so_buffer_mode_);
 						for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 						{
 							glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
@@ -1260,7 +1313,7 @@ namespace KlayGE
 					{
 						glDrawArraysInstancedARB(mode, rl.StartVertexLocation(), static_cast<GLsizei>(rl.NumVertices()), num_instances);
 					}
-					pass->Unbind();
+					pass.Unbind(effect);
 				}
 			}
 
@@ -1357,14 +1410,14 @@ namespace KlayGE
 				{
 					for (uint32_t i = 0; i < num_passes; ++ i)
 					{
-						RenderPassPtr const & pass = tech.Pass(i);
+						auto& pass = tech.Pass(i);
 
-						pass->Bind();
+						pass.Bind(effect);
 
 						if (so_rl_)
 						{
-							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-							glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
+							glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], so_buffer_mode_);
 							for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 							{
 								glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
@@ -1373,21 +1426,21 @@ namespace KlayGE
 
 						glDrawElements(mode, static_cast<GLsizei>(rl.NumIndices()),
 							index_type, index_offset);
-						pass->Unbind();
+						pass.Unbind(effect);
 					}
 				}
 				else
 				{
 					for (uint32_t i = 0; i < num_passes; ++ i)
 					{
-						RenderPassPtr const & pass = tech.Pass(i);
+						auto& pass = tech.Pass(i);
 
-						pass->Bind();
+						pass.Bind(effect);
 
 						if (so_rl_)
 						{
-							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass->GetShaderObject());
-							glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], GL_SEPARATE_ATTRIBS);
+							OGLShaderObjectPtr shader = checked_pointer_cast<OGLShaderObject>(pass.GetShaderObject(effect));
+							glTransformFeedbackVaryings(shader->GLSLProgram(), static_cast<GLsizei>(so_vars_ptrs_.size()), &so_vars_ptrs_[0], so_buffer_mode_);
 							for (uint32_t j = 0; j < so_buffs_.size(); ++ j)
 							{
 								glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, j, so_buffs_[j]);
@@ -1395,7 +1448,7 @@ namespace KlayGE
 						}
 
 						glDrawArrays(mode, rl.StartVertexLocation(), static_cast<GLsizei>(rl.NumVertices()));
-						pass->Unbind();
+						pass.Unbind(effect);
 					}
 				}
 
@@ -1411,24 +1464,38 @@ namespace KlayGE
 		checked_cast<OGLRenderLayout const *>(&rl)->Deactive(cur_shader);
 	}
 
-	void OGLRenderEngine::DoDispatch(RenderTechnique const & /*tech*/, uint32_t /*tgx*/, uint32_t /*tgy*/, uint32_t /*tgz*/)
+	void OGLRenderEngine::DoDispatch(RenderEffect const & effect, RenderTechnique const & tech,
+		uint32_t tgx, uint32_t tgy, uint32_t tgz)
 	{
 		BOOST_ASSERT(false);
+
+		KFL_UNUSED(effect);
+		KFL_UNUSED(tech);
+		KFL_UNUSED(tgx);
+		KFL_UNUSED(tgy);
+		KFL_UNUSED(tgz);
 	}
 
-	void OGLRenderEngine::DoDispatchIndirect(RenderTechnique const & tech,
+	void OGLRenderEngine::DoDispatchIndirect(RenderEffect const & effect, RenderTechnique const & tech,
 			GraphicsBufferPtr const & buff_args, uint32_t offset)
 	{
 		BOOST_ASSERT(false);
 
-		UNREF_PARAM(tech);
-		UNREF_PARAM(buff_args);
-		UNREF_PARAM(offset);
+		KFL_UNUSED(effect);
+		KFL_UNUSED(tech);
+		KFL_UNUSED(buff_args);
+		KFL_UNUSED(offset);
 	}
 
 	void OGLRenderEngine::ForceFlush()
 	{
 		glFlush();
+	}
+
+	TexturePtr const & OGLRenderEngine::ScreenDepthStencilTexture() const
+	{
+		static TexturePtr ret;
+		return ret;
 	}
 
 	// …Ë÷√ºÙ≥˝æÿ’Û
@@ -1517,6 +1584,8 @@ namespace KlayGE
 		}
 
 		so_rl_.reset();
+
+		glloader_uninit();
 
 #if defined KLAYGE_PLATFORM_WINDOWS
 		::FreeLibrary(mod_opengl32_);
@@ -1625,7 +1694,7 @@ namespace KlayGE
 		glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &temp);
 		caps_.max_texture_cube_size = temp;
 
-		/*if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_texture_array())
+		if (glloader_GL_VERSION_3_0() || glloader_GL_EXT_texture_array())
 		{
 			glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS_EXT, &temp);
 			caps_.max_texture_array_length = temp;
@@ -1633,8 +1702,7 @@ namespace KlayGE
 		else
 		{
 			caps_.max_texture_array_length = 1;
-		}*/
-		caps_.max_texture_array_length = 1;
+		}
 
 		glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &temp);
 		caps_.max_pixel_texture_units = static_cast<uint8_t>(temp);
@@ -1719,6 +1787,17 @@ namespace KlayGE
 		}
 		caps_.no_overwrite_support = false;
 		caps_.full_npot_texture_support = true;
+		/* TODO
+		if ((caps_.max_texture_array_length > 1)
+			&& (glloader_GL_VERSION_3_2() || glloader_GL_ARB_geometry_shader4() || glloader_GL_EXT_geometry_shader4()))
+		{
+			caps_.render_to_texture_array_support = true;
+		}
+		else
+		{
+			caps_.render_to_texture_array_support = false;
+		}*/
+		caps_.render_to_texture_array_support = false;
 
 		if (glloader_GL_VERSION_3_2() || glloader_GL_ARB_geometry_shader4() || glloader_GL_EXT_geometry_shader4())
 		{
@@ -1934,6 +2013,20 @@ namespace KlayGE
 		{
 			texture_format_.insert(EF_BC4_SRGB);
 			texture_format_.insert(EF_BC5_SRGB);
+		}
+		if (glloader_GL_VERSION_4_3() || glloader_GL_ARB_ES3_compatibility())
+		{
+			texture_format_.insert(EF_ETC1);
+			texture_format_.insert(EF_ETC2_R11);
+			texture_format_.insert(EF_SIGNED_ETC2_R11);
+			texture_format_.insert(EF_ETC2_GR11);
+			texture_format_.insert(EF_SIGNED_ETC2_GR11);
+			texture_format_.insert(EF_ETC2_BGR8);
+			texture_format_.insert(EF_ETC2_BGR8_SRGB);
+			texture_format_.insert(EF_ETC2_A1BGR8);
+			texture_format_.insert(EF_ETC2_A1BGR8_SRGB);
+			texture_format_.insert(EF_ETC2_ABGR8);
+			texture_format_.insert(EF_ETC2_ABGR8_SRGB);
 		}
 
 		GLint max_samples;

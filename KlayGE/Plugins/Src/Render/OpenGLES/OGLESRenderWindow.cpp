@@ -24,15 +24,6 @@
 
 #include <map>
 #include <boost/assert.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
-#endif
-#include <boost/algorithm/string/split.hpp>
-#if defined(KLAYGE_COMPILER_GCC)
-#pragma GCC diagnostic pop
-#endif
-#include <boost/algorithm/string/trim.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include <glloader/glloader.h>
@@ -60,8 +51,6 @@ namespace KlayGE
 		color_bits_			= NumFormatBits(settings.color_fmt);
 
 		WindowPtr const & main_wnd = Context::Instance().AppInstance().MainWnd();		
-		on_paint_connect_ = main_wnd->OnPaint().connect(std::bind(&OGLESRenderWindow::OnPaint, this,
-			std::placeholders::_1));
 		on_exit_size_move_connect_ = main_wnd->OnExitSizeMove().connect(std::bind(&OGLESRenderWindow::OnExitSizeMove, this,
 			std::placeholders::_1));
 		on_size_connect_ = main_wnd->OnSize().connect(std::bind(&OGLESRenderWindow::OnSize, this,
@@ -74,8 +63,8 @@ namespace KlayGE
 		}
 		else
 		{
-			top_ = settings.top;
-			left_ = settings.left;
+			left_ = main_wnd->Left();
+			top_ = main_wnd->Top();
 		}
 
 #if !(defined KLAYGE_PLATFORM_IOS)
@@ -154,17 +143,11 @@ namespace KlayGE
 		}
 		available_versions.push_back(std::make_tuple("2.0", EGL_OPENGL_ES2_BIT, 2, 0));
 
-		std::vector<std::string> strs;
-		boost::algorithm::split(strs, settings.options, boost::is_any_of(","));
-		for (size_t index = 0; index < strs.size(); ++ index)
+		for (size_t index = 0; index < settings.options.size(); ++ index)
 		{
-			std::string& opt = strs[index];
-			boost::algorithm::trim(opt);
-			std::string::size_type loc = opt.find(':');
-			std::string opt_name = opt.substr(0, loc);
-			std::string opt_val = opt.substr(loc + 1);
-
-			if ("version" == opt_name)
+			std::string const & opt_name = settings.options[index].first;
+			std::string const & opt_val = settings.options[index].second;
+			if (0 == strcmp("version", opt_name.c_str()))
 			{
 				size_t feature_index = 0;
 				for (size_t i = 0; i < available_versions.size(); ++ i)
@@ -318,7 +301,6 @@ namespace KlayGE
 
 	OGLESRenderWindow::~OGLESRenderWindow()
 	{
-		on_paint_connect_.disconnect();
 		on_exit_size_move_connect_.disconnect();
 		on_size_connect_.disconnect();
 
@@ -340,9 +322,6 @@ namespace KlayGE
 		// Notify viewports of resize
 		viewport_->width = width;
 		viewport_->height = height;
-
-		App3DFramework& app = Context::Instance().AppInstance();
-		app.OnResize(width, height);
 	}
 
 	// 改变窗口位置
@@ -413,7 +392,7 @@ namespace KlayGE
 	void OGLESRenderWindow::WindowMovedOrResized(Window const & win)
 	{
 #if defined KLAYGE_PLATFORM_WINDOWS
-		UNREF_PARAM(win);
+		KFL_UNUSED(win);
 
 		::RECT rect;
 		::GetClientRect(hWnd_, &rect);
@@ -447,12 +426,12 @@ namespace KlayGE
 		uint32_t new_width = w - new_left;
 		uint32_t new_height = h - new_top;
 #elif defined KLAYGE_PLATFORM_DARWIN
-		UNREF_PARAM(win);
+		KFL_UNUSED(win);
 		uint2 screen = Context::Instance().AppInstance().MainWnd()->GetNSViewSize();
 		uint32_t new_width = screen[0];
 		uint32_t new_height = screen[1];
 #elif defined KLAYGE_PLATFORM_IOS
-		UNREF_PARAM(win);
+		KFL_UNUSED(win);
 		uint2 screen = Context::Instance().AppInstance().MainWnd()->GetGLKViewSize();
 		uint32_t new_width = screen[0];
 		uint32_t new_height = screen[1];
@@ -502,18 +481,6 @@ namespace KlayGE
 #else
 		eglSwapBuffers(display_, surf_);
 #endif
-	}
-
-	void OGLESRenderWindow::OnPaint(Window const & win)
-	{
-		// If we get WM_PAINT messges, it usually means our window was
-		// comvered up, so we need to refresh it by re-showing the contents
-		// of the current frame.
-		if (win.Active() && win.Ready())
-		{
-			Context::Instance().SceneManagerInstance().Update();
-			this->SwapBuffers();
-		}
 	}
 
 	void OGLESRenderWindow::OnExitSizeMove(Window const & win)

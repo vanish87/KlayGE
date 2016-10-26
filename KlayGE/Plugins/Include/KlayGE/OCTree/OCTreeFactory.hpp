@@ -17,19 +17,15 @@
 
 #include <KlayGE/PreDeclare.hpp>
 
-#ifdef KLAYGE_HAS_DECLSPEC
-	#ifdef KLAYGE_OCTREE_SM_SOURCE				// Build dll
-		#define KLAYGE_OCTREE_SM_API __declspec(dllexport)
-	#else										// Use dll
-		#define KLAYGE_OCTREE_SM_API __declspec(dllimport)
-	#endif
-#else
-	#define KLAYGE_OCTREE_SM_API
-#endif // KLAYGE_HAS_DECLSPEC
+#ifdef KLAYGE_OCTREE_SM_SOURCE				// Build dll
+	#define KLAYGE_OCTREE_SM_API KLAYGE_SYMBOL_EXPORT
+#else										// Use dll
+	#define KLAYGE_OCTREE_SM_API KLAYGE_SYMBOL_IMPORT
+#endif
 
 extern "C"
 {
-	KLAYGE_OCTREE_SM_API void MakeSceneManager(KlayGE::SceneManagerPtr& ptr);
+	KLAYGE_OCTREE_SM_API void MakeSceneManager(std::unique_ptr<KlayGE::SceneManager>& ptr);
 }
 
 #endif			// _OCTREEFACTORY_HPP

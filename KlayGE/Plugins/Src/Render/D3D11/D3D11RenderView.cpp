@@ -17,7 +17,7 @@
 #include <KFL/Math.hpp>
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/Context.hpp>
-#include <KlayGe/FrameBuffer.hpp>
+#include <KlayGE/FrameBuffer.hpp>
 
 #include <boost/assert.hpp>
 
@@ -33,6 +33,7 @@ namespace KlayGE
 		D3D11RenderEngine& renderEngine(*checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance()));
 		d3d_device_ = renderEngine.D3DDevice();
 		d3d_imm_ctx_ = renderEngine.D3DDeviceImmContext();
+		d3d_imm_ctx_1_ = renderEngine.D3DDeviceImmContext1();
 	}
 
 	D3D11RenderView::~D3D11RenderView()
@@ -81,28 +82,10 @@ namespace KlayGE
 	{
 		BOOST_ASSERT(gb.AccessHint() & EAH_GPU_Write);
 
-		D3D11_RENDER_TARGET_VIEW_DESC desc;
-		desc.Format = D3D11Mapping::MappingFormat(pf);
-		desc.ViewDimension = D3D11_RTV_DIMENSION_BUFFER;
-		desc.Buffer.ElementOffset = 0;
-		desc.Buffer.ElementWidth = std::min(width * height, gb.Size() / NumFormatBytes(pf));
-
-		ID3D11RenderTargetView* rt_view;
-		TIF(d3d_device_->CreateRenderTargetView(checked_cast<D3D11GraphicsBuffer*>(&gb)->D3DBuffer().get(), &desc, &rt_view));
-		rt_view_ = MakeCOMPtr(rt_view);
+		rt_view_ = checked_cast<D3D11GraphicsBuffer*>(&gb)->D3DRenderTargetView();
 
 		width_ = width * height;
 		height_ = 1;
-		pf_ = pf;
-
-		this->BindDiscardFunc();
-	}
-
-	D3D11RenderTargetRenderView::D3D11RenderTargetRenderView(ID3D11RenderTargetViewPtr const & view, uint32_t width, uint32_t height, ElementFormat pf)
-		: rt_view_(view), rt_src_(nullptr), rt_first_subres_(0), rt_num_subres_(0)
-	{
-		width_ = width;
-		height_ = height;
 		pf_ = pf;
 
 		this->BindDiscardFunc();
@@ -135,14 +118,12 @@ namespace KlayGE
 
 	void D3D11RenderTargetRenderView::BindDiscardFunc()
 	{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		if (re.D3D11RuntimeSubVer() >= 1)
 		{
 			discard_func_ = std::bind(&D3D11RenderTargetRenderView::HWDiscard, this);
 		}
 		else
-#endif
 		{
 			discard_func_ = std::bind(&D3D11RenderTargetRenderView::FackDiscard, this);
 		}
@@ -150,10 +131,7 @@ namespace KlayGE
 
 	void D3D11RenderTargetRenderView::HWDiscard()
 	{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
-		ID3D11DeviceContext1Ptr const & d3d_imm_ctx_1 = std::static_pointer_cast<ID3D11DeviceContext1>(d3d_imm_ctx_);
-		d3d_imm_ctx_1->DiscardView(rt_view_.get());
-#endif
+		d3d_imm_ctx_1_->DiscardView(rt_view_.get());
 	}
 
 	void D3D11RenderTargetRenderView::FackDiscard()
@@ -207,55 +185,15 @@ namespace KlayGE
 		this->BindDiscardFunc();
 	}
 
-	D3D11DepthStencilRenderView::D3D11DepthStencilRenderView(ID3D11DepthStencilViewPtr const & view, uint32_t width, uint32_t height, ElementFormat pf)
-		: ds_view_(view), rt_src_(nullptr), rt_first_subres_(0), rt_num_subres_(0)
-	{
-		width_ = width;
-		height_ = height;
-		pf_ = pf;
-
-		this->BindDiscardFunc();
-	}
-
 	D3D11DepthStencilRenderView::D3D11DepthStencilRenderView(uint32_t width, uint32_t height,
 											ElementFormat pf, uint32_t sample_count, uint32_t sample_quality)
-		: rt_src_(nullptr), rt_first_subres_(0), rt_num_subres_(0)
+		: rt_src_(nullptr), rt_first_subres_(0), rt_num_subres_(1)
 	{
 		BOOST_ASSERT(IsDepthFormat(pf));
 
-		D3D11_TEXTURE2D_DESC tex_desc;
-		tex_desc.Width = width;
-		tex_desc.Height = height;
-		tex_desc.MipLevels = 1;
-		tex_desc.ArraySize = 1;
-		tex_desc.Format = D3D11Mapping::MappingFormat(pf);
-		tex_desc.SampleDesc.Count = sample_count;
-		tex_desc.SampleDesc.Quality = sample_quality;
-		tex_desc.Usage = D3D11_USAGE_DEFAULT;
-		tex_desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-		tex_desc.CPUAccessFlags = 0;
-		tex_desc.MiscFlags = 0;
-		ID3D11Texture2D* depth_tex;
-		TIF(d3d_device_->CreateTexture2D(&tex_desc, nullptr, &depth_tex));
-
-		D3D11_DEPTH_STENCIL_VIEW_DESC desc;
-		desc.Format = tex_desc.Format;
-		if (sample_count > 1)
-		{
-			desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DMS;
-		}
-		else
-		{
-			desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-		}
-		desc.Flags = 0;
-		desc.Texture2D.MipSlice = 0;
-
-		ID3D11DepthStencilView* ds_view;
-		TIF(d3d_device_->CreateDepthStencilView(depth_tex, &desc, &ds_view));
-		ds_view_ = MakeCOMPtr(ds_view);
-
-		depth_tex->Release();
+		auto& rf = Context::Instance().RenderFactoryInstance();
+		TexturePtr ds_tex = rf.MakeTexture2D(width, height, 1, 1, pf, sample_count, sample_quality, EAH_GPU_Write, nullptr);
+		ds_view_ = checked_cast<D3D11Texture*>(ds_tex.get())->RetriveD3DDepthStencilView(0, 1, 0);
 
 		width_ = width;
 		height_ = height;
@@ -291,14 +229,12 @@ namespace KlayGE
 	
 	void D3D11DepthStencilRenderView::BindDiscardFunc()
 	{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		if (re.D3D11RuntimeSubVer() >= 1)
 		{
 			discard_func_ = std::bind(&D3D11DepthStencilRenderView::HWDiscard, this);
 		}
 		else
-#endif
 		{
 			discard_func_ = std::bind(&D3D11DepthStencilRenderView::FackDiscard, this);
 		}
@@ -306,10 +242,7 @@ namespace KlayGE
 
 	void D3D11DepthStencilRenderView::HWDiscard()
 	{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
-		ID3D11DeviceContext1Ptr const & d3d_imm_ctx_1 = std::static_pointer_cast<ID3D11DeviceContext1>(d3d_imm_ctx_);
-		d3d_imm_ctx_1->DiscardView(ds_view_.get());
-#endif
+		d3d_imm_ctx_1_->DiscardView(ds_view_.get());
 	}
 
 	void D3D11DepthStencilRenderView::FackDiscard()
@@ -319,14 +252,14 @@ namespace KlayGE
 
 	void D3D11DepthStencilRenderView::OnAttached(FrameBuffer& /*fb*/, uint32_t att)
 	{
-		UNREF_PARAM(att);
+		KFL_UNUSED(att);
 
 		BOOST_ASSERT(FrameBuffer::ATT_DepthStencil == att);
 	}
 
 	void D3D11DepthStencilRenderView::OnDetached(FrameBuffer& /*fb*/, uint32_t att)
 	{
-		UNREF_PARAM(att);
+		KFL_UNUSED(att);
 
 		BOOST_ASSERT(FrameBuffer::ATT_DepthStencil == att);
 	}
@@ -388,25 +321,12 @@ namespace KlayGE
 		D3D11RenderEngine& renderEngine(*checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance()));
 		d3d_device_ = renderEngine.D3DDevice();
 		d3d_imm_ctx_ = renderEngine.D3DDeviceImmContext();
+		d3d_imm_ctx_1_ = renderEngine.D3DDeviceImmContext1();
 
 		ua_view_ = checked_cast<D3D11GraphicsBuffer*>(&gb)->D3DUnorderedAccessView();
 
 		width_ = gb.Size() / NumFormatBytes(pf);
 		height_ = 1;
-		pf_ = pf;
-
-		this->BindDiscardFunc();
-	}
-
-	D3D11UnorderedAccessView::D3D11UnorderedAccessView(ID3D11UnorderedAccessViewPtr const & view, uint32_t width, uint32_t height, ElementFormat pf)
-		: ua_view_(view), ua_src_(nullptr), ua_first_subres_(0), ua_num_subres_(0)
-	{
-		D3D11RenderEngine& renderEngine(*checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance()));
-		d3d_device_ = renderEngine.D3DDevice();
-		d3d_imm_ctx_ = renderEngine.D3DDeviceImmContext();
-
-		width_ = width;
-		height_ = height;
 		pf_ = pf;
 
 		this->BindDiscardFunc();
@@ -433,14 +353,12 @@ namespace KlayGE
 
 	void D3D11UnorderedAccessView::BindDiscardFunc()
 	{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 		D3D11RenderEngine& re = *checked_cast<D3D11RenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 		if (re.D3D11RuntimeSubVer() >= 1)
 		{
 			discard_func_ = std::bind(&D3D11UnorderedAccessView::HWDiscard, this);
 		}
 		else
-#endif
 		{
 			discard_func_ = std::bind(&D3D11UnorderedAccessView::FackDiscard, this);
 		}
@@ -448,10 +366,7 @@ namespace KlayGE
 
 	void D3D11UnorderedAccessView::HWDiscard()
 	{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
-		ID3D11DeviceContext1Ptr const & d3d_imm_ctx_1 = std::static_pointer_cast<ID3D11DeviceContext1>(d3d_imm_ctx_);
-		d3d_imm_ctx_1->DiscardView(ua_view_.get());
-#endif
+		d3d_imm_ctx_1_->DiscardView(ua_view_.get());
 	}
 
 	void D3D11UnorderedAccessView::FackDiscard()

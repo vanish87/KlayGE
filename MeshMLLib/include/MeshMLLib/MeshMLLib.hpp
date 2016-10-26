@@ -69,6 +69,42 @@ namespace KlayGE
 			UES_All = 0xFF
 		};
 
+		typedef std::pair<std::string, std::string> TextureSlot;
+
+		struct Material
+		{
+			enum SurfaceDetailMode
+			{
+				SDM_Parallax = 0,
+				SDM_FlatTessellation,
+				SDM_SmoothTessellation
+			};
+			
+			Material()
+				: sss(false),
+					detail_mode(SDM_Parallax),
+					height_offset_scale(-0.5f, 0.06f),
+					tess_factors(5, 5, 1, 9)
+			{
+			}
+
+			float3 ambient;
+			float3 diffuse;
+			float3 specular;
+			float3 emit;
+			float opacity;
+			float shininess;
+			bool sss;
+
+			std::vector<TextureSlot> texture_slots;
+
+			SurfaceDetailMode detail_mode;
+			float2 height_offset_scale;
+			float4 tess_factors;
+
+			bool operator==(Material const & rhs) const;
+		};
+
 	public:
 		explicit MeshMLObj(float unit_scale);
 
@@ -100,7 +136,9 @@ namespace KlayGE
 
 		int AllocMaterial();
 		void SetMaterial(int mtl_id, float3 const & ambient, float3 const & diffuse,
-			float3 const & specular, float3 const & emit, float opacity, float shininess);
+			float3 const & specular, float3 const & emit, float opacity, float shininess, bool sss);
+		void SetDetailMaterial(int mtl_id, Material::SurfaceDetailMode detail_mode, float height_offset, float height_scale,
+			float edge_tess_hint, float inside_tess_hint, float min_tess, float max_tess);
 		int AllocTextureSlot(int mtl_id);
 		void SetTextureSlot(int mtl_id, int slot_id, std::string const & type, std::string const & name);
 
@@ -135,22 +173,8 @@ namespace KlayGE
 			std::string const & encoding = std::string());
 
 	private:
-		typedef std::pair<std::string, std::string> TextureSlot;
 		typedef std::pair<int, float> JointBinding;
 
-		struct Material
-		{
-			float3 ambient;
-			float3 diffuse;
-			float3 specular;
-			float3 emit;
-			float opacity;
-			float shininess;
-			std::vector<TextureSlot> texture_slots;
-
-			bool operator==(Material const & rhs) const;
-		};
-		
 		struct Vertex
 		{
 			float3 position;

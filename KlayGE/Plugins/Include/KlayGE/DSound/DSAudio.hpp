@@ -20,28 +20,9 @@
 
 #include <vector>
 #include <windows.h>
+#include <KlayGE/SALWrapper.hpp>
 #if defined(KLAYGE_COMPILER_GCC) || defined(KLAYGE_COMPILER_CLANG)
-	#define __bcount(size)
-	#define __in
-	#define __in_ecount(size)
-	#define __out
-	#define __out_ecount(size)
-	#define __out_bcount(size)
-	#define __inout
-	#define __in_bcount(size)
-	#define __in_opt
-	#define __in_ecount_opt(size)
-	#define __in_bcount_opt(size)
-	#define __out_opt
-	#define __out_ecount_opt(size)
-	#define __out_bcount_opt(size)
-	#define __inout_opt
-	#define __out_ecount_part_opt(size,length)
-	#define __in_xcount_opt(size) 
-	#define __deref_out
-	#define __deref_out_bcount(size)
-	#define __deref_opt_out_bcount(size)
-	#define __null
+#define __null
 #endif
 #include <dsound.h>
 
@@ -118,11 +99,12 @@ namespace KlayGE
 		void DoPlay(bool loop);
 		void DoStop();
 
+		bool FillData(uint32_t size);
+
 	private:
 		IDSBufferPtr	buffer_;
 		uint32_t		fillSize_;
 		uint32_t		fillCount_;
-		uint32_t		writePos_;
 
 		std::shared_ptr<IDirectSound3DBuffer> ds3DBuffer_;
 
@@ -156,8 +138,8 @@ namespace KlayGE
 		void SetListenerOri(float3 const & face, float3 const & up);
 
 	private:
-		virtual void DoSuspend() KLAYGE_OVERRIDE;
-		virtual void DoResume() KLAYGE_OVERRIDE;
+		virtual void DoSuspend() override;
+		virtual void DoResume() override;
 
 	private:
 		std::shared_ptr<IDirectSound>				dsound_;

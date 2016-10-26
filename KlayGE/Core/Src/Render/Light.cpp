@@ -121,31 +121,15 @@ namespace KlayGE
 
 	void LightSource::SkylightTex(TexturePtr const & tex_y, TexturePtr const & tex_c)
 	{
-		UNREF_PARAM(tex_y);
-		UNREF_PARAM(tex_c);
+		KFL_UNUSED(tex_y);
+		KFL_UNUSED(tex_c);
 
 		BOOST_ASSERT(false);
 	}
 
 	void LightSource::SkylightTex(TexturePtr const & tex)
 	{
-		UNREF_PARAM(tex);
-
-		BOOST_ASSERT(false);
-	}
-
-	void LightSource::SkylightTex(std::function<TexturePtr()> const & y_cube_tl,
-		std::function<TexturePtr()> const & c_cube_tl)
-	{
-		UNREF_PARAM(y_cube_tl);
-		UNREF_PARAM(c_cube_tl);
-
-		BOOST_ASSERT(false);
-	}
-
-	void LightSource::SkylightTex(std::function<TexturePtr()> const & cube_tl)
-	{
-		UNREF_PARAM(cube_tl);
+		KFL_UNUSED(tex);
 
 		BOOST_ASSERT(false);
 	}
@@ -285,7 +269,7 @@ namespace KlayGE
 
 	void LightSource::Radius(float radius)
 	{
-		UNREF_PARAM(radius);
+		KFL_UNUSED(radius);
 	}
 
 	float3 const & LightSource::Extend() const
@@ -296,7 +280,7 @@ namespace KlayGE
 
 	void LightSource::Extend(float3 const & extend)
 	{
-		UNREF_PARAM(extend);
+		KFL_UNUSED(extend);
 	}
 
 
@@ -322,28 +306,16 @@ namespace KlayGE
 
 	TexturePtr const & AmbientLightSource::SkylightTexY() const
 	{
-		if (sky_tex_y_tl_)
-		{
-			sky_tex_y_ = sky_tex_y_tl_();
-		}
 		return sky_tex_y_;
 	}
 
 	TexturePtr const & AmbientLightSource::SkylightTexC() const
 	{
-		if (sky_tex_c_tl_)
-		{
-			sky_tex_c_ = sky_tex_c_tl_();
-		}
 		return sky_tex_c_;
 	}
 
 	TexturePtr const & AmbientLightSource::SkylightTex() const
 	{
-		if (sky_tex_y_tl_)
-		{
-			sky_tex_y_ = sky_tex_y_tl_();
-		}
 		return sky_tex_y_;
 	}
 
@@ -356,18 +328,6 @@ namespace KlayGE
 	void AmbientLightSource::SkylightTex(TexturePtr const & tex)
 	{
 		sky_tex_y_ = tex;
-	}
-
-	void AmbientLightSource::SkylightTex(std::function<TexturePtr()> const & y_cube_tl,
-		std::function<TexturePtr()> const & c_cube_tl)
-	{
-		sky_tex_y_tl_ = y_cube_tl;
-		sky_tex_c_tl_ = c_cube_tl;
-	}
-
-	void AmbientLightSource::SkylightTex(std::function<TexturePtr()> const & cube_tl)
-	{
-		sky_tex_y_tl_ = cube_tl;
 	}
 
 
@@ -417,19 +377,18 @@ namespace KlayGE
 	void PointLightSource::UpdateCameras()
 	{
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-		CameraPtr const & camera = re.CurFrameBuffer()->GetViewport()->camera;
+		Camera const & camera = *re.CurFrameBuffer()->GetViewport()->camera;
 
 		for (int j = 0; j < 6; ++ j)
 		{
-			std::pair<float3, float3> ad = CubeMapViewVector<float>(static_cast<Texture::CubeFaces>(j));
-			float3 const & d = ad.first;
-			float3 const & u = ad.second;
+			float3 d, u;
+			std::tie(d, u) = CubeMapViewVector<float>(static_cast<Texture::CubeFaces>(j));
 
 			float3 lookat = MathLib::transform_quat(d, quat_);
 			float3 up = MathLib::transform_quat(u, quat_);
 
 			sm_cameras_[j]->ViewParams(pos_, pos_ + lookat, up);
-			sm_cameras_[j]->ProjParams(PI / 2, 1, camera->NearPlane(), camera->FarPlane());
+			sm_cameras_[j]->ProjParams(PI / 2, 1, camera.NearPlane(), camera.FarPlane());
 		}
 	}
 
@@ -500,8 +459,8 @@ namespace KlayGE
 		sm_camera_->ViewParams(pos_, pos_ + lookat, up);
 
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-		CameraPtr const & camera = re.CurFrameBuffer()->GetViewport()->camera;
-		sm_camera_->ProjParams(cos_outer_inner_.z(), 1, camera->NearPlane(), camera->FarPlane());
+		Camera const & camera = *re.CurFrameBuffer()->GetViewport()->camera;
+		sm_camera_->ProjParams(cos_outer_inner_.z(), 1, camera.NearPlane(), camera.FarPlane());
 	}
 
 	float SpotLightSource::CosInnerAngle() const
@@ -657,7 +616,7 @@ namespace KlayGE
 
 	void TubeAreaLightSource::Falloff(float3 const & fall_off)
 	{
-		UNREF_PARAM(fall_off);
+		KFL_UNUSED(fall_off);
 		LightSource::Falloff(float3(1, 0, 0));
 	}
 

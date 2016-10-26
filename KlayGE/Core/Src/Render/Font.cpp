@@ -95,7 +95,7 @@ namespace KlayGE
 			dist_texture_ = rf.MakeTexture2D(size, size, 1, 1, EF_R8, 1, 0, EAH_GPU_Read, nullptr);
 			a_char_texture_ = rf.MakeTexture2D(kfont_char_size, kfont_char_size, 1, 1, EF_R8, 1, 0, EAH_CPU_Write, nullptr);
 
-			char_free_list_.push_back(std::make_pair(0, size * size / kfont_char_size / kfont_char_size));
+			char_free_list_.emplace_back(0, size * size / kfont_char_size / kfont_char_size);
 
 			effect_ = SyncLoadRenderEffect("Font.fxml");
 			*(effect_->ParameterByName("distance_tex")) = dist_texture_;
@@ -118,7 +118,7 @@ namespace KlayGE
 			tc_aabb_ = AABBox(float3(0, 0, 0), float3(0, 0, 0));
 		}
 
-		RenderTechniquePtr const & GetRenderTechnique() const
+		RenderTechnique* GetRenderTechnique() const override
 		{
 			if (three_dim_)
 			{
@@ -186,7 +186,7 @@ namespace KlayGE
 				rl_->StartIndexLocation(ind_offset / sizeof(uint16_t));
 				rl_->NumIndices(ind_length / sizeof(uint16_t));
 
-				re.Render(*this->GetRenderTechnique(), *rl_);
+				re.Render(*this->GetRenderEffect(), *this->GetRenderTechnique(), *rl_);
 			}
 
 			for (size_t i = 0; i < tb_vb_sub_allocs_.size(); ++ i)
@@ -278,7 +278,7 @@ namespace KlayGE
 				}
 				else
 				{
-					lines.push_back(std::make_pair(0.0f, L""));
+					lines.emplace_back(0.0f, L"");
 				}
 			}
 
@@ -616,7 +616,7 @@ namespace KlayGE
 									{
 										++ freeiter;
 									}
-									char_free_list_.insert(freeiter, std::make_pair(id, id + 1));
+									char_free_list_.emplace(freeiter, id, id + 1);
 
 									cim.erase(chiter);
 									break;
@@ -708,10 +708,9 @@ namespace KlayGE
 
 		TexturePtr		dist_texture_;
 		TexturePtr		a_char_texture_;
-		RenderEffectPtr	effect_;
 
-		RenderEffectParameterPtr half_width_height_ep_;
-		RenderEffectParameterPtr mvp_ep_;
+		RenderEffectParameter* half_width_height_ep_;
+		RenderEffectParameter* mvp_ep_;
 
 		std::shared_ptr<KFont> kfont_loader_;
 
@@ -810,6 +809,11 @@ namespace
 			return resource;
 		}
 
+		virtual std::shared_ptr<void> Resource() const override
+		{
+			return *font_desc_.kfont;
+		}
+
 	private:
 		FontDesc font_desc_;
 	};
@@ -903,8 +907,9 @@ namespace KlayGE
 		return ResLoader::Instance().SyncQueryT<Font>(MakeSharedPtr<FontLoadingDesc>(font_name, flags));
 	}
 
-	std::function<FontPtr()> ASyncLoadFont(std::string const & font_name, uint32_t flags)
+	FontPtr ASyncLoadFont(std::string const & font_name, uint32_t flags)
 	{
-		return ResLoader::Instance().ASyncQueryT<Font>(MakeSharedPtr<FontLoadingDesc>(font_name, flags));
+		// TODO: Make it really async
+		return ResLoader::Instance().SyncQueryT<Font>(MakeSharedPtr<FontLoadingDesc>(font_name, flags));
 	}
 }

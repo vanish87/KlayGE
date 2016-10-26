@@ -21,9 +21,6 @@
 #include <KFL/XMLDom.hpp>
 #include <KlayGE/Camera.hpp>
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string/trim.hpp>
-
 #include <KlayGE/RenderFactory.hpp>
 #include <KlayGE/InputFactory.hpp>
 
@@ -51,12 +48,12 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("ParticleEditor.fxml");
-			depth_tech_ = effect->TechniqueByName("TerrainDepth");
-			color_tech_ = effect->TechniqueByName("Terrain");
+			effect_ = SyncLoadRenderEffect("ParticleEditor.fxml");
+			depth_tech_ = effect_->TechniqueByName("TerrainDepth");
+			color_tech_ = effect_->TechniqueByName("Terrain");
 			technique_ = color_tech_;
 
-			*(effect->ParameterByName("grass_tex")) = ASyncLoadTexture("grass.dds", EAH_GPU_Read | EAH_Immutable);
+			*(effect_->ParameterByName("grass_tex")) = ASyncLoadTexture("grass.dds", EAH_GPU_Read | EAH_Immutable);
 
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_TriangleStrip);
@@ -69,11 +66,7 @@ namespace
 				float3(+10, 0, -10),
 			};
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(vertices);
-			init_data.slice_pitch = 0;
-			init_data.data = &vertices[0];
-			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(vertices), vertices);
 			rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_BGR32F)));
 
 			pos_aabb_ = MathLib::compute_aabbox(vertices, vertices + sizeof(vertices) / sizeof(vertices[0]));
@@ -89,14 +82,14 @@ namespace
 			float4x4 view = app.ActiveCamera().ViewMatrix();
 			float4x4 proj = app.ActiveCamera().ProjMatrix();
 
-			*(technique_->Effect().ParameterByName("view")) = view;
-			*(technique_->Effect().ParameterByName("proj")) = proj;
+			*(effect_->ParameterByName("view")) = view;
+			*(effect_->ParameterByName("proj")) = proj;
 
 			Camera const & camera = Context::Instance().AppInstance().ActiveCamera();
-			*(technique_->Effect().ParameterByName("depth_near_far_invfar")) = float3(camera.NearPlane(), camera.FarPlane(), 1.0f / camera.FarPlane());
+			*(effect_->ParameterByName("depth_near_far_invfar")) = float3(camera.NearPlane(), camera.FarPlane(), 1.0f / camera.FarPlane());
 		}
 
-		virtual void Pass(PassType type) KLAYGE_OVERRIDE
+		virtual void Pass(PassType type) override
 		{
 			switch (type)
 			{
@@ -111,8 +104,8 @@ namespace
 		}
 
 	private:
-		RenderTechniquePtr depth_tech_;
-		RenderTechniquePtr color_tech_;
+		RenderTechnique* depth_tech_;
+		RenderTechnique* color_tech_;
 	};
 
 	class TerrainObject : public SceneObjectHelper
@@ -123,9 +116,6 @@ namespace
 		{
 		}
 	};
-
-	int const NUM_PARTICLE = 4096;
-
 
 	enum
 	{

@@ -453,7 +453,7 @@ int main(int argc, char* argv[])
 
 	if (argc < 2)
 	{
-		cout << "使用方法: HDRCompressor xxx.dds [R16 | R16F] [BC5 | BC3]" << endl;
+		cout << "Usage: HDRCompressor xxx.dds [R16 | R16F] [BC5 | BC3]" << endl;
 		return 1;
 	}
 
@@ -490,7 +490,7 @@ int main(int argc, char* argv[])
 
 	cout << "HDR texture is compressed into " << y_file << " and " << c_file << endl;
 
-	ResLoader::Destroy();
+	Context::Destroy();
 
 	return 0;
 }

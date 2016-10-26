@@ -37,7 +37,7 @@
 
 #define KLAYGE_NAME			KlayGE
 #define KLAYGE_VER_MAJOR	4
-#define KLAYGE_VER_MINOR	7
+#define KLAYGE_VER_MINOR	9
 #define KLAYGE_VER_RELEASE	0
 #define KLAYGE_VER_STR		KFL_STRINGIZE(KLAYGE_NAME) " " KFL_STRINGIZE(KLAYGE_VER_MAJOR) "." KFL_STRINGIZE(KLAYGE_VER_MINOR) "." KFL_STRINGIZE(KLAYGE_VER_RELEASE)
 
@@ -48,15 +48,11 @@
 	#include <KFL/Detail/AutoLink.hpp>
 #endif
 
-#ifdef KLAYGE_HAS_DECLSPEC
-	#ifdef KLAYGE_CORE_SOURCE		// Build dll
-		#define KLAYGE_CORE_API __declspec(dllexport)
-	#else							// Use dll
-		#define KLAYGE_CORE_API __declspec(dllimport)
-	#endif
-#else
-	#define KLAYGE_CORE_API
-#endif // KLAYGE_HAS_DECLSPEC
+#ifdef KLAYGE_CORE_SOURCE		// Build dll
+	#define KLAYGE_CORE_API KLAYGE_SYMBOL_EXPORT
+#else							// Use dll
+	#define KLAYGE_CORE_API KLAYGE_SYMBOL_IMPORT
+#endif
 
 #include <vector>
 #include <string>

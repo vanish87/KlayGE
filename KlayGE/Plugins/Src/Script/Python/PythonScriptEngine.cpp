@@ -49,11 +49,16 @@ namespace KlayGE
 
 	PyObject* StdoutWrite(PyObject* self, PyObject* args)
 	{
-		UNREF_PARAM(self);
-		UNREF_PARAM(args);
+		KFL_UNUSED(self);
+		KFL_UNUSED(args);
 
-		char* data;
+		char* data = nullptr;
 		if (!PyArg_ParseTuple(args, "s", &data))
+		{
+			return 0;
+		}
+
+		if (nullptr == data)
 		{
 			return 0;
 		}
@@ -68,8 +73,8 @@ namespace KlayGE
 	
 	PyObject* StdoutFlush(PyObject* self, PyObject* args)
 	{
-		UNREF_PARAM(self);
-		UNREF_PARAM(args);
+		KFL_UNUSED(self);
+		KFL_UNUSED(args);
 
 		// no-op
 		return Py_BuildValue("");
@@ -122,12 +127,31 @@ namespace KlayGE
 		0,                    /* tp_init */
 		0,                    /* tp_alloc */
 		0,                    /* tp_new */
+		0,                    /* tp_free */
+		0,                    /* tp_is_gc */
+		0,                    /* tp_bases */
+		0,                    /* tp_mro */
+		0,                    /* tp_cache */
+		0,                    /* tp_subclasses */
+		0,                    /* tp_weaklist */
+		0,                    /* tp_del */
+		0,                    /* tp_version_tag */
+		0,                    /* tp_finalize */
+
+#ifdef COUNT_ALLOCS
+		0,                    /* tp_allocs */
+		0,                    /* tp_frees */
+		0,                    /* tp_maxalloc */
+		0,                    /* tp_prev */
+		0                     /* tp_next */
+#endif
 	};
 	
 	PyModuleDef emb_module =
 	{
 		PyModuleDef_HEAD_INIT,
 		"emb", 0, -1, 0,
+		0, 0, 0, 0
 	};
 	
 	PyObjectPtr stdout_obj;

@@ -450,7 +450,7 @@ namespace KlayGE
 		void InputHandler(InputEngine const & sender, InputAction const & action);
 
 	private:
-		static UIManagerPtr ui_mgr_instance_;
+		static std::unique_ptr<UIManager> ui_mgr_instance_;
 
 		// Shared between all dialogs
 		RenderEffectPtr effect_;
@@ -669,8 +669,6 @@ namespace KlayGE
 		bool keyboard_input_;
 		bool mouse_input_;
 
-		int default_control_id_;
-
 		// Initialize default Elements
 		void InitDefaultElements();
 
@@ -684,7 +682,6 @@ namespace KlayGE
 		bool show_caption_;
 		bool always_in_opacity_;
 		bool minimized_;
-		bool drag_;
 		std::string id_;
 		std::wstring caption_;
 

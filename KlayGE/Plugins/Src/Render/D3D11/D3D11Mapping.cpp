@@ -359,7 +359,6 @@ namespace KlayGE
 		}
 	}
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 	D3D11_LOGIC_OP D3D11Mapping::Mapping(LogicOperation lo)
 	{
 		switch (lo)
@@ -417,7 +416,6 @@ namespace KlayGE
 			return D3D11_LOGIC_OP_NOOP;
 		}
 	}
-#endif
 
 	D3D11_PRIMITIVE_TOPOLOGY D3D11Mapping::Mapping(RenderLayout::topology_type tt)
 	{
@@ -633,7 +631,7 @@ namespace KlayGE
 		}
 	}
 
-	D3D11_SO_DECLARATION_ENTRY D3D11Mapping::Mapping(ShaderDesc::StreamOutputDecl const & decl, uint8_t slot)
+	D3D11_SO_DECLARATION_ENTRY D3D11Mapping::Mapping(ShaderDesc::StreamOutputDecl const & decl)
 	{
 		D3D11_SO_DECLARATION_ENTRY ret;
 
@@ -641,7 +639,7 @@ namespace KlayGE
 		ret.SemanticIndex = decl.usage_index;
 		ret.StartComponent = decl.start_component;
 		ret.ComponentCount = decl.component_count;
-		ret.OutputSlot = slot;
+		ret.OutputSlot = decl.slot;
 		switch (decl.usage)
 		{
 		// Vertex xyzs

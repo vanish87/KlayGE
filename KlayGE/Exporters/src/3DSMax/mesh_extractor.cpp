@@ -331,7 +331,7 @@ namespace KlayGE
 					float3(diffuse.r, diffuse.g, diffuse.b),
 					float3(specular.r * specular_level, specular.g * specular_level, specular.b * specular_level),
 					float3(emit.r, emit.g, emit.b), opacity,
-					shininess);
+					shininess, false);
 
 				for (int j = 0; j < max_mtl->NumSubTexmaps(); ++ j)
 				{
@@ -392,7 +392,7 @@ namespace KlayGE
 			uv_transss.push_back(std::map<int, std::pair<Matrix3, int>>());
 
 			meshml_obj_.SetMaterial(mtl_id, float3(0.5f, 0.5f, 0.5f),
-				float3(0.5f, 0.5f, 0.5f), float3(0, 0, 0), float3(0, 0, 0), 1, 1);
+				float3(0.5f, 0.5f, 0.5f), float3(0, 0, 0), float3(0, 0, 0), 1, 1, false);
 		}
 	}
 
@@ -644,7 +644,7 @@ namespace KlayGE
 							parent_node = parent_node->GetParentNode();
 						}
 
-						pos_binds.second.push_back(std::make_pair(parent_node, 1.0f));
+						pos_binds.second.emplace_back(parent_node, 1.0f);
 					}
 
 					Point3 v0 = pos_binds.first * tm;
@@ -927,7 +927,7 @@ namespace KlayGE
 			}
 			if (!repeat && (weight > 0))
 			{
-				binds.push_back(std::make_pair(joint_node, weight));
+				binds.emplace_back(joint_node, weight);
 			}
 		}
 	}

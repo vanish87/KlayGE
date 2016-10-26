@@ -36,6 +36,7 @@
 #include <KlayGE/ResLoader.hpp>
 #include <KFL/Util.hpp>
 #include <KlayGE/TexCompressionBC.hpp>
+#include <KlayGE/TexCompressionETC.hpp>
 #include <KFL/Half.hpp>
 
 #include <cstring>
@@ -813,7 +814,7 @@ namespace
 		uint32_t src_width, uint32_t src_height, uint32_t src_depth)
 	{
 		BOOST_ASSERT(IsCompressedFormat(dst_format) && !IsCompressedFormat(src_format));
-		UNREF_PARAM(src_format);
+		KFL_UNUSED(src_format);
 
 		TexCompressionPtr codec;
 		switch (dst_format)
@@ -848,6 +849,51 @@ namespace
 			codec = MakeSharedPtr<TexCompressionBC5>();
 			break;
 
+		case EF_BC6:
+			codec = MakeSharedPtr<TexCompressionBC6U>();
+			break;
+
+		case EF_SIGNED_BC6:
+			codec = MakeSharedPtr<TexCompressionBC6S>();
+			break;
+
+		case EF_BC7:
+		case EF_BC7_SRGB:
+			codec = MakeSharedPtr<TexCompressionBC7>();
+			break;
+
+		case EF_ETC1:
+			codec = MakeSharedPtr<TexCompressionETC1>();
+			break;
+
+		case EF_ETC2_BGR8:
+		case EF_ETC2_BGR8_SRGB:
+			codec = MakeSharedPtr<TexCompressionETC2RGB8>();
+			break;
+
+		case EF_ETC2_A1BGR8:
+		case EF_ETC2_A1BGR8_SRGB:
+			codec = MakeSharedPtr<TexCompressionETC2RGB8A1>();
+			break;
+
+		case EF_ETC2_ABGR8:
+		case EF_ETC2_ABGR8_SRGB:
+			// TODO
+			BOOST_ASSERT(false);
+			break;
+
+		case EF_ETC2_R11:
+		case EF_SIGNED_ETC2_R11:
+			// TODO
+			BOOST_ASSERT(false);
+			break;
+
+		case EF_ETC2_GR11:
+		case EF_SIGNED_ETC2_GR11:
+			// TODO
+			BOOST_ASSERT(false);
+			break;
+
 		default:
 			BOOST_ASSERT(false);
 			break;
@@ -876,20 +922,28 @@ namespace
 		case EF_BC1:
 		case EF_BC2:
 		case EF_BC3:
+		case EF_BC7:
+		case EF_ETC1:
+		case EF_ETC2_BGR8:
+		case EF_ETC2_A1BGR8:
+		case EF_ETC2_ABGR8:
 			dst_format = EF_ARGB8;
 			break;
 				
 		case EF_BC4:
+		case EF_ETC2_R11:
 			dst_format = EF_R8;
 			break;
 
 		case EF_BC5:
+		case EF_ETC2_GR11:
 			dst_format = EF_GR8;
 			break;
 
 		case EF_SIGNED_BC1:
 		case EF_SIGNED_BC2:
 		case EF_SIGNED_BC3:
+		case EF_SIGNED_ETC2_R11:
 			dst_format = EF_SIGNED_ABGR8;
 			break;
 
@@ -906,7 +960,16 @@ namespace
 		case EF_BC3_SRGB:
 		case EF_BC4_SRGB:
 		case EF_BC5_SRGB:
+		case EF_BC7_SRGB:
+		case EF_ETC2_BGR8_SRGB:
+		case EF_ETC2_A1BGR8_SRGB:
+		case EF_ETC2_ABGR8_SRGB:
 			dst_format = EF_ARGB8_SRGB;
+			break;
+
+		case EF_BC6:
+		case EF_SIGNED_BC6:
+			dst_format = EF_ABGR16F;
 			break;
 
 		default:
@@ -946,6 +1009,51 @@ namespace
 		case EF_BC5_SRGB:
 		case EF_SIGNED_BC5:
 			codec = MakeSharedPtr<TexCompressionBC5>();
+			break;
+
+		case EF_BC6:
+			codec = MakeSharedPtr<TexCompressionBC6U>();
+			break;
+
+		case EF_SIGNED_BC6:
+			codec = MakeSharedPtr<TexCompressionBC6S>();
+			break;
+
+		case EF_BC7:
+		case EF_BC7_SRGB:
+			codec = MakeSharedPtr<TexCompressionBC7>();
+			break;
+
+		case EF_ETC1:
+			codec = MakeSharedPtr<TexCompressionETC1>();
+			break;
+
+		case EF_ETC2_BGR8:
+		case EF_ETC2_BGR8_SRGB:
+			codec = MakeSharedPtr<TexCompressionETC2RGB8>();
+			break;
+
+		case EF_ETC2_A1BGR8:
+		case EF_ETC2_A1BGR8_SRGB:
+			codec = MakeSharedPtr<TexCompressionETC2RGB8A1>();
+			break;
+
+		case EF_ETC2_ABGR8:
+		case EF_ETC2_ABGR8_SRGB:
+			// TODO
+			BOOST_ASSERT(false);
+			break;
+
+		case EF_ETC2_R11:
+		case EF_SIGNED_ETC2_R11:
+			// TODO
+			BOOST_ASSERT(false);
+			break;
+
+		case EF_ETC2_GR11:
+		case EF_SIGNED_ETC2_GR11:
+			// TODO
+			BOOST_ASSERT(false);
 			break;
 
 		default:
@@ -1013,6 +1121,119 @@ namespace
 			return true;
 		}
 
+		virtual std::shared_ptr<void> CreateResource() override
+		{
+			TexDesc::TexData& tex_data = *tex_desc_.tex_data;
+
+			{
+				uint32_t row_pitch, slice_pitch;
+				GetImageInfo(tex_desc_.res_name, tex_data.type, tex_data.width, tex_data.height, tex_data.depth,
+					tex_data.num_mipmaps, tex_data.array_size, tex_data.format,
+					row_pitch, slice_pitch);
+			}
+
+			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+			RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
+
+			if ((Texture::TT_3D == tex_data.type) && (caps.max_texture_depth < tex_data.depth))
+			{
+				tex_data.type = Texture::TT_2D;
+				tex_data.height *= tex_data.depth;
+				tex_data.depth = 1;
+				tex_data.num_mipmaps = 1;
+				tex_data.init_data.resize(1);
+			}
+
+			uint32_t array_size = tex_data.array_size;
+			if (Texture::TT_Cube == tex_data.type)
+			{
+				array_size *= 6;
+			}
+
+			if (((EF_BC5 == tex_data.format) && !caps.texture_format_support(EF_BC5))
+				|| ((EF_BC5_SRGB == tex_data.format) && !caps.texture_format_support(EF_BC5_SRGB)))
+			{
+				if (IsSRGB(tex_data.format))
+				{
+					tex_data.format = EF_BC3_SRGB;
+				}
+				else
+				{
+					tex_data.format = EF_BC3;
+				}
+			}
+			if (((EF_BC4 == tex_data.format) && !caps.texture_format_support(EF_BC4))
+				|| ((EF_BC4_SRGB == tex_data.format) && !caps.texture_format_support(EF_BC4_SRGB)))
+			{
+				if (IsSRGB(tex_data.format))
+				{
+					tex_data.format = EF_BC1_SRGB;
+				}
+				else
+				{
+					tex_data.format = EF_BC1;
+				}
+			}
+
+			static ElementFormat const convert_fmts[][2] =
+			{
+				{ EF_BC1, EF_ARGB8 },
+				{ EF_BC1_SRGB, EF_ARGB8_SRGB },
+				{ EF_BC2, EF_ARGB8 },
+				{ EF_BC2_SRGB, EF_ARGB8_SRGB },
+				{ EF_BC3, EF_ARGB8 },
+				{ EF_BC3_SRGB, EF_ARGB8_SRGB },
+				{ EF_BC4, EF_R8 },
+				{ EF_BC4_SRGB, EF_R8 },
+				{ EF_SIGNED_BC4, EF_SIGNED_R8 },
+				{ EF_BC5, EF_GR8 },
+				{ EF_BC5_SRGB, EF_GR8 },
+				{ EF_SIGNED_BC5, EF_SIGNED_GR8 },
+				{ EF_BC6, EF_ABGR16F },
+				{ EF_SIGNED_BC6, EF_ABGR16F },
+				{ EF_BC7, EF_ARGB8 },
+				{ EF_BC7_SRGB, EF_ARGB8 },
+				{ EF_ETC1, EF_ARGB8 },
+				{ EF_ETC2_BGR8, EF_ARGB8 },
+				{ EF_ETC2_BGR8_SRGB, EF_ARGB8_SRGB },
+				{ EF_ETC2_A1BGR8, EF_ARGB8 },
+				{ EF_ETC2_A1BGR8_SRGB, EF_ARGB8_SRGB },
+				{ EF_ETC2_ABGR8, EF_ARGB8 },
+				{ EF_ETC2_ABGR8_SRGB, EF_ARGB8_SRGB },
+				{ EF_R8, EF_ARGB8 },
+				{ EF_SIGNED_R8, EF_SIGNED_ABGR8 },
+				{ EF_GR8, EF_ARGB8 },
+				{ EF_SIGNED_GR8, EF_SIGNED_ABGR8 },
+				{ EF_ARGB8_SRGB, EF_ARGB8 },
+				{ EF_ARGB8, EF_ABGR8 },
+				{ EF_R16, EF_R16F },
+				{ EF_R16F, EF_R8 },
+			};
+			while (!caps.texture_format_support(tex_data.format))
+			{
+				bool found = false;
+				for (size_t i = 0; i < sizeof(convert_fmts) / sizeof(convert_fmts[0][0]) / 2; ++ i)
+				{
+					if (convert_fmts[i][0] == tex_data.format)
+					{
+						tex_data.format = convert_fmts[i][1];
+						found = true;
+						break;
+					}
+				}
+
+				if (!found)
+				{
+					LogError("%s's format (%ld) is not supported.",
+						tex_desc_.res_name.c_str(), tex_data.format);
+					break;
+				}
+			}
+
+			*tex_desc_.tex = this->CreateTexture();
+			return *tex_desc_.tex;
+		}
+
 		void SubThreadStage()
 		{
 			this->LoadDDS();
@@ -1020,12 +1241,13 @@ namespace
 
 		std::shared_ptr<void> MainThreadStage()
 		{
-			if (!*tex_desc_.tex)
+			TexturePtr const & tex = *tex_desc_.tex;
+			if (!tex || !tex->HWResourceReady())
 			{
-				*tex_desc_.tex = this->CreateTexture();
+				tex->CreateHWResource(&tex_desc_.tex_data->init_data[0]);
 				tex_desc_.tex_data.reset();
 			}
-			return std::static_pointer_cast<void>(*tex_desc_.tex);
+			return std::static_pointer_cast<void>(tex);
 		}
 
 		bool HasSubThreadStage() const
@@ -1060,6 +1282,11 @@ namespace
 			return resource;
 		}
 
+		virtual std::shared_ptr<void> Resource() const override
+		{
+			return *tex_desc_.tex;
+		}
+
 	private:
 		void LoadDDS()
 		{
@@ -1072,7 +1299,6 @@ namespace
 
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
-
 			if ((Texture::TT_3D == tex_data.type) && (caps.max_texture_depth < tex_data.depth))
 			{
 				tex_data.type = Texture::TT_2D;
@@ -1137,7 +1363,7 @@ namespace
 				}
 			}
 
-			static ElementFormat const convert_fmts[][2] = 
+			static ElementFormat const convert_fmts[][2] =
 			{
 				{ EF_BC1, EF_ARGB8 },
 				{ EF_BC1_SRGB, EF_ARGB8_SRGB },
@@ -1151,6 +1377,10 @@ namespace
 				{ EF_BC5, EF_GR8 },
 				{ EF_BC5_SRGB, EF_GR8 },
 				{ EF_SIGNED_BC5, EF_SIGNED_GR8 },
+				{ EF_BC6, EF_ABGR16F },
+				{ EF_SIGNED_BC6, EF_ABGR16F },
+				{ EF_BC7, EF_ARGB8 },
+				{ EF_BC7_SRGB, EF_ARGB8 },
 				{ EF_ETC1, EF_ARGB8 },
 				{ EF_ETC2_BGR8, EF_ARGB8 },
 				{ EF_ETC2_BGR8_SRGB, EF_ARGB8_SRGB },
@@ -1275,8 +1505,6 @@ namespace
 
 				if (!found)
 				{
-					LogError("%s's format (%ld) is not supported.",
-						tex_desc_.res_name.c_str(), tex_data.format);
 					break;
 				}
 			}
@@ -1296,23 +1524,23 @@ namespace
 			switch (tex_data.type)
 			{
 			case Texture::TT_1D:
-				texture = rf.MakeTexture1D(tex_data.width, tex_data.num_mipmaps, tex_data.array_size,
-					tex_data.format, 1, 0, tex_desc_.access_hint, &tex_data.init_data[0]);
+				texture = rf.MakeDelayCreationTexture1D(tex_data.width, tex_data.num_mipmaps, tex_data.array_size,
+					tex_data.format, 1, 0, tex_desc_.access_hint);
 				break;
 
 			case Texture::TT_2D:
-				texture = rf.MakeTexture2D(tex_data.width, tex_data.height, tex_data.num_mipmaps, tex_data.array_size,
-					tex_data.format, 1, 0, tex_desc_.access_hint, &tex_data.init_data[0]);
+				texture = rf.MakeDelayCreationTexture2D(tex_data.width, tex_data.height, tex_data.num_mipmaps, tex_data.array_size,
+					tex_data.format, 1, 0, tex_desc_.access_hint);
 				break;
 
 			case Texture::TT_3D:
-				texture = rf.MakeTexture3D(tex_data.width, tex_data.height, tex_data.depth, tex_data.num_mipmaps,
-					tex_data.array_size, tex_data.format, 1, 0, tex_desc_.access_hint, &tex_data.init_data[0]);
+				texture = rf.MakeDelayCreationTexture3D(tex_data.width, tex_data.height, tex_data.depth, tex_data.num_mipmaps,
+					tex_data.array_size, tex_data.format, 1, 0, tex_desc_.access_hint);
 				break;
 
 			case Texture::TT_Cube:
-				texture = rf.MakeTextureCube(tex_data.width, tex_data.num_mipmaps, tex_data.array_size,
-					tex_data.format, 1, 0, tex_desc_.access_hint, &tex_data.init_data[0]);
+				texture = rf.MakeDelayCreationTextureCube(tex_data.width, tex_data.num_mipmaps, tex_data.array_size,
+					tex_data.format, 1, 0, tex_desc_.access_hint);
 				break;
 
 			default:
@@ -1674,7 +1902,7 @@ namespace KlayGE
 				row_pitch = desc.width * NumFormatBytes(format);
 			}
 		}
-		slice_pitch = row_pitch * height;
+		slice_pitch = row_pitch * desc.height;
 
 		if (desc.reserved1[0] != 0)
 		{
@@ -1958,7 +2186,7 @@ namespace KlayGE
 		return ResLoader::Instance().SyncQueryT<Texture>(MakeSharedPtr<TextureLoadingDesc>(tex_name, access_hint));
 	}
 
-	std::function<TexturePtr()> ASyncLoadTexture(std::string const & tex_name, uint32_t access_hint)
+	TexturePtr ASyncLoadTexture(std::string const & tex_name, uint32_t access_hint)
 	{
 		return ResLoader::Instance().ASyncQueryT<Texture>(MakeSharedPtr<TextureLoadingDesc>(tex_name, access_hint));
 	}
@@ -2727,110 +2955,6 @@ namespace KlayGE
 	}
 
 
-	class NullTexture : public Texture
-	{
-	public:
-		NullTexture(TextureType type, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
-			: Texture(type, sample_count, sample_quality, access_hint)
-		{
-		}
-
-		std::wstring const & Name() const
-		{
-			static std::wstring const name(L"Null Texture");
-			return name;
-		}
-
-		uint32_t Width(uint32_t /*level*/) const
-		{
-			return 0;
-		}
-		uint32_t Height(uint32_t /*level*/) const
-		{
-			return 0;
-		}
-		uint32_t Depth(uint32_t /*level*/) const
-		{
-			return 0;
-		}
-
-		void CopyToTexture(Texture& /*target*/)
-		{
-		}
-
-		void CopyToSubTexture1D(Texture& /*target*/,
-			uint32_t /*dst_array_index*/, uint32_t /*dst_level*/, uint32_t /*dst_x_offset*/, uint32_t /*dst_width*/,
-			uint32_t /*src_array_index*/, uint32_t /*src_level*/, uint32_t /*src_x_offset*/, uint32_t /*src_width*/)
-		{
-		}
-
-		void CopyToSubTexture2D(Texture& /*target*/,
-				uint32_t /*dst_array_index*/, uint32_t /*dst_level*/, uint32_t /*dst_x_offset*/, uint32_t /*dst_y_offset*/, uint32_t /*dst_width*/, uint32_t /*dst_height*/,
-				uint32_t /*src_array_index*/, uint32_t /*src_level*/, uint32_t /*src_x_offset*/, uint32_t /*src_y_offset*/, uint32_t /*src_width*/, uint32_t /*src_height*/)
-		{
-		}
-
-		void CopyToSubTexture3D(Texture& /*target*/,
-				uint32_t /*dst_array_index*/, uint32_t /*dst_level*/, uint32_t /*dst_x_offset*/, uint32_t /*dst_y_offset*/, uint32_t /*dst_z_offset*/, uint32_t /*dst_width*/, uint32_t /*dst_height*/, uint32_t /*dst_depth*/,
-				uint32_t /*src_array_index*/, uint32_t /*src_level*/, uint32_t /*src_x_offset*/, uint32_t /*src_y_offset*/, uint32_t /*src_z_offset*/, uint32_t /*src_width*/, uint32_t /*src_height*/, uint32_t /*src_depth*/)
-		{
-		}
-
-		void CopyToSubTextureCube(Texture& /*target*/,
-				uint32_t /*dst_array_index*/, CubeFaces /*dst_face*/, uint32_t /*dst_level*/, uint32_t /*dst_x_offset*/, uint32_t /*dst_y_offset*/, uint32_t /*dst_width*/, uint32_t /*dst_height*/,
-				uint32_t /*src_array_index*/, CubeFaces /*src_face*/, uint32_t /*src_level*/, uint32_t /*src_x_offset*/, uint32_t /*src_y_offset*/, uint32_t /*src_width*/, uint32_t /*src_height*/)
-		{
-		}
-
-		void Map1D(uint32_t /*array_index*/, uint32_t /*level*/, TextureMapAccess /*level*/,
-			uint32_t /*x_offset*/, uint32_t /*width*/,
-			void*& /*data*/)
-		{
-		}
-		void Map2D(uint32_t /*array_index*/, uint32_t /*level*/, TextureMapAccess /*level*/,
-			uint32_t /*x_offset*/, uint32_t /*y_offset*/, uint32_t /*width*/, uint32_t /*height*/,
-			void*& /*data*/, uint32_t& /*row_pitch*/)
-		{
-		}
-		void Map3D(uint32_t /*array_index*/, uint32_t /*level*/, TextureMapAccess /*level*/,
-			uint32_t /*x_offset*/, uint32_t /*y_offset*/, uint32_t /*z_offset*/,
-			uint32_t /*width*/, uint32_t /*height*/, uint32_t /*depth*/,
-			void*& /*data*/, uint32_t& /*row_pitch*/, uint32_t& /*slice_pitch*/)
-		{
-		}
-		void MapCube(uint32_t /*array_index*/, CubeFaces /*level*/, uint32_t /*level*/, TextureMapAccess /*level*/,
-			uint32_t /*x_offset*/, uint32_t /*y_offset*/, uint32_t /*width*/, uint32_t /*height*/,
-			void*& /*data*/, uint32_t& /*row_pitch*/)
-		{
-		}
-
-		void Unmap1D(uint32_t /*array_index*/, uint32_t /*level*/)
-		{
-		}
-		void Unmap2D(uint32_t /*array_index*/, uint32_t /*level*/)
-		{
-		}
-		void Unmap3D(uint32_t /*array_index*/, uint32_t /*level*/)
-		{
-		}
-		void UnmapCube(uint32_t /*array_index*/, CubeFaces /*face*/, uint32_t /*level*/)
-		{
-		}
-
-		void BuildMipSubLevels()
-		{
-		}
-
-		virtual void OfferHWResource() KLAYGE_OVERRIDE
-		{
-		}
-		virtual void ReclaimHWResource(ElementInitData const * init_data) KLAYGE_OVERRIDE
-		{
-			UNREF_PARAM(init_data);
-		}
-	};
-
-
 	Texture::Texture(Texture::TextureType type, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 			: type_(type), sample_count_(sample_count), sample_quality_(sample_quality), access_hint_(access_hint)
 	{
@@ -2838,12 +2962,6 @@ namespace KlayGE
 
 	Texture::~Texture()
 	{
-	}
-
-	TexturePtr Texture::NullObject()
-	{
-		static TexturePtr obj = MakeSharedPtr<NullTexture>(TT_2D, 1, 0, 0);
-		return obj;
 	}
 
 	uint32_t Texture::NumMipMaps() const
@@ -3226,14 +3344,21 @@ namespace KlayGE
 			case EF_BC1:
 			case EF_BC2:
 			case EF_BC3:
+			case EF_BC7:
+			case EF_ETC1:
+			case EF_ETC2_BGR8:
+			case EF_ETC2_A1BGR8:
+			case EF_ETC2_ABGR8:
 				dst_cpu_format = EF_ARGB8;
 				break;
 				
 			case EF_BC4:
+			case EF_ETC2_R11:
 				dst_cpu_format = EF_R8;
 				break;
 
 			case EF_BC5:
+			case EF_ETC2_GR11:
 				dst_cpu_format = EF_GR8;
 				break;
 
@@ -3244,6 +3369,7 @@ namespace KlayGE
 				break;
 
 			case EF_SIGNED_BC4:
+			case EF_SIGNED_ETC2_R11:
 				dst_cpu_format = EF_SIGNED_R8;
 				break;
 
@@ -3256,7 +3382,16 @@ namespace KlayGE
 			case EF_BC3_SRGB:
 			case EF_BC4_SRGB:
 			case EF_BC5_SRGB:
+			case EF_BC7_SRGB:
+			case EF_ETC2_BGR8_SRGB:
+			case EF_ETC2_A1BGR8_SRGB:
+			case EF_ETC2_ABGR8_SRGB:
 				dst_cpu_format = EF_ARGB8_SRGB;
+				break;
+
+			case EF_BC6:
+			case EF_SIGNED_BC6:
+				dst_cpu_format = EF_ABGR16F;
 				break;
 
 			default:

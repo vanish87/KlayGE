@@ -32,18 +32,23 @@
 #elif defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
+#elif defined(KLAYGE_COMPILER_CLANG)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter" // Ignore unused parameter 'sp'
 #endif
 #include <boost/signals2.hpp>
 #if defined(KLAYGE_COMPILER_MSVC)
 #pragma warning(pop)
 #elif defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic pop
+#elif defined(KLAYGE_COMPILER_CLANG)
+#pragma clang diagnostic pop
 #endif
 
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 #include <windows.h>
 #elif defined KLAYGE_PLATFORM_WINDOWS_RUNTIME
-#include <agile.h>
+#include <windows.ui.core.h>
 #elif defined KLAYGE_PLATFORM_LINUX
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -71,6 +76,16 @@ namespace KlayGE
 	class KLAYGE_CORE_API Window
 	{
 	public:
+		enum WindowRotation
+		{
+			WR_Unspecified,
+			WR_Identity,
+			WR_Rotate90,
+			WR_Rotate180,
+			WR_Rotate270
+		};
+
+	public:
 		Window(std::string const & name, RenderSettings const & settings);
 		Window(std::string const & name, RenderSettings const & settings, void* native_wnd);
 		~Window();
@@ -83,12 +98,23 @@ namespace KlayGE
 			return wnd_;
 		}
 #elif defined KLAYGE_PLATFORM_WINDOWS_RUNTIME
-		void SetWindow(Platform::Agile<Windows::UI::Core::CoreWindow> const & window);
+		void SetWindow(std::shared_ptr<ABI::Windows::UI::Core::ICoreWindow> const & window);
 
-		Platform::Agile<Windows::UI::Core::CoreWindow> GetWindow() const
+		std::shared_ptr<ABI::Windows::UI::Core::ICoreWindow> GetWindow() const
 		{
 			return wnd_;
 		}
+
+		void OnSizeChanged(ABI::Windows::UI::Core::IWindowSizeChangedEventArgs* args);
+		void OnVisibilityChanged(ABI::Windows::UI::Core::IVisibilityChangedEventArgs* args);
+		void OnClosed();
+		void OnPointerPressed(ABI::Windows::UI::Core::IPointerEventArgs* args);
+		void OnPointerReleased(ABI::Windows::UI::Core::IPointerEventArgs* args);
+		void OnPointerMoved(ABI::Windows::UI::Core::IPointerEventArgs* args);
+		void OnPointerWheelChanged(ABI::Windows::UI::Core::IPointerEventArgs* args);
+		void OnDpiChanged();
+		void OnOrientationChanged();
+		void OnDisplayContentsInvalidated();
 #elif defined KLAYGE_PLATFORM_LINUX
 		::Display* XDisplay() const
 		{
@@ -168,6 +194,16 @@ namespace KlayGE
 		void Closed(bool closed)
 		{
 			closed_ = closed;
+		}
+
+		float DPIScale() const
+		{
+			return dpi_scale_;
+		}
+
+		WindowRotation Rotation() const
+		{
+			return win_rotation_;
 		}
 
 	public:
@@ -355,12 +391,20 @@ namespace KlayGE
 #endif
 		CloseEvent close_event_;
 
+#if defined KLAYGE_PLATFORM_WINDOWS
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 	private:
-		static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg,
-			WPARAM wParam, LPARAM lParam);
+		static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#if (_WIN32_WINNT >= _WIN32_WINNT_WINBLUE)
+		static BOOL CALLBACK EnumMonProc(HMONITOR mon, HDC dc_mon, RECT* rc_mon, LPARAM lparam);
+#endif
 
 		LRESULT MsgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#else
+		void DetectsOrientation();
+#endif
+
+		void DetectsDPI();
 #elif defined KLAYGE_PLATFORM_LINUX
 	public:
 		void MsgProc(XEvent const & event);
@@ -379,16 +423,21 @@ namespace KlayGE
 		bool active_;
 		bool ready_;
 		bool closed_;
-		bool hide_;
+
+		float dpi_scale_;
+		WindowRotation win_rotation_;
 
 #if defined KLAYGE_PLATFORM_WINDOWS
+		bool hide_;
+		bool external_wnd_;
 		std::wstring wname_;
 
 #if defined KLAYGE_PLATFORM_WINDOWS_DESKTOP
 		HWND wnd_;
 		WNDPROC default_wnd_proc_;
 #else
-		Platform::Agile<Windows::UI::Core::CoreWindow> wnd_;
+		std::shared_ptr<ABI::Windows::UI::Core::ICoreWindow> wnd_;
+		std::array<uint32_t, 16> pointer_id_map_;
 #endif
 #elif defined KLAYGE_PLATFORM_LINUX
 		::Display* x_display_;
@@ -404,8 +453,6 @@ namespace KlayGE
 #elif defined KLAYGE_PLATFORM_IOS
 		KlayGEView* eagl_view_;
 #endif
-
-		bool external_wnd_;
 	};
 }
 

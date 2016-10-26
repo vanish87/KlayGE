@@ -50,7 +50,7 @@ namespace
 			special_shading_alpha_blend_front_tech_ = deferred_effect_->TechniqueByName("OceanSpecialShadingAlphaBlendFront");
 			technique_ = gbuffer_alpha_blend_front_mrt_tech_;
 
-			reflection_tex_param_ = technique_->Effect().ParameterByName("reflection_tex");
+			reflection_tex_param_ = effect_->ParameterByName("reflection_tex");
 
 			this->SetStretch(strength);
 			this->SetBaseLevel(base_level);
@@ -63,47 +63,47 @@ namespace
 
 		void PatchLength(float patch_length)
 		{
-			*(technique_->Effect().ParameterByName("patch_length")) = patch_length;
+			*(effect_->ParameterByName("patch_length")) = patch_length;
 		}
 
 		void DisplacementParam(float3 const & min_disp0, float3 const & min_disp1, float3 const & disp_range0, float3 const & disp_range1)
 		{
-			*(technique_->Effect().ParameterByName("min_disp0")) = min_disp0;
-			*(technique_->Effect().ParameterByName("min_disp1")) = min_disp1;
-			*(technique_->Effect().ParameterByName("disp_range0")) = disp_range0;
-			*(technique_->Effect().ParameterByName("disp_range1")) = disp_range1;
+			*(effect_->ParameterByName("min_disp0")) = min_disp0;
+			*(effect_->ParameterByName("min_disp1")) = min_disp1;
+			*(effect_->ParameterByName("disp_range0")) = disp_range0;
+			*(effect_->ParameterByName("disp_range1")) = disp_range1;
 		}
 
 		void DisplacementMap(TexturePtr const & tex0, TexturePtr const & tex1)
 		{
-			*(technique_->Effect().ParameterByName("displacement_tex_0")) = tex0;
-			*(technique_->Effect().ParameterByName("displacement_tex_1")) = tex1;
+			*(effect_->ParameterByName("displacement_tex_0")) = tex0;
+			*(effect_->ParameterByName("displacement_tex_1")) = tex1;
 		}
 
 		void GradientMap(TexturePtr const & tex0, TexturePtr const & tex1)
 		{
-			*(technique_->Effect().ParameterByName("gradient_tex_0")) = tex0;
-			*(technique_->Effect().ParameterByName("gradient_tex_1")) = tex1;
+			*(effect_->ParameterByName("gradient_tex_0")) = tex0;
+			*(effect_->ParameterByName("gradient_tex_1")) = tex1;
 		}
 
 		void DisplacementMapArray(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("displacement_tex_array")) = tex;
+			*(effect_->ParameterByName("displacement_tex_array")) = tex;
 		}
 
 		void GradientMapArray(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("gradient_tex_array")) = tex;
+			*(effect_->ParameterByName("gradient_tex_array")) = tex;
 		}
 
 		void Frames(int2 const & frames)
 		{
-			*(technique_->Effect().ParameterByName("frames")) = frames;
+			*(effect_->ParameterByName("frames")) = frames;
 		}
 
 		void InterpolateFrac(float frac)
 		{
-			*(technique_->Effect().ParameterByName("interpolate_frac")) = frac;
+			*(effect_->ParameterByName("interpolate_frac")) = frac;
 		}
 
 		void OnRenderBegin()
@@ -123,7 +123,8 @@ namespace
 			case PT_TransparencyFrontGBufferMRT:
 				*diffuse_clr_param_ = float4(0.07f, 0.15f, 0.2f, 0);
 				*normal_map_enabled_param_ = static_cast<int32_t>(0);
-				*height_map_enabled_param_ = static_cast<int32_t>(0);
+				*height_map_parallax_enabled_param_ = static_cast<int32_t>(0);
+				*height_map_tess_enabled_param_ = static_cast<int32_t>(0);
 				*specular_clr_param_ = float4(5, 5, 5, 0);
 				*shininess_clr_param_ = float2(0.5f, 0);
 				*opaque_depth_tex_param_ = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameDepthTex(0);
@@ -137,23 +138,23 @@ namespace
 				*emit_clr_param_ = float4(0, 0, 0, 0);
 				*opacity_clr_param_ = 1.0f;
 				*opacity_map_enabled_param_ = static_cast<int32_t>(0);
-				*(technique_->Effect().ParameterByName("g_buffer_tex")) = Context::Instance().DeferredRenderingLayerInstance()->GBufferRT0Tex(0);
+				*(effect_->ParameterByName("g_buffer_tex")) = Context::Instance().DeferredRenderingLayerInstance()->GBufferRT0Tex(0);
 				{
 					App3DFramework const & app = Context::Instance().AppInstance();
 					Camera const & camera = app.ActiveCamera();
-					*(technique_->Effect().ParameterByName("proj")) = camera.ProjMatrix();
-					*(technique_->Effect().ParameterByName("inv_proj")) = camera.InverseProjMatrix();
+					*(effect_->ParameterByName("proj")) = camera.ProjMatrix();
+					*(effect_->ParameterByName("inv_proj")) = camera.InverseProjMatrix();
 					float q = camera.FarPlane() / (camera.FarPlane() - camera.NearPlane());
 					float3 near_q_far(camera.NearPlane() * q, q, camera.FarPlane());
-					*(technique_->Effect().ParameterByName("near_q_far")) = near_q_far;
-					*(technique_->Effect().ParameterByName("ray_length")) = camera.FarPlane() - camera.NearPlane();
-					*(technique_->Effect().ParameterByName("min_samples")) = static_cast<int32_t>(20);
-					*(technique_->Effect().ParameterByName("max_samples")) = static_cast<int32_t>(30);
-					*(technique_->Effect().ParameterByName("view")) = camera.ViewMatrix();
-					*(technique_->Effect().ParameterByName("inv_view")) = camera.InverseViewMatrix();
+					*(effect_->ParameterByName("near_q_far")) = near_q_far;
+					*(effect_->ParameterByName("ray_length")) = camera.FarPlane() - camera.NearPlane();
+					*(effect_->ParameterByName("min_samples")) = static_cast<int32_t>(20);
+					*(effect_->ParameterByName("max_samples")) = static_cast<int32_t>(30);
+					*(effect_->ParameterByName("view")) = camera.ViewMatrix();
+					*(effect_->ParameterByName("inv_view")) = camera.InverseViewMatrix();
 				}
-				*(technique_->Effect().ParameterByName("front_side_depth_tex")) = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameDepthTex(0);
-				*(technique_->Effect().ParameterByName("front_side_tex")) = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameShadingTex(0);
+				*(effect_->ParameterByName("front_side_depth_tex")) = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameDepthTex(0);
+				*(effect_->ParameterByName("front_side_tex")) = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameShadingTex(0);
 				break;
 
 			case PT_OpaqueSpecialShading:
@@ -164,15 +165,15 @@ namespace
 				*emit_clr_param_ = float4(0, 0, 0, 0);
 				*opacity_clr_param_ = 1.0f;
 				*opacity_map_enabled_param_ = static_cast<int32_t>(0);
-				*(technique_->Effect().ParameterByName("opaque_shading_tex")) = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameShadingTex(0);
-				*(technique_->Effect().ParameterByName("g_buffer_tex")) = Context::Instance().DeferredRenderingLayerInstance()->GBufferRT0Tex(0);
+				*(effect_->ParameterByName("opaque_shading_tex")) = Context::Instance().DeferredRenderingLayerInstance()->CurrFrameShadingTex(0);
+				*(effect_->ParameterByName("g_buffer_tex")) = Context::Instance().DeferredRenderingLayerInstance()->GBufferRT0Tex(0);
 				{
 					App3DFramework const & app = Context::Instance().AppInstance();
 					Camera const & camera = app.ActiveCamera();
 					float q = camera.FarPlane() / (camera.FarPlane() - camera.NearPlane());
 					float3 near_q_far(camera.NearPlane() * q, q, camera.FarPlane());
-					*(technique_->Effect().ParameterByName("near_q_far")) = near_q_far;
-					*(technique_->Effect().ParameterByName("inv_view")) = camera.InverseViewMatrix();
+					*(effect_->ParameterByName("near_q_far")) = near_q_far;
+					*(effect_->ParameterByName("inv_view")) = camera.InverseViewMatrix();
 				}
 				break;
 
@@ -386,7 +387,7 @@ namespace
 			return ocean_plane_;
 		}
 
-		virtual bool MainThreadUpdate(float app_time, float elapsed_time) KLAYGE_OVERRIDE
+		virtual bool MainThreadUpdate(float app_time, float elapsed_time) override
 		{
 			if (dirty_)
 			{
@@ -751,12 +752,12 @@ namespace
 			gbuffer_rt1_tech_ = effect->TechniqueByName("GBufferFoggySkyBoxRT1");
 			gbuffer_mrt_tech_ = effect->TechniqueByName("GBufferFoggySkyBoxMRT");
 			special_shading_tech_ = effect->TechniqueByName("SpecialShadingFoggySkyBox");
-			this->Technique(gbuffer_mrt_tech_);
+			this->Technique(effect, gbuffer_mrt_tech_);
 		}
 		
 		void FogColor(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("fog_color")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("fog_color")) = float3(clr.r(), clr.g(), clr.b());
 		}
 	};
 
@@ -820,10 +821,10 @@ bool OceanApp::ConfirmDevice() const
 void OceanApp::OnCreate()
 {
 	this->LookAt(float3(-3455.78f, 23.4f, 8133.55f), float3(-3456.18f, 23.4f, 8134.49f));
-	this->Proj(0.1f, 5000);
+	this->Proj(0.1f, 7000);
 
-	std::function<TexturePtr()> c_cube_tl = ASyncLoadTexture("DH001cross_c.dds", EAH_GPU_Read | EAH_Immutable);
-	std::function<TexturePtr()> y_cube_tl = ASyncLoadTexture("DH001cross_y.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr c_cube = ASyncLoadTexture("DH001cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr y_cube = ASyncLoadTexture("DH001cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
 
 	font_ = SyncLoadFont("gkai00mp.kfont");
 
@@ -845,10 +846,10 @@ void OceanApp::OnCreate()
 	}
 
 	HQTerrainSceneObjectPtr terrain = MakeSharedPtr<HQTerrainSceneObject>(MakeSharedPtr<ProceduralTerrain>());
-	terrain->TextureLayer(0, SyncLoadTexture("RealSand40BoH.dds", EAH_GPU_Read | EAH_Immutable));
-	terrain->TextureLayer(1, SyncLoadTexture("snow_DM.dds", EAH_GPU_Read | EAH_Immutable));
-	terrain->TextureLayer(2, SyncLoadTexture("GrassGreenTexture0002.dds", EAH_GPU_Read | EAH_Immutable));
-	terrain->TextureLayer(3, SyncLoadTexture("Dirt.dds", EAH_GPU_Read | EAH_Immutable));
+	terrain->TextureLayer(0, ASyncLoadTexture("RealSand40BoH.dds", EAH_GPU_Read | EAH_Immutable));
+	terrain->TextureLayer(1, ASyncLoadTexture("snow_DM.dds", EAH_GPU_Read | EAH_Immutable));
+	terrain->TextureLayer(2, ASyncLoadTexture("GrassGreenTexture0002.dds", EAH_GPU_Read | EAH_Immutable));
+	terrain->TextureLayer(3, ASyncLoadTexture("Dirt.dds", EAH_GPU_Read | EAH_Immutable));
 	terrain->TextureScale(0, float2(7, 7));
 	terrain->TextureScale(1, float2(1, 1));
 	terrain->TextureScale(2, float2(3, 3));
@@ -860,7 +861,7 @@ void OceanApp::OnCreate()
 	ocean_->AddToSceneManager();
 
 	sky_box_ = MakeSharedPtr<SceneObjectFoggySkyBox>();
-	checked_pointer_cast<SceneObjectFoggySkyBox>(sky_box_)->CompressedCubeMap(y_cube_tl, c_cube_tl);
+	checked_pointer_cast<SceneObjectFoggySkyBox>(sky_box_)->CompressedCubeMap(y_cube, c_cube);
 	checked_pointer_cast<SceneObjectFoggySkyBox>(sky_box_)->FogColor(fog_color);
 	sky_box_->AddToSceneManager();
 
@@ -875,7 +876,6 @@ void OceanApp::OnCreate()
 	deferred_rendering_->AtmosphericPostProcess(fog_pp_);
 
 	light_shaft_pp_ = MakeSharedPtr<LightShaftPostProcess>();
-	light_shaft_pp_->SetParam(0, -sun_light_->Direction() * 10000.0f);
 	light_shaft_pp_->SetParam(1, sun_light_->Color());
 
 	fpcController_.Scalers(0.05f, 1.0f);
@@ -1089,6 +1089,7 @@ uint32_t OceanApp::DoUpdate(uint32_t pass)
 	{
 		if (light_shaft_on_)
 		{
+			light_shaft_pp_->SetParam(0, -sun_light_->Direction() * 10000.0f + this->ActiveCamera().EyePos());
 			light_shaft_pp_->InputPin(0, deferred_rendering_->PrevFrameShadingTex(0));
 			light_shaft_pp_->InputPin(1, deferred_rendering_->PrevFrameDepthTex(0));
 			light_shaft_pp_->Apply();

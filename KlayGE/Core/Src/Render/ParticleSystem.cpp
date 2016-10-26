@@ -392,6 +392,11 @@ namespace
 			return std::static_pointer_cast<void>(rhs_pp->Clone());
 		}
 
+		virtual std::shared_ptr<void> Resource() const override
+		{
+			return *ps_desc_.ps;
+		}
+
 	private:
 		ParticleSystemDesc ps_desc_;
 	};
@@ -420,17 +425,19 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
+			effect_ = SyncLoadRenderEffect("Particle.fxml");
+
 			rl_ = rf.MakeRenderLayout();
 			if (gs_support)
 			{
 				rl_->TopologyType(RenderLayout::TT_PointList);
 
-				GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write, nullptr);
-				pos_vb->Resize(sizeof(ParticleInstance));
+				GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write,
+					sizeof(ParticleInstance), nullptr);
 				rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_ABGR32F),
 					vertex_element(VEU_TextureCoord, 0, EF_ABGR32F)));
 
-				simple_forward_tech_ = SyncLoadRenderEffect("Particle.fxml")->TechniqueByName("ParticleWithGS");
+				simple_forward_tech_ = effect_->TechniqueByName("ParticleWithGS");
 			}
 			else
 			{
@@ -449,28 +456,23 @@ namespace
 
 				rl_->TopologyType(RenderLayout::TT_TriangleStrip);
 
-				ElementInitData init_data;
-				init_data.row_pitch = sizeof(texs);
-				init_data.slice_pitch = 0;
-				init_data.data = texs;
-				GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+				GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					sizeof(texs), texs);
 				rl_->BindVertexStream(tex_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)),
 					RenderLayout::ST_Geometry, 0);
 
-				GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write, nullptr);
-				pos_vb->Resize(sizeof(ParticleInstance));
+				GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write,
+					sizeof(ParticleInstance), nullptr);
 				rl_->BindVertexStream(pos_vb,
 					std::make_tuple(vertex_element(VEU_TextureCoord, 0, EF_ABGR32F),
 						vertex_element(VEU_TextureCoord, 1, EF_ABGR32F)),
 					RenderLayout::ST_Instance);
 
-				init_data.row_pitch = sizeof(indices);
-				init_data.slice_pitch = 0;
-				init_data.data = indices;
-				GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+				GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+					sizeof(indices), indices);
 				rl_->BindIndexStream(ib, EF_R16UI);
 
-				simple_forward_tech_ = SyncLoadRenderEffect("Particle.fxml")->TechniqueByName("Particle");
+				simple_forward_tech_ = effect_->TechniqueByName("Particle");
 			}
 			technique_ = simple_forward_tech_;
 
@@ -479,27 +481,27 @@ namespace
 
 		void SceneDepthTexture(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("depth_tex")) = tex;
+			*(effect_->ParameterByName("depth_tex")) = tex;
 		}
 
 		void ParticleColorFrom(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("particle_color_from")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("particle_color_from")) = float3(clr.r(), clr.g(), clr.b());
 		}
 
 		void ParticleColorTo(Color const & clr)
 		{
-			*(technique_->Effect().ParameterByName("particle_color_to")) = float3(clr.r(), clr.g(), clr.b());
+			*(effect_->ParameterByName("particle_color_to")) = float3(clr.r(), clr.g(), clr.b());
 		}
 
 		void ParticleAlphaFrom(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("particle_alpha_from_tex")) = tex;
+			*(effect_->ParameterByName("particle_alpha_from_tex")) = tex;
 		}
 
 		void ParticleAlphaTo(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("particle_alpha_to_tex")) = tex;
+			*(effect_->ParameterByName("particle_alpha_to_tex")) = tex;
 		}
 
 		void OnRenderBegin()
@@ -509,18 +511,18 @@ namespace
 			float4x4 const & view = camera.ViewMatrix();
 			float4x4 const & proj = camera.ProjMatrix();
 
-			*(technique_->Effect().ParameterByName("model_view")) = model_mat_ * view;
-			*(technique_->Effect().ParameterByName("proj")) = proj;
-			*(technique_->Effect().ParameterByName("far_plane")) = camera.FarPlane();
+			*(effect_->ParameterByName("model_view")) = model_mat_ * view;
+			*(effect_->ParameterByName("proj")) = proj;
+			*(effect_->ParameterByName("far_plane")) = camera.FarPlane();
 
 			float scale_x = sqrt(model_mat_(0, 0) * model_mat_(0, 0) + model_mat_(0, 1) * model_mat_(0, 1) + model_mat_(0, 2) * model_mat_(0, 2));
 			float scale_y = sqrt(model_mat_(1, 0) * model_mat_(1, 0) + model_mat_(1, 1) * model_mat_(1, 1) + model_mat_(1, 2) * model_mat_(1, 2));
-			*(technique_->Effect().ParameterByName("point_radius")) = 0.08f * std::max(scale_x, scale_y);
+			*(effect_->ParameterByName("point_radius")) = 0.08f * std::max(scale_x, scale_y);
 
-			DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+			auto drl = Context::Instance().DeferredRenderingLayerInstance();
 			if (drl)
 			{
-				*(technique_->Effect().ParameterByName("depth_tex")) = drl->CurrFrameDepthTex(drl->ActiveViewport());
+				*(effect_->ParameterByName("depth_tex")) = drl->CurrFrameDepthTex(drl->ActiveViewport());
 			}
 		}
 
@@ -709,8 +711,8 @@ namespace KlayGE
 	{
 		auto emitter_iter = emitters_.begin();
 		uint32_t new_particle = (*emitter_iter)->Update(elapsed_time);
-		
-		float4x4 view_mat = Context::Instance().AppInstance().ActiveCamera().ViewMatrix();
+
+		float4x4 const & view_mat = Context::Instance().AppInstance().ActiveCamera().ViewMatrix();
 		std::vector<std::pair<uint32_t, float>> active_particles;
 
 		float3 min_bb(+1e10f, +1e10f, +1e10f);
@@ -757,7 +759,7 @@ namespace KlayGE
 				float p_to_v = (pos.x() * view_mat(0, 2) + pos.y() * view_mat(1, 2) + pos.z() * view_mat(2, 2) + view_mat(3, 2))
 					/ (pos.x() * view_mat(0, 3) + pos.y() * view_mat(1, 3) + pos.z() * view_mat(2, 3) + view_mat(3, 3));
 
-				active_particles.push_back(std::make_pair(i, p_to_v));
+				active_particles.emplace_back(i, p_to_v);
 
 				min_bb = MathLib::minimize(min_bb, pos);
 				max_bb = MathLib::maximize(min_bb, pos);
@@ -777,32 +779,55 @@ namespace KlayGE
 
 	bool ParticleSystem::MainThreadUpdate(float app_time, float elapsed_time)
 	{
-		UNREF_PARAM(app_time);
-		UNREF_PARAM(elapsed_time);
+		KFL_UNUSED(app_time);
+		KFL_UNUSED(elapsed_time);
 
 		std::lock_guard<std::mutex> lock(update_mutex_);
 
 		uint32_t const num_active_particles = static_cast<uint32_t>(active_particles_.size());
 
-		RenderLayoutPtr const & rl = renderable_->GetRenderLayout();
-		GraphicsBufferPtr instance_gb;
-		if (gs_support_)
-		{
-			instance_gb = rl->GetVertexStream(0);
-		}
-		else
-		{
-			instance_gb = rl->InstanceStream();
-
-			for (uint32_t i = 0; i < rl->NumVertexStreams(); ++ i)
-			{
-				rl->VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, num_active_particles);
-			}
-		}
-
+		RenderLayout& rl = renderable_->GetRenderLayout();
 		if (!active_particles_.empty())
 		{
-			instance_gb->Resize(sizeof(ParticleInstance) * num_active_particles);
+			GraphicsBufferPtr instance_gb;
+			if (gs_support_)
+			{
+				instance_gb = rl.GetVertexStream(0);
+			}
+			else
+			{
+				instance_gb = rl.InstanceStream();
+			}
+
+			uint32_t const new_instance_size = num_active_particles * sizeof(ParticleInstance);
+			if (!instance_gb || (instance_gb->Size() < new_instance_size))
+			{
+				RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+				instance_gb = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write,
+					new_instance_size, nullptr);
+
+				if (gs_support_)
+				{
+					rl.SetVertexStream(0, instance_gb);
+				}
+				else
+				{
+					rl.InstanceStream(instance_gb);
+				}
+			}
+
+			if (gs_support_)
+			{
+				rl.NumVertices(num_active_particles);
+			}
+			else
+			{
+				for (uint32_t i = 0; i < rl.NumVertexStreams(); ++ i)
+				{
+					rl.VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, num_active_particles);
+				}
+			}
+
 			{
 				GraphicsBuffer::Mapper mapper(*instance_gb, BA_Write_Only);
 				ParticleInstance* instance_data = mapper.Pointer<ParticleInstance>();
@@ -859,9 +884,10 @@ namespace KlayGE
 		return ResLoader::Instance().SyncQueryT<ParticleSystem>(MakeSharedPtr<ParticleSystemLoadingDesc>(psml_name));
 	}
 
-	std::function<ParticleSystemPtr()> ASyncLoadParticleSystem(std::string const & psml_name)
+	ParticleSystemPtr ASyncLoadParticleSystem(std::string const & psml_name)
 	{
-		return ResLoader::Instance().ASyncQueryT<ParticleSystem>(MakeSharedPtr<ParticleSystemLoadingDesc>(psml_name));
+		// TODO: Make it really async
+		return ResLoader::Instance().SyncQueryT<ParticleSystem>(MakeSharedPtr<ParticleSystemLoadingDesc>(psml_name));
 	}
 
 	void SaveParticleSystem(ParticleSystemPtr const & ps, std::string const & psml_name)

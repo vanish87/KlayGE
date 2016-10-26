@@ -37,9 +37,9 @@ namespace
 			technique_ = special_shading_tech_;
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
-			StaticMesh::BuildMeshInfo();
+			StaticMesh::DoBuildMeshInfo();
 
 			mtl_->diffuse = float3(0.2f, 0.2f, 0.2f);
 			mtl_->shininess = 128;
@@ -47,15 +47,15 @@ namespace
 
 			effect_attrs_ |= EA_Reflection;
 
-			reflection_tech_ = technique_->Effect().TechniqueByName("ReflectReflectionTech");
+			reflection_tech_ = effect_->TechniqueByName("ReflectReflectionTech");
 			reflection_alpha_blend_back_tech_ = reflection_tech_;
 			reflection_alpha_blend_front_tech_ = reflection_tech_;
 
-			special_shading_tech_ = technique_->Effect().TechniqueByName("ReflectSpecialShadingTech");
+			special_shading_tech_ = effect_->TechniqueByName("ReflectSpecialShadingTech");
 			special_shading_alpha_blend_back_tech_ = special_shading_tech_;
 			special_shading_alpha_blend_front_tech_ = special_shading_tech_;
 
-			reflection_tex_param_ = technique_->Effect().ParameterByName("reflection_tex");
+			reflection_tex_param_ = effect_->ParameterByName("reflection_tex");
 		}
 
 		void OnRenderBegin()
@@ -70,13 +70,13 @@ namespace
 				{
 					App3DFramework const & app = Context::Instance().AppInstance();
 					Camera const & camera = app.ActiveCamera();
-					*(technique_->Effect().ParameterByName("proj")) = camera.ProjMatrix();
-					*(technique_->Effect().ParameterByName("inv_proj")) = camera.InverseProjMatrix();
+					*(effect_->ParameterByName("proj")) = camera.ProjMatrix();
+					*(effect_->ParameterByName("inv_proj")) = camera.InverseProjMatrix();
 					float q = camera.FarPlane() / (camera.FarPlane() - camera.NearPlane());
 					float3 near_q_far(camera.NearPlane() * q, q, camera.FarPlane());
-					*(technique_->Effect().ParameterByName("near_q_far")) = near_q_far;
-					*(technique_->Effect().ParameterByName("ray_length")) = camera.FarPlane() - camera.NearPlane();
-					*(technique_->Effect().ParameterByName("inv_view")) = camera.InverseViewMatrix();
+					*(effect_->ParameterByName("near_q_far")) = near_q_far;
+					*(effect_->ParameterByName("ray_length")) = camera.FarPlane() - camera.NearPlane();
+					*(effect_->ParameterByName("inv_view")) = camera.InverseViewMatrix();
 				}
 				break;
 
@@ -87,20 +87,20 @@ namespace
 
 		void FrontReflectionTex(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("front_side_tex")) = tex;
+			*(effect_->ParameterByName("front_side_tex")) = tex;
 		}
 		void FrontReflectionDepthTex(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("front_side_depth_tex")) = tex;
+			*(effect_->ParameterByName("front_side_depth_tex")) = tex;
 		}
 
 		void BackReflectionTex(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("back_side_tex")) = tex;
+			*(effect_->ParameterByName("back_side_tex")) = tex;
 		}
 		void BackReflectionDepthTex(TexturePtr const & tex)
 		{
-			*(technique_->Effect().ParameterByName("back_side_depth_tex")) = tex;
+			*(effect_->ParameterByName("back_side_depth_tex")) = tex;
 		}
 
 		void BackCamera(CameraPtr const & camera)
@@ -110,21 +110,21 @@ namespace
 
 			float4x4 const mv = model_mat_ * view;
 
-			*(technique_->Effect().ParameterByName("back_model_view")) = mv;
-			*(technique_->Effect().ParameterByName("back_mvp")) = mv * proj;
+			*(effect_->ParameterByName("back_model_view")) = mv;
+			*(effect_->ParameterByName("back_mvp")) = mv * proj;
 
 			App3DFramework const & app = Context::Instance().AppInstance();
 			Camera const & scene_camera = app.ActiveCamera();
-			*(technique_->Effect().ParameterByName("eye_in_back_camera")) = MathLib::transform_coord(scene_camera.EyePos(), view);
+			*(effect_->ParameterByName("eye_in_back_camera")) = MathLib::transform_coord(scene_camera.EyePos(), view);
 		}
 
 		void MinSamples(int32_t samples)
 		{
-			*(technique_->Effect().ParameterByName("min_samples")) = samples;
+			*(effect_->ParameterByName("min_samples")) = samples;
 		}
 		void MaxSamples(int32_t samples)
 		{
-			*(technique_->Effect().ParameterByName("max_samples")) = samples;
+			*(effect_->ParameterByName("max_samples")) = samples;
 		}
 
 		void EnbleReflection(bool enable)
@@ -141,8 +141,8 @@ namespace
 
 		void SkyBox(TexturePtr const & y_cube, TexturePtr const & c_cube)
 		{
-			*(technique_->Effect().ParameterByName("skybox_tex")) = y_cube;
-			*(technique_->Effect().ParameterByName("skybox_C_tex")) = c_cube;
+			*(effect_->ParameterByName("skybox_tex")) = y_cube;
+			*(effect_->ParameterByName("skybox_C_tex")) = c_cube;
 		}
 
 	private:
@@ -160,9 +160,10 @@ namespace
 		{
 		}
 
-		void BuildMeshInfo()
+	private:
+		virtual void DoBuildMeshInfo() override
 		{
-			StaticMesh::BuildMeshInfo();
+			StaticMesh::DoBuildMeshInfo();
 
 			mtl_->diffuse = float3(0.73f, 1, 0.46f);
 			if (Context::Instance().Config().graphics_cfg.gamma)
@@ -218,11 +219,11 @@ void ScreenSpaceReflectionApp::OnCreate()
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
 	loading_percentage_ = 0;
-	c_cube_tl_ = ASyncLoadTexture("Lake_CraterLake03_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
-	y_cube_tl_ = ASyncLoadTexture("Lake_CraterLake03_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
-	teapot_ml_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable,
+	c_cube_ = ASyncLoadTexture("Lake_CraterLake03_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
+	y_cube_ = ASyncLoadTexture("Lake_CraterLake03_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
+	teapot_model_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable,
 		CreateModelFactory<RenderModel>(), CreateMeshFactory<ReflectMesh>());
-	std::function<RenderablePtr()> dino_ml = ASyncLoadModel("dino50.7z//dino50.meshml", EAH_GPU_Read | EAH_Immutable,
+	RenderablePtr dino_model = ASyncLoadModel("dino50.7z//dino50.meshml", EAH_GPU_Read | EAH_Immutable,
 		CreateModelFactory<RenderModel>(), CreateMeshFactory<DinoMesh>());
 
 	this->LookAt(float3(2.0f, 2.0f, -5.0f), float3(0.0f, 1.0f, 0.0f), float3(0, 1, 0));
@@ -235,7 +236,7 @@ void ScreenSpaceReflectionApp::OnCreate()
 	this->ActiveCamera().AddToSceneManager();
 
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
-	ambient_light->SkylightTex(y_cube_tl_, c_cube_tl_);
+	ambient_light->SkylightTex(y_cube_, c_cube_);
 	ambient_light->Color(float3(0.1f, 0.1f, 0.1f));
 	ambient_light->AddToSceneManager();
 
@@ -246,7 +247,7 @@ void ScreenSpaceReflectionApp::OnCreate()
 	point_light_->Falloff(float3(1, 0, 0.3f));
 	point_light_->AddToSceneManager();
 
-	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(dino_ml, SceneObject::SOA_Cullable, 0);
+	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(dino_model, SceneObject::SOA_Cullable);
 	scene_obj->ModelMatrix(MathLib::scaling(float3(2, 2, 2)) * MathLib::translation(0.0f, 1.0f, -2.5f));
 	scene_obj->AddToSceneManager();
 
@@ -375,10 +376,9 @@ uint32_t ScreenSpaceReflectionApp::DoUpdate(KlayGE::uint32_t pass)
 		{
 			if (loading_percentage_ < 30)
 			{
-				RenderModelPtr model = teapot_ml_();
-				if (model)
+				if (teapot_model_->HWResourceReady())
 				{
-					teapot_ = MakeSharedPtr<SceneObjectHelper>(model->Subrenderable(0), SceneObjectHelper::SOA_Cullable);
+					teapot_ = MakeSharedPtr<SceneObjectHelper>(teapot_model_->Subrenderable(0), SceneObjectHelper::SOA_Cullable);
 					teapot_->ModelMatrix(MathLib::scaling(float3(15, 15, 15)));
 					teapot_->AddToSceneManager();
 
@@ -391,12 +391,10 @@ uint32_t ScreenSpaceReflectionApp::DoUpdate(KlayGE::uint32_t pass)
 			}
 			else if (loading_percentage_ < 40)
 			{
-				TexturePtr y_cube_tex = y_cube_tl_();
-				TexturePtr c_cube_tex = c_cube_tl_();
-				if (!!y_cube_tex && !!c_cube_tex)
+				if (y_cube_->HWResourceReady() && c_cube_->HWResourceReady())
 				{
-					checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube_tex, c_cube_tex);
-					checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->SkyBox(y_cube_tex, c_cube_tex);
+					checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube_, c_cube_);
+					checked_pointer_cast<ReflectMesh>(teapot_->GetRenderable())->SkyBox(y_cube_, c_cube_);
 
 					loading_percentage_ = 100;
 				}

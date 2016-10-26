@@ -38,8 +38,6 @@ namespace
 	int32_t const NUM_LINE = 10;
 	int32_t const NUM_INSTANCE = 400;
 
-	int const MOTION_FRAMES = 5;
-
 	class MotionBlurRenderMesh : public StaticMesh
 	{
 	public:
@@ -57,14 +55,15 @@ namespace
 		RenderInstanceMesh(RenderModelPtr const & model, std::wstring const & /*name*/)
 			: MotionBlurRenderMesh(model, L"InstancedMesh")
 		{
-			technique_ = SyncLoadRenderEffect("MotionBlurDoF.fxml")->TechniqueByName("ColorDepthInstanced");
+			effect_ = SyncLoadRenderEffect("MotionBlurDoF.fxml");
+			technique_ = effect_->TechniqueByName("ColorDepthInstanced");
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
 			AABBox const & bb = this->PosBound();
-			*(technique_->Effect().ParameterByName("pos_center")) = bb.Center();
-			*(technique_->Effect().ParameterByName("pos_extent")) = bb.HalfSize();
+			*(effect_->ParameterByName("pos_center")) = bb.Center();
+			*(effect_->ParameterByName("pos_extent")) = bb.HalfSize();
 		}
 
 		void OnRenderBegin()
@@ -77,23 +76,23 @@ namespace
 			float4x4 const & prev_view = camera.PrevViewMatrix();
 			float4x4 const & prev_proj = camera.PrevProjMatrix();
 
-			*(technique_->Effect().ParameterByName("eye_in_world")) = camera.EyePos();
-			*(technique_->Effect().ParameterByName("view")) = curr_view;
-			*(technique_->Effect().ParameterByName("proj")) = curr_proj;
-			*(technique_->Effect().ParameterByName("prev_view")) = prev_view;
-			*(technique_->Effect().ParameterByName("prev_proj")) = prev_proj;
-			*(technique_->Effect().ParameterByName("elapsed_time")) = app.FrameTime();
+			*(effect_->ParameterByName("eye_in_world")) = camera.EyePos();
+			*(effect_->ParameterByName("view")) = curr_view;
+			*(effect_->ParameterByName("proj")) = curr_proj;
+			*(effect_->ParameterByName("prev_view")) = prev_view;
+			*(effect_->ParameterByName("prev_proj")) = prev_proj;
+			*(effect_->ParameterByName("elapsed_time")) = app.FrameTime();
 		}
 
 		void MotionVecPass(bool motion_vec)
 		{
 			if (motion_vec)
 			{
-				technique_ = technique_->Effect().TechniqueByName("MotionVectorInstanced");
+				technique_ = effect_->TechniqueByName("MotionVectorInstanced");
 			}
 			else
 			{
-				technique_ = technique_->Effect().TechniqueByName("ColorDepthInstanced");
+				technique_ = effect_->TechniqueByName("ColorDepthInstanced");
 			}
 		}
 	};
@@ -112,14 +111,15 @@ namespace
 		RenderNonInstancedMesh(RenderModelPtr const & model, std::wstring const & /*name*/)
 			: MotionBlurRenderMesh(model, L"NonInstancedMesh")
 		{
-			technique_ = SyncLoadRenderEffect("MotionBlurDoF.fxml")->TechniqueByName("ColorDepthNonInstanced");
+			effect_ = SyncLoadRenderEffect("MotionBlurDoF.fxml");
+			technique_ = effect_->TechniqueByName("ColorDepthNonInstanced");
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
 			AABBox const & bb = this->PosBound();
-			*(technique_->Effect().ParameterByName("pos_center")) = bb.Center();
-			*(technique_->Effect().ParameterByName("pos_extent")) = bb.HalfSize();
+			*(effect_->ParameterByName("pos_center")) = bb.Center();
+			*(effect_->ParameterByName("pos_extent")) = bb.HalfSize();
 		}
 
 		void OnRenderBegin()
@@ -132,17 +132,17 @@ namespace
 			float4x4 const & prev_view = camera.PrevViewMatrix();
 			float4x4 const & prev_proj = camera.PrevProjMatrix();
 
-			*(technique_->Effect().ParameterByName("eye_in_world")) = camera.EyePos();
-			*(technique_->Effect().ParameterByName("view")) = curr_view;
-			*(technique_->Effect().ParameterByName("proj")) = curr_proj;
-			*(technique_->Effect().ParameterByName("prev_view")) = prev_view;
-			*(technique_->Effect().ParameterByName("prev_proj")) = prev_proj;
-			*(technique_->Effect().ParameterByName("elapsed_time")) = app.FrameTime();
+			*(effect_->ParameterByName("eye_in_world")) = camera.EyePos();
+			*(effect_->ParameterByName("view")) = curr_view;
+			*(effect_->ParameterByName("proj")) = curr_proj;
+			*(effect_->ParameterByName("prev_view")) = prev_view;
+			*(effect_->ParameterByName("prev_proj")) = prev_proj;
+			*(effect_->ParameterByName("elapsed_time")) = app.FrameTime();
 		}
 
 		void OnInstanceBegin(uint32_t id)
 		{
-			InstData const * data = static_cast<InstData const *>(instances_[id].lock()->InstanceData());
+			InstData const * data = static_cast<InstData const *>(instances_[id]->InstanceData());
 
 			float4x4 model;
 			model.Col(0, data->mat[0]);
@@ -156,21 +156,21 @@ namespace
 			last_model.Col(2, data->last_mat[2]);
 			last_model.Col(3, float4(0, 0, 0, 1));
 
-			*(technique_->Effect().ParameterByName("modelmat")) = model;
-			*(technique_->Effect().ParameterByName("last_modelmat")) = last_model;
+			*(effect_->ParameterByName("modelmat")) = model;
+			*(effect_->ParameterByName("last_modelmat")) = last_model;
 			Color clr(data->clr);
-			*(technique_->Effect().ParameterByName("color")) = float4(clr.b(), clr.g(), clr.r(), clr.a());	// swap b and r
+			*(effect_->ParameterByName("color")) = float4(clr.b(), clr.g(), clr.r(), clr.a());	// swap b and r
 		}
 
 		void MotionVecPass(bool motion_vec)
 		{
 			if (motion_vec)
 			{
-				technique_ = technique_->Effect().TechniqueByName("MotionVectorNonInstanced");
+				technique_ = effect_->TechniqueByName("MotionVectorNonInstanced");
 			}
 			else
 			{
-				technique_ = technique_->Effect().TechniqueByName("ColorDepthNonInstanced");
+				technique_ = effect_->TechniqueByName("ColorDepthNonInstanced");
 			}
 		}
 
@@ -220,7 +220,7 @@ namespace
 			renderable_ = ra;
 		}
 
-		virtual void SubThreadUpdate(float /*app_time*/, float elapsed_time) KLAYGE_OVERRIDE
+		virtual void SubThreadUpdate(float /*app_time*/, float elapsed_time) override
 		{
 			last_mats_.push_back(model_);
 
@@ -256,16 +256,16 @@ namespace
 			: PostProcess(L"DepthOfField"),
 				max_radius_(8), show_blur_factor_(false)
 		{
-			input_pins_.push_back(std::make_pair("color_tex", TexturePtr()));
-			input_pins_.push_back(std::make_pair("depth_tex", TexturePtr()));
+			input_pins_.emplace_back("color_tex", TexturePtr());
+			input_pins_.emplace_back("depth_tex", TexturePtr());
 
-			output_pins_.push_back(std::make_pair("output", TexturePtr()));
+			output_pins_.emplace_back("output", TexturePtr());
 
 			RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
 			cs_support_ = caps.cs_support && (caps.max_shader_model >= ShaderModel(5, 0));
 
 			RenderEffectPtr effect = SyncLoadRenderEffect("DepthOfFieldPP.fxml");
-			this->Technique(effect->TechniqueByName("DepthOfFieldNormalization"));
+			this->Technique(effect, effect->TechniqueByName("DepthOfFieldNormalization"));
 
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			spread_fb_ = rf.MakeFrameBuffer();
@@ -316,11 +316,11 @@ namespace
 			show_blur_factor_ = show;
 			if (show_blur_factor_)
 			{
-				technique_ = technique_->Effect().TechniqueByName("DepthOfFieldBlurFactor");
+				technique_ = effect_->TechniqueByName("DepthOfFieldBlurFactor");
 			}
 			else
 			{
-				technique_ = technique_->Effect().TechniqueByName("DepthOfFieldNormalization");
+				technique_ = effect_->TechniqueByName("DepthOfFieldNormalization");
 			}
 		}
 		bool ShowBlurFactor() const
@@ -351,7 +351,7 @@ namespace
 
 				RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 				spread_tex_ = rf.MakeTexture2D(width, height, 1, 1, fmt, 1, 0, EAH_GPU_Read | EAH_GPU_Write | (cs_support_ ? EAH_GPU_Unordered : 0), nullptr);
-				spread_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*spread_tex_, 0, 0, 0));
+				spread_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*spread_tex_, 0, 1, 0));
 
 				spreading_pp_->SetParam(0, float4(static_cast<float>(width),
 					static_cast<float>(height), 1.0f / width, 1.0f / height));
@@ -366,10 +366,7 @@ namespace
 						float4(+1, -1, 1 - (max_radius_ * 2 + 1.0f) / width, 1 - (max_radius_ * 2 + 1.0f) / height)
 					};
 				
-					ElementInitData init_data;
-					init_data.row_pitch = sizeof(pos);
-					init_data.data = &pos[0];
-					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(pos), &pos[0]);
 					normalization_rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_ABGR32F)));
 				}
 
@@ -384,8 +381,8 @@ namespace
 		{
 			if (show_blur_factor_)
 			{
-				*(technique_->Effect().ParameterByName("focus_plane_inv_range")) = float2(-focus_plane_ / focus_range_, 1.0f / focus_range_);
-				*(technique_->Effect().ParameterByName("depth_tex")) = this->InputPin(1);
+				*(effect_->ParameterByName("focus_plane_inv_range")) = float2(-focus_plane_ / focus_range_, 1.0f / focus_range_);
+				*(effect_->ParameterByName("depth_tex")) = this->InputPin(1);
 				PostProcess::Apply();
 			}
 			else
@@ -398,10 +395,10 @@ namespace
 
 				sat_pp_->Apply();
 
-				*(technique_->Effect().ParameterByName("src_tex")) = spread_tex_;
+				*(effect_->ParameterByName("src_tex")) = spread_tex_;
 
 				re.BindFrameBuffer(frame_buffer_);
-				re.Render(*technique_, *normalization_rl_);
+				re.Render(*effect_, *technique_, *normalization_rl_);
 			}
 		}
 
@@ -431,10 +428,10 @@ namespace
 			: PostProcess(L"BokehFilter"),
 				max_radius_(8)
 		{
-			input_pins_.push_back(std::make_pair("color_tex", TexturePtr()));
-			input_pins_.push_back(std::make_pair("depth_tex", TexturePtr()));
+			input_pins_.emplace_back("color_tex", TexturePtr());
+			input_pins_.emplace_back("depth_tex", TexturePtr());
 
-			output_pins_.push_back(std::make_pair("output", TexturePtr()));
+			output_pins_.emplace_back("output", TexturePtr());
 
 			RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
 			gs_support_ = (caps.max_shader_model >= ShaderModel(4, 0));
@@ -442,14 +439,14 @@ namespace
 			RenderEffectPtr effect = SyncLoadRenderEffect("DepthOfFieldPP.fxml");
 			if (gs_support_)
 			{
-				this->Technique(effect->TechniqueByName("SeparateBokeh4"));
+				this->Technique(effect, effect->TechniqueByName("SeparateBokeh4"));
 			}
 			else
 			{
-				this->Technique(effect->TechniqueByName("SeparateBokeh"));
+				this->Technique(effect, effect->TechniqueByName("SeparateBokeh"));
 			}
 
-			*(technique_->Effect().ParameterByName("max_radius")) = static_cast<float>(max_radius_);
+			*(effect->ParameterByName("max_radius")) = static_cast<float>(max_radius_);
 
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			bokeh_fb_ = rf.MakeFrameBuffer();
@@ -489,16 +486,16 @@ namespace
 				uint32_t const out_width = in_width * 2 + max_radius_ * 4;
 				uint32_t const out_height = in_height;
 
-				*(technique_->Effect().ParameterByName("in_width_height")) = float4(static_cast<float>(in_width),
+				*(effect_->ParameterByName("in_width_height")) = float4(static_cast<float>(in_width),
 					static_cast<float>(in_height), 1.0f / in_width, 1.0f / in_height);
-				*(technique_->Effect().ParameterByName("bokeh_width_height")) = float4(static_cast<float>(out_width),
+				*(effect_->ParameterByName("bokeh_width_height")) = float4(static_cast<float>(out_width),
 					static_cast<float>(out_height), 1.0f / out_width, 1.0f / out_height);
-				*(technique_->Effect().ParameterByName("background_offset")) = static_cast<float>(in_width + max_radius_ * 4);
+				*(effect_->ParameterByName("background_offset")) = static_cast<float>(in_width + max_radius_ * 4);
 
 				RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 				RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
 				bokeh_tex_ = rf.MakeTexture2D(out_width, out_height, 1, 1, tex->Format(), 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
-				bokeh_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*bokeh_tex_, 0, 0, 0));
+				bokeh_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*bokeh_tex_, 0, 1, 0));
 
 				if (gs_support_)
 				{
@@ -513,11 +510,8 @@ namespace
 						}
 					}
 
-					ElementInitData init_data;
-					init_data.data = &points[0];
-					init_data.row_pitch = static_cast<uint32_t>(points.size() * sizeof(points[0]));
-					init_data.slice_pitch = 0;
-					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+						static_cast<uint32_t>(points.size() * sizeof(points[0])), &points[0]);
 					bokeh_rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 				}
 				else
@@ -575,17 +569,12 @@ namespace
 						}
 					}
 
-					ElementInitData init_data;
-					init_data.data = &points[0];
-					init_data.row_pitch = static_cast<uint32_t>(points.size() * sizeof(points[0]));
-					init_data.slice_pitch = 0;
-					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+					GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+						static_cast<uint32_t>(points.size() * sizeof(points[0])), &points[0]);
 					bokeh_rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_ABGR32F)));
 
-					init_data.data = &indices[0];
-					init_data.row_pitch = static_cast<uint32_t>(indices.size() * sizeof(indices[0]));
-					init_data.slice_pitch = 0;
-					GraphicsBufferPtr pos_ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+					GraphicsBufferPtr pos_ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+						static_cast<uint32_t>(indices.size() * sizeof(indices[0])), &indices[0]);
 					bokeh_rl_->BindIndexStream(pos_ib, EF_R32UI);
 				}
 
@@ -614,14 +603,14 @@ namespace
 		void Apply()
 		{
 			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-			*(technique_->Effect().ParameterByName("focus_plane_inv_range")) = float2(-focus_plane_ / focus_range_, 1.0f / focus_range_);
-			*(technique_->Effect().ParameterByName("focus_plane")) = focus_plane_;
-			*(technique_->Effect().ParameterByName("color_tex")) = this->InputPin(0);
-			*(technique_->Effect().ParameterByName("depth_tex")) = this->InputPin(1);
+			*(effect_->ParameterByName("focus_plane_inv_range")) = float2(-focus_plane_ / focus_range_, 1.0f / focus_range_);
+			*(effect_->ParameterByName("focus_plane")) = focus_plane_;
+			*(effect_->ParameterByName("color_tex")) = this->InputPin(0);
+			*(effect_->ParameterByName("depth_tex")) = this->InputPin(1);
 
 			re.BindFrameBuffer(bokeh_fb_);
 			bokeh_fb_->Clear(FrameBuffer::CBM_Color, Color(0, 0, 0, 0), 1, 0);
-			re.Render(*technique_, *bokeh_rl_);
+			re.Render(*effect_, *technique_, *bokeh_rl_);
 
 			merge_bokeh_pp_->SetParam(3, float2(-focus_plane_ / focus_range_, 1.0f / focus_range_));
 			merge_bokeh_pp_->SetParam(4, focus_plane_);
@@ -650,13 +639,14 @@ namespace
 			: PostProcess(L"MotionBlur"),
 				show_motion_vec_(false)
 		{
-			input_pins_.push_back(std::make_pair("color_tex", TexturePtr()));
-			input_pins_.push_back(std::make_pair("depth_tex", TexturePtr()));
-			input_pins_.push_back(std::make_pair("motion_vec_tex", TexturePtr()));
+			input_pins_.emplace_back("color_tex", TexturePtr());
+			input_pins_.emplace_back("depth_tex", TexturePtr());
+			input_pins_.emplace_back("motion_vec_tex", TexturePtr());
 
-			output_pins_.push_back(std::make_pair("output", TexturePtr()));
+			output_pins_.emplace_back("output", TexturePtr());
 
-			this->Technique(SyncLoadRenderEffect("MotionBlurPP.fxml")->TechniqueByName("MotionBlur"));
+			auto effect = SyncLoadRenderEffect("MotionBlurPP.fxml");
+			this->Technique(effect, effect->TechniqueByName("MotionBlur"));
 		}
 
 		void ShowMotionVector(bool show)
@@ -664,11 +654,11 @@ namespace
 			show_motion_vec_ = show;
 			if (show_motion_vec_)
 			{
-				technique_ = technique_->Effect().TechniqueByName("MotionBlurMotionVec");
+				technique_ = effect_->TechniqueByName("MotionBlurMotionVec");
 			}
 			else
 			{
-				technique_ = technique_->Effect().TechniqueByName("MotionBlur");
+				technique_ = effect_->TechniqueByName("MotionBlur");
 			}
 		}
 		bool ShowMotionVector() const
@@ -725,8 +715,8 @@ bool MotionBlurDoFApp::ConfirmDevice() const
 void MotionBlurDoFApp::OnCreate()
 {
 	loading_percentage_ = 0;
-	model_instance_ml_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable, CreateModelFactory<RenderModel>(), CreateMeshFactory<RenderInstanceMesh>());
-	model_mesh_ml_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable, CreateModelFactory<RenderModel>(), CreateMeshFactory<RenderNonInstancedMesh>());
+	model_instance_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable, CreateModelFactory<RenderModel>(), CreateMeshFactory<RenderInstanceMesh>());
+	model_mesh_ = ASyncLoadModel("teapot.meshml", EAH_GPU_Read | EAH_Immutable, CreateModelFactory<RenderModel>(), CreateMeshFactory<RenderNonInstancedMesh>());
 
 	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
@@ -1086,10 +1076,9 @@ uint32_t MotionBlurDoFApp::DoUpdate(uint32_t pass)
 		{
 			if (loading_percentage_ < 80 - NUM_LINE)
 			{
-				RenderModelPtr model = model_instance_ml_();
-				if (model)
+				if (model_instance_->HWResourceReady())
 				{
-					renderInstance_ = model->Subrenderable(0);
+					renderInstance_ = model_instance_->Subrenderable(0);
 					loading_percentage_ = 80 - NUM_LINE;
 				}
 			}
@@ -1128,10 +1117,9 @@ uint32_t MotionBlurDoFApp::DoUpdate(uint32_t pass)
 			}
 			else
 			{
-				RenderModelPtr model = model_mesh_ml_();
-				if (model)
+				if (model_mesh_)
 				{
-					renderMesh_ = model->Subrenderable(0);
+					renderMesh_ = model_mesh_->Subrenderable(0);
 					loading_percentage_ = 100;
 				}
 			}

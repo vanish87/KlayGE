@@ -26,18 +26,18 @@
 
 #include <KlayGE/DSound/DSAudio.hpp>
 
-const GUID GUID_NULL = { 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
+GUID const GUID_NULL = { 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
 
 namespace
 {
 	// 检查一个音频缓冲区是否空闲
 	/////////////////////////////////////////////////////////////////////////////////
-	bool IsSourceFree(KlayGE::IDSBufferPtr pDSB)
+	bool IsSourceFree(KlayGE::IDSBufferPtr const & dsb)
 	{
-		if (pDSB)
+		if (dsb)
 		{
 			DWORD status;
-			pDSB->GetStatus(&status);
+			dsb->GetStatus(&status);
 			return (0 == (status & DSBSTATUS_PLAYING));
 		}
 
@@ -59,25 +59,25 @@ namespace KlayGE
 		// 建立 DirectSound 缓冲区，要尽量减少使用建立标志，
 		// 因为使用太多不必要的标志会影响硬件加速性能
 		DSBUFFERDESC dsbd;
-		std::memset(&dsbd, 0, sizeof(dsbd));
 		dsbd.dwSize				= sizeof(dsbd);
 		dsbd.dwFlags			= DSBCAPS_CTRLVOLUME | DSBCAPS_CTRL3D | DSBCAPS_MUTE3DATMAXDISTANCE;
-		dsbd.guid3DAlgorithm	= GUID_NULL;
 		dsbd.dwBufferBytes		= static_cast<uint32_t>(dataSource->Size());
+		dsbd.dwReserved			= 0;
 		dsbd.lpwfxFormat		= &wfx;
+		dsbd.guid3DAlgorithm = GUID_NULL;
 
 		std::shared_ptr<IDirectSound> const & dsound = checked_cast<DSAudioEngine const *>(&Context::Instance().AudioFactoryInstance().AudioEngineInstance())->DSound();
 
 		// DirectSound只能播放 PCM 数据。其他格式可能不能工作。
 		IDirectSoundBuffer* temp;
 		TIF(dsound->CreateSoundBuffer(&dsbd, &temp, nullptr));
-		sources_[0] = IDSBufferPtr(temp);
+		sources_[0] = MakeCOMPtr(temp);
 
 		// 复制缓冲区，使所有缓冲区使用同一段数据
 		for (auto iter = sources_.begin() + 1; iter != sources_.end(); ++ iter)
 		{
 			TIF(dsound->DuplicateSoundBuffer(sources_[0].get(), &temp));
-			*iter = IDSBufferPtr(temp);
+			*iter = MakeCOMPtr(temp);
 		}
 
 		// 锁定缓冲区
@@ -125,7 +125,7 @@ namespace KlayGE
 	/////////////////////////////////////////////////////////////////////////////////
 	DSSoundBuffer::~DSSoundBuffer()
 	{
-		//this->Stop();
+		this->Stop();
 		sources_.clear();
 	}
 

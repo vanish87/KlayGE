@@ -30,7 +30,7 @@
 namespace KlayGE
 {
 	OGLESTextureCube::OGLESTextureCube(uint32_t size, uint32_t numMipMaps, uint32_t array_size, ElementFormat format,
-								uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data)
+								uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
 					: OGLESTexture(TT_Cube, array_size, sample_count, sample_quality, access_hint)
 	{
 		if (IsSRGB(format))
@@ -55,28 +55,36 @@ namespace KlayGE
 		{
 			num_mip_maps_ = numMipMaps;
 		}
-		array_size_ = 1;
 
-		widths_.resize(num_mip_maps_);
+		width_ = size;
+		
+		tex_data_.resize(array_size_ * num_mip_maps_ * 6);
+
+		glBindTexture(target_type_, texture_);
+		if (glloader_GLES_VERSION_3_0())
 		{
-			uint32_t s = size;
-			for (uint32_t level = 0; level < num_mip_maps_; ++ level)
+			glTexParameteri(target_type_, GL_TEXTURE_BASE_LEVEL, 0);
+			glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL, num_mip_maps_ - 1);
+		}
+		else if (glloader_GLES_APPLE_texture_max_level())
+		{
+			glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL_APPLE, num_mip_maps_ - 1);
+		}
+		else
+		{
+			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			if (re.HackForTegra())
 			{
-				widths_[level] = s;
-
-				s = std::max<uint32_t>(1U, s / 2);
+				glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL, num_mip_maps_ - 1);
 			}
 		}
-		
-		tex_data_.resize(6 * num_mip_maps_);
-		this->ReclaimHWResource(init_data);
 	}
 
 	uint32_t OGLESTextureCube::Width(uint32_t level) const
 	{
 		BOOST_ASSERT(level < num_mip_maps_);
 
-		return widths_[level];
+		return std::max<uint32_t>(1U, width_ >> level);
 	}
 
 	uint32_t OGLESTextureCube::Height(uint32_t level) const
@@ -196,16 +204,14 @@ namespace KlayGE
 					uint32_t x_offset, uint32_t y_offset, uint32_t /*width*/, uint32_t /*height*/,
 					void*& data, uint32_t& row_pitch)
 	{
-		BOOST_ASSERT(0 == array_index);
-		UNREF_PARAM(array_index);
-
 		last_tma_ = tma;
 
 		uint32_t const texel_size = NumFormatBytes(format_);
+		uint32_t const w = this->Width(level);
 
-		row_pitch = widths_[level] * texel_size;
+		row_pitch = w * texel_size;
 
-		uint8_t* p = &tex_data_[face * num_mip_maps_ + level][0];
+		uint8_t* p = &tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0];
 		if (IsCompressedFormat(format_))
 		{
 			uint32_t const block_size = NumFormatBytes(format_) * 4;
@@ -213,15 +219,12 @@ namespace KlayGE
 		}
 		else
 		{
-			data = p + (y_offset * widths_[level] + x_offset) * texel_size;
+			data = p + (y_offset * w + x_offset) * texel_size;
 		}
 	}
 
 	void OGLESTextureCube::UnmapCube(uint32_t array_index, CubeFaces face, uint32_t level)
 	{
-		BOOST_ASSERT(0 == array_index);
-		UNREF_PARAM(array_index);
-
 		switch (last_tma_)
 		{
 		case TMA_Read_Only:
@@ -235,6 +238,8 @@ namespace KlayGE
 				GLenum gl_type;
 				OGLESMapping::MappingFormat(gl_internalFormat, gl_format, gl_type, format_);
 
+				uint32_t const w = this->Width(level);
+
 				OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
 				re.BindTexture(0, target_type_, texture_);
 
@@ -244,13 +249,12 @@ namespace KlayGE
 					GLsizei const image_size = ((this->Width(level) + 3) / 4) * ((this->Height(level) + 3) / 4) * block_size;
 
 					glCompressedTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level,
-						0, 0, widths_[level], widths_[level], gl_format, image_size, &tex_data_[face * num_mip_maps_ + level][0]);
+						0, 0, w, w, gl_format, image_size, &tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0]);
 				}
 				else
 				{
 					glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level,
-						0, 0, widths_[level], widths_[level],
-						gl_format, gl_type, &tex_data_[face * num_mip_maps_ + level][0]);
+						0, 0, w, w, gl_format, gl_type, &tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0]);
 				}
 			}
 			break;
@@ -260,7 +264,7 @@ namespace KlayGE
 		}
 	}
 
-	void OGLESTextureCube::ReclaimHWResource(ElementInitData const * init_data)
+	void OGLESTextureCube::CreateHWResource(ElementInitData const * init_data)
 	{
 		uint32_t texel_size = NumFormatBytes(format_);
 
@@ -269,72 +273,95 @@ namespace KlayGE
 		GLenum gltype;
 		OGLESMapping::MappingFormat(glinternalFormat, glformat, gltype, format_);
 
-		glGenTextures(1, &texture_);
 		glBindTexture(target_type_, texture_);
-		glTexParameteri(target_type_, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(target_type_, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		if (glloader_GLES_VERSION_3_0())
+		for (uint32_t array_index = 0; array_index < array_size_; ++ array_index)
 		{
-			glTexParameteri(target_type_, GL_TEXTURE_BASE_LEVEL, 0);
-			glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL, num_mip_maps_ - 1);
-		}
-		else if (glloader_GLES_APPLE_texture_max_level())
-		{
-			glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL_APPLE, num_mip_maps_ - 1);
-		}
-		else
-		{
-			OGLESRenderEngine& re = *checked_cast<OGLESRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-			if (re.HackForTegra())
+			for (int face = 0; face < 6; ++ face)
 			{
-				glTexParameteri(target_type_, GL_TEXTURE_MAX_LEVEL, num_mip_maps_ - 1);
-			}
-		}
-
-		for (int face = 0; face < 6; ++ face)
-		{
-			for (uint32_t level = 0; level < num_mip_maps_; ++ level)
-			{
-				if (IsCompressedFormat(format_))
+				for (uint32_t level = 0; level < num_mip_maps_; ++ level)
 				{
-					uint32_t const block_size = NumFormatBytes(format_) * 4;
-					GLsizei const image_size = ((widths_[level] + 3) / 4) * ((widths_[level] + 3) / 4) * block_size;
+					uint32_t const s = this->Width(level);
 
-					void* ptr;
-					if (nullptr == init_data)
+					if (IsCompressedFormat(format_))
 					{
-						tex_data_[face * num_mip_maps_ + level].resize(image_size, 0);
-						ptr = nullptr;
+						uint32_t const block_size = NumFormatBytes(format_) * 4;
+						GLsizei const image_size = ((s + 3) / 4) * ((s + 3) / 4) * block_size;
+
+						void* ptr;
+						if (nullptr == init_data)
+						{
+							tex_data_[(array_index * 6 + face) * num_mip_maps_ + level].resize(image_size, 0);
+							ptr = nullptr;
+						}
+						else
+						{
+							tex_data_[(array_index * 6 + face) * num_mip_maps_ + level].resize(image_size);
+							std::memcpy(&tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0],
+								init_data[(array_index * 6 + face) * num_mip_maps_ + level].data, image_size);
+							ptr = &tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0];
+						}
+
+						if (array_size_ > 1)
+						{
+							if (0 == array_index)
+							{
+								glCompressedTexImage3D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, glinternalFormat,
+									s, s, array_size_, 0, image_size * array_size_, nullptr);
+							}
+
+							if (init_data != nullptr)
+							{
+								glCompressedTexSubImage3D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, 0, 0, array_index, s, s, 1,
+									glformat, image_size, init_data[(array_index * 6 + face) * num_mip_maps_ + level].data);
+							}
+						}
+						else
+						{
+							glCompressedTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, glinternalFormat,
+								s, s, 0, image_size, ptr);
+						}
 					}
 					else
 					{
-						tex_data_[face * num_mip_maps_ + level].resize(image_size);
-						std::memcpy(&tex_data_[face * num_mip_maps_ + level][0], init_data[face * num_mip_maps_ + level].data, image_size);
-						ptr = &tex_data_[face * num_mip_maps_ + level][0];
-					}
-					glCompressedTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, glinternalFormat,
-						widths_[level], widths_[level], 0, image_size, ptr);
-				}
-				else
-				{
-					GLsizei const image_size = widths_[level] * widths_[level] * texel_size;
+						GLsizei const image_size = s * s * texel_size;
 
-					void* ptr;
-					if (nullptr == init_data)
-					{
-						tex_data_[face * num_mip_maps_ + level].resize(image_size, 0);
-						ptr = nullptr;
+						void* ptr;
+						if (nullptr == init_data)
+						{
+							tex_data_[(array_index * 6 + face) * num_mip_maps_ + level].resize(image_size, 0);
+							ptr = nullptr;
+						}
+						else
+						{
+							tex_data_[(array_index * 6 + face) * num_mip_maps_ + level].resize(image_size);
+							std::memcpy(&tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0],
+								init_data[face * num_mip_maps_ + level].data, image_size);
+							ptr = &tex_data_[(array_index * 6 + face) * num_mip_maps_ + level][0];
+						}
+
+						if (array_size_ > 1)
+						{
+							if (0 == array_index)
+							{
+								glTexImage3D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, glinternalFormat, s, s, array_size_, 0, glformat, gltype, nullptr);
+							}
+
+							if (init_data != nullptr)
+							{
+								glTexSubImage3D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, 0, 0, array_index, s, s, 1,
+									glformat, gltype, init_data[array_index * num_mip_maps_ + level].data);
+							}
+						}
+						else
+						{
+							glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, glinternalFormat,
+								s, s, 0, glformat, gltype, ptr);
+						}
 					}
-					else
-					{
-						tex_data_[face * num_mip_maps_ + level].resize(image_size);
-						std::memcpy(&tex_data_[face * num_mip_maps_ + level][0], init_data[face * num_mip_maps_ + level].data, image_size);
-						ptr = &tex_data_[face * num_mip_maps_ + level][0];
-					}
-					glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, glinternalFormat,
-						widths_[level], widths_[level], 0, glformat, gltype, ptr);
 				}
 			}
 		}
+
+		hw_res_ready_ = true;
 	}
 }

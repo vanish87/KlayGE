@@ -27,7 +27,7 @@
 namespace KlayGE
 {
 	SceneObject::SceneObject(uint32_t attrib)
-		: attrib_(attrib), parent_(nullptr),
+		: attrib_(attrib), parent_(nullptr), renderable_hw_res_ready_(false),
 			model_(float4x4::Identity()), abs_model_(float4x4::Identity()),
 			visible_mark_(BO_No)
 	{
@@ -82,9 +82,9 @@ namespace KlayGE
 		return abs_model_;
 	}
 
-	AABBoxPtr const & SceneObject::PosBoundWS() const
+	AABBox const & SceneObject::PosBoundWS() const
 	{
-		return pos_aabb_ws_;
+		return *pos_aabb_ws_;
 	}
 
 	void SceneObject::UpdateAbsModelMatrix()
@@ -140,15 +140,12 @@ namespace KlayGE
 	bool SceneObject::MainThreadUpdate(float app_time, float elapsed_time)
 	{
 		bool refreshed = false;
-		if (!renderable_ && renderable_rl_)
+		if (renderable_ && !renderable_hw_res_ready_ && renderable_->HWResourceReady())
 		{
-			renderable_ = renderable_rl_();
-			if (renderable_)
-			{
-				this->OnAttachRenderable(false);
-				this->UpdateAbsModelMatrix();
-				refreshed = true;
-			}
+			this->OnAttachRenderable(false);
+			this->UpdateAbsModelMatrix();
+			refreshed = true;
+			renderable_hw_res_ready_ = true;
 		}
 
 		if (main_thread_update_func_)

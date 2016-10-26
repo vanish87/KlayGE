@@ -50,11 +50,13 @@ namespace KlayGE
 			uint8_t usage_index;
 			uint8_t start_component;
 			uint8_t component_count;
+			uint8_t slot;
 
 			friend bool operator==(StreamOutputDecl const & lhs, StreamOutputDecl const & rhs)
 			{
 				return (lhs.usage == rhs.usage) && (lhs.usage_index == rhs.usage_index)
-					&& (lhs.start_component == rhs.start_component) && (lhs.component_count == rhs.component_count);
+					&& (lhs.start_component == rhs.start_component) && (lhs.component_count == rhs.component_count)
+					&& (lhs.slot == rhs.slot);
 			}
 			friend bool operator!=(StreamOutputDecl const & lhs, StreamOutputDecl const & rhs)
 			{
@@ -98,17 +100,15 @@ namespace KlayGE
 		{
 		}
 
-		static ShaderObjectPtr NullObject();
-
-		virtual bool AttachNativeShader(ShaderType type, RenderEffect const & effect, std::vector<uint32_t> const & shader_desc_ids,
-			std::vector<uint8_t> const & native_shader_block) = 0;
+		virtual bool AttachNativeShader(ShaderType type, RenderEffect const & effect,
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids, std::vector<uint8_t> const & native_shader_block) = 0;
 
 		virtual bool StreamIn(ResIdentifierPtr const & res, ShaderType type, RenderEffect const & effect,
-			std::vector<uint32_t> const & shader_desc_ids) = 0;
+			std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) = 0;
 		virtual void StreamOut(std::ostream& os, ShaderType type) = 0;
 
 		virtual void AttachShader(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass, std::vector<uint32_t> const & shader_desc_ids) = 0;
+			RenderTechnique const & tech, RenderPass const & pass, std::array<uint32_t, ST_NumShaderTypes> const & shader_desc_ids) = 0;
 		virtual void AttachShader(ShaderType type, RenderEffect const & effect,
 			RenderTechnique const & tech, RenderPass const & pass, ShaderObjectPtr const & shared_so) = 0;
 		virtual void LinkShaders(RenderEffect const & effect) = 0;
@@ -146,6 +146,14 @@ namespace KlayGE
 		{
 			return cs_block_size_z_;
 		}
+
+	protected:
+		std::vector<uint8_t> CompileToDXBC(ShaderType type, RenderEffect const & effect,
+			RenderTechnique const & tech, RenderPass const & pass,
+			std::vector<std::pair<char const *, char const *>> const & api_special_macros,
+			char const * func_name, char const * shader_profile, uint32_t flags);
+		void ReflectDXBC(std::vector<uint8_t> const & code, void** reflector);
+		std::vector<uint8_t> StripDXBC(std::vector<uint8_t> const & code, uint32_t strip_flags);
 
 	protected:
 		std::array<bool, ST_NumShaderTypes> is_shader_validate_;

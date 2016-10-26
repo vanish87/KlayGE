@@ -33,7 +33,7 @@ namespace
 	void DecompressNormalMapSubresource(uint32_t width, uint32_t height, ElementFormat restored_format, 
 		ElementInitData& restored_data, std::vector<uint8_t>& restored_data_block, ElementFormat com_format, ElementInitData const & com_data)
 	{
-		UNREF_PARAM(restored_format);
+		KFL_UNUSED(restored_format);
 
 		std::vector<uint8_t> normals(width * height * 4);
 
@@ -329,7 +329,7 @@ int main(int argc, char* argv[])
 	if (in_file.empty())
 	{
 		cout << "Couldn't locate " << in_file << endl;
-		ResLoader::Destroy();
+		Context::Destroy();
 		return 1;
 	}
 
@@ -355,7 +355,7 @@ int main(int argc, char* argv[])
 
 	cout << "Na Length map is saved to " << argv[2] << endl;
 
-	ResLoader::Destroy();
+	Context::Destroy();
 
 	return 0;
 }

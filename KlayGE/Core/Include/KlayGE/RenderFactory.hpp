@@ -30,6 +30,7 @@
 #pragma once
 
 #include <KlayGE/PreDeclare.hpp>
+#include <KlayGE/RenderEngine.hpp>
 #include <KlayGE/Texture.hpp>
 #include <KlayGE/GraphicsBuffer.hpp>
 #include <KlayGE/RenderStateObject.hpp>
@@ -44,8 +45,6 @@ namespace KlayGE
 	public:
 		virtual ~RenderFactory();
 
-		static RenderFactoryPtr NullObject();
-
 		virtual std::wstring const & Name() const = 0;
 
 		RenderEngine& RenderEngineInstance();
@@ -53,25 +52,42 @@ namespace KlayGE
 		void Suspend();
 		void Resume();
 
-		virtual TexturePtr MakeTexture1D(uint32_t width, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data) = 0;
-		virtual TexturePtr MakeTexture2D(uint32_t width, uint32_t height, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data) = 0;
-		virtual TexturePtr MakeTexture3D(uint32_t width, uint32_t height, uint32_t depth, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data) = 0;
-		virtual TexturePtr MakeTextureCube(uint32_t size, uint32_t numMipMaps, uint32_t array_size,
-			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data) = 0;
+		virtual TexturePtr MakeDelayCreationTexture1D(uint32_t width, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) = 0;
+		virtual TexturePtr MakeDelayCreationTexture2D(uint32_t width, uint32_t height, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) = 0;
+		virtual TexturePtr MakeDelayCreationTexture3D(uint32_t width, uint32_t height, uint32_t depth, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) = 0;
+		virtual TexturePtr MakeDelayCreationTextureCube(uint32_t size, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint) = 0;
+
+		TexturePtr MakeTexture1D(uint32_t width, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data);
+		TexturePtr MakeTexture2D(uint32_t width, uint32_t height, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data);
+		TexturePtr MakeTexture3D(uint32_t width, uint32_t height, uint32_t depth, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data);
+		TexturePtr MakeTextureCube(uint32_t size, uint32_t num_mip_maps, uint32_t array_size,
+			ElementFormat format, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint, ElementInitData const * init_data);
+
 		virtual FrameBufferPtr MakeFrameBuffer() = 0;
 
 		virtual RenderLayoutPtr MakeRenderLayout() = 0;
 
-		virtual GraphicsBufferPtr MakeVertexBuffer(BufferUsage usage, uint32_t access_hint, ElementInitData const * init_data, ElementFormat fmt = EF_Unknown) = 0;
-		virtual GraphicsBufferPtr MakeIndexBuffer(BufferUsage usage, uint32_t access_hint, ElementInitData const * init_data, ElementFormat fmt = EF_Unknown) = 0;
-		virtual GraphicsBufferPtr MakeConstantBuffer(BufferUsage usage, uint32_t access_hint, ElementInitData const * init_data, ElementFormat fmt = EF_Unknown) = 0;
+		virtual GraphicsBufferPtr MakeDelayCreationVertexBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte, ElementFormat fmt = EF_Unknown) = 0;
+		virtual GraphicsBufferPtr MakeDelayCreationIndexBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte, ElementFormat fmt = EF_Unknown) = 0;
+		virtual GraphicsBufferPtr MakeDelayCreationConstantBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte, ElementFormat fmt = EF_Unknown) = 0;
+
+		GraphicsBufferPtr MakeVertexBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte, void const * init_data, ElementFormat fmt = EF_Unknown);
+		GraphicsBufferPtr MakeIndexBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte, void const * init_data, ElementFormat fmt = EF_Unknown);
+		GraphicsBufferPtr MakeConstantBuffer(BufferUsage usage, uint32_t access_hint, uint32_t size_in_byte, void const * init_data, ElementFormat fmt = EF_Unknown);
 
 		virtual QueryPtr MakeOcclusionQuery() = 0;
 		virtual QueryPtr MakeConditionalRender() = 0;
 		virtual QueryPtr MakeTimerQuery() = 0;
+		virtual QueryPtr MakeSOStatisticsQuery() = 0;
+
+		virtual FencePtr MakeFence() = 0;
 
 		virtual RenderViewPtr Make1DRenderView(Texture& texture, int first_array_index, int array_size, int level) = 0;
 		virtual RenderViewPtr Make2DRenderView(Texture& texture, int first_array_index, int array_size, int level) = 0;
@@ -104,7 +120,7 @@ namespace KlayGE
 		virtual ShaderObjectPtr MakeShaderObject() = 0;
 
 	private:
-		virtual RenderEnginePtr DoMakeRenderEngine() = 0;
+		virtual std::unique_ptr<RenderEngine> DoMakeRenderEngine() = 0;
 
 		virtual RasterizerStateObjectPtr DoMakeRasterizerStateObject(RasterizerStateDesc const & desc) = 0;
 		virtual DepthStencilStateObjectPtr DoMakeDepthStencilStateObject(DepthStencilStateDesc const & desc) = 0;
@@ -115,7 +131,7 @@ namespace KlayGE
 		virtual void DoResume() = 0;
 
 	protected:
-		RenderEnginePtr re_;
+		std::unique_ptr<RenderEngine> re_;
 
 		std::map<RasterizerStateDesc, RasterizerStateObjectPtr> rs_pool_;
 		std::map<DepthStencilStateDesc, DepthStencilStateObjectPtr> dss_pool_;

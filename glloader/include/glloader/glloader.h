@@ -80,7 +80,7 @@
 #if defined(__APPLE__) || defined(__APPLE_CC__)
 	#define GLLOADER_AGL
 #endif
-#if defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__) || defined(__CYGWIN__)
+#if defined(__unix__) || defined(linux) || defined(__linux) || defined(__linux__)
 	#define GLLOADER_GLX
 #endif
 
@@ -340,6 +340,11 @@ extern "C"
  * Initiate GLLoader
  */
 GLLOADER_API void glloader_init();
+
+/**
+ * Uninitiate GLLoader
+ */
+GLLOADER_API void glloader_uninit();
 
 /**
  * Find out if a particular feature is available on your platform, including the core and the extensions.

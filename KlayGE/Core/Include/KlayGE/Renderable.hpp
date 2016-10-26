@@ -130,20 +130,40 @@ namespace KlayGE
 	typedef std::vector<std::pair<std::string, std::string>> TextureSlotsType;
 	struct KLAYGE_CORE_API RenderMaterial
 	{
+		enum SurfaceDetailMode
+		{
+			SDM_Parallax = 0,
+			SDM_FlatTessellation,
+			SDM_SmoothTessellation
+		};
+
+		RenderMaterial()
+			: sss(false),
+				detail_mode(SDM_Parallax),
+				height_offset_scale(-0.5f, 0.06f),
+				tess_factors(5, 5, 1, 9)
+		{
+		}
+
 		float3 ambient;
 		float3 diffuse;
 		float3 specular;
 		float3 emit;
 		float opacity;
 		float shininess;
+		bool sss;
 
 		TextureSlotsType texture_slots;
+
+		SurfaceDetailMode detail_mode;
+		float2 height_offset_scale;
+		float4 tess_factors;
 	};
 
 	float const INV_LOG_8192 = 1 / log(8192.0f);
 
 	// Abstract class defining the interface all renderable objects must implement.
-	class KLAYGE_CORE_API Renderable : public std::enable_shared_from_this<Renderable>
+	class KLAYGE_CORE_API Renderable
 	{
 	public:
 		enum EffectAttribute
@@ -161,11 +181,15 @@ namespace KlayGE
 		Renderable();
 		virtual ~Renderable();
 
-		virtual RenderTechniquePtr const & GetRenderTechnique() const
+		virtual RenderEffectPtr const & GetRenderEffect() const
+		{
+			return effect_;
+		}
+		virtual RenderTechnique* GetRenderTechnique() const
 		{
 			return technique_;
 		}
-		virtual RenderLayoutPtr const & GetRenderLayout() const = 0;
+		virtual RenderLayout& GetRenderLayout() const = 0;
 		virtual std::wstring const & Name() const = 0;
 
 		virtual void OnRenderBegin();
@@ -191,15 +215,15 @@ namespace KlayGE
 				this->AddInstance(*iter);
 			}
 		}
-		void AddInstance(SceneObjectPtr const & obj);
+		void AddInstance(SceneObject const * obj);
 
 		uint32_t NumInstances() const
 		{
 			return static_cast<uint32_t>(instances_.size());
 		}
-		SceneObjectPtr GetInstance(uint32_t index) const
+		SceneObject const * GetInstance(uint32_t index) const
 		{
-			return instances_[index].lock();
+			return instances_[index];
 		}
 
 		virtual void ModelMatrix(float4x4 const & mat);
@@ -219,6 +243,12 @@ namespace KlayGE
 		{
 			return static_cast<uint32_t>(subrenderables_.size());
 		}
+
+		virtual bool HWResourceReady() const
+		{
+			return true;
+		}
+		bool AllHWResourceReady() const;
 
 		// For select mode
 
@@ -268,18 +298,19 @@ namespace KlayGE
 
 		// For deferred only
 		virtual void BindDeferredEffect(RenderEffectPtr const & deferred_effect);
-		virtual RenderTechniquePtr const & PassTech(PassType type) const;
+		virtual RenderTechnique* PassTech(PassType type) const;
 		virtual void UpdateTechniques();
 
 	protected:
-		std::vector<std::weak_ptr<SceneObject>> instances_;
+		std::vector<SceneObject const *> instances_;
 
-		RenderTechniquePtr technique_;
+		RenderEffectPtr effect_;
+		RenderTechnique* technique_;
 
 		// For select mode
 
-		RenderTechniquePtr select_mode_tech_;
-		RenderEffectParameterPtr select_mode_object_id_param_;
+		RenderTechnique* select_mode_tech_;
+		RenderEffectParameter* select_mode_object_id_param_;
 		float4 select_mode_object_id_;
 		bool select_mode_on_;
 
@@ -287,29 +318,29 @@ namespace KlayGE
 
 		RenderEffectPtr deferred_effect_;
 
-		RenderTechniquePtr depth_tech_;
-		RenderTechniquePtr depth_alpha_blend_back_tech_;
-		RenderTechniquePtr depth_alpha_blend_front_tech_;
-		RenderTechniquePtr gbuffer_rt0_tech_;
-		RenderTechniquePtr gbuffer_alpha_blend_back_rt0_tech_;
-		RenderTechniquePtr gbuffer_alpha_blend_front_rt0_tech_;
-		RenderTechniquePtr gbuffer_rt1_tech_;
-		RenderTechniquePtr gbuffer_alpha_blend_back_rt1_tech_;
-		RenderTechniquePtr gbuffer_alpha_blend_front_rt1_tech_;
-		RenderTechniquePtr gbuffer_mrt_tech_;
-		RenderTechniquePtr gbuffer_alpha_blend_back_mrt_tech_;
-		RenderTechniquePtr gbuffer_alpha_blend_front_mrt_tech_;
-		RenderTechniquePtr gen_sm_tech_;
-		RenderTechniquePtr gen_sm_wo_dt_tech_;
-		RenderTechniquePtr gen_cascaded_sm_tech_;
-		RenderTechniquePtr gen_rsm_tech_;
-		RenderTechniquePtr reflection_tech_;
-		RenderTechniquePtr reflection_alpha_blend_back_tech_;
-		RenderTechniquePtr reflection_alpha_blend_front_tech_;
-		RenderTechniquePtr special_shading_tech_;
-		RenderTechniquePtr special_shading_alpha_blend_back_tech_;
-		RenderTechniquePtr special_shading_alpha_blend_front_tech_;
-		RenderTechniquePtr simple_forward_tech_;
+		RenderTechnique* depth_tech_;
+		RenderTechnique* depth_alpha_blend_back_tech_;
+		RenderTechnique* depth_alpha_blend_front_tech_;
+		RenderTechnique* gbuffer_rt0_tech_;
+		RenderTechnique* gbuffer_alpha_blend_back_rt0_tech_;
+		RenderTechnique* gbuffer_alpha_blend_front_rt0_tech_;
+		RenderTechnique* gbuffer_rt1_tech_;
+		RenderTechnique* gbuffer_alpha_blend_back_rt1_tech_;
+		RenderTechnique* gbuffer_alpha_blend_front_rt1_tech_;
+		RenderTechnique* gbuffer_mrt_tech_;
+		RenderTechnique* gbuffer_alpha_blend_back_mrt_tech_;
+		RenderTechnique* gbuffer_alpha_blend_front_mrt_tech_;
+		RenderTechnique* gen_sm_tech_;
+		RenderTechnique* gen_sm_wo_dt_tech_;
+		RenderTechnique* gen_cascaded_sm_tech_;
+		RenderTechnique* gen_rsm_tech_;
+		RenderTechnique* reflection_tech_;
+		RenderTechnique* reflection_alpha_blend_back_tech_;
+		RenderTechnique* reflection_alpha_blend_front_tech_;
+		RenderTechnique* special_shading_tech_;
+		RenderTechnique* special_shading_alpha_blend_back_tech_;
+		RenderTechnique* special_shading_alpha_blend_front_tech_;
+		RenderTechnique* simple_forward_tech_;
 
 		float4x4 model_mat_;
 
@@ -319,29 +350,34 @@ namespace KlayGE
 
 		RenderMaterialPtr mtl_;
 
-		RenderEffectParameterPtr mvp_param_;
-		RenderEffectParameterPtr model_view_param_;
-		RenderEffectParameterPtr far_plane_param_;
-		RenderEffectParameterPtr pos_center_param_;
-		RenderEffectParameterPtr pos_extent_param_;
-		RenderEffectParameterPtr tc_center_param_;
-		RenderEffectParameterPtr tc_extent_param_;
-		RenderEffectParameterPtr shininess_tex_param_;
-		RenderEffectParameterPtr shininess_clr_param_;
-		RenderEffectParameterPtr specular_tex_param_;
-		RenderEffectParameterPtr specular_clr_param_;
-		RenderEffectParameterPtr normal_map_enabled_param_;
-		RenderEffectParameterPtr normal_tex_param_;
-		RenderEffectParameterPtr height_map_enabled_param_;
-		RenderEffectParameterPtr height_tex_param_;
-		RenderEffectParameterPtr diffuse_tex_param_;
-		RenderEffectParameterPtr diffuse_clr_param_;
-		RenderEffectParameterPtr emit_tex_param_;
-		RenderEffectParameterPtr emit_clr_param_;
-		RenderEffectParameterPtr opacity_clr_param_;
-		RenderEffectParameterPtr opacity_map_enabled_param_;
-		RenderEffectParameterPtr opaque_depth_tex_param_;
-		RenderEffectParameterPtr reflection_tex_param_;
+		RenderEffectParameter* mvp_param_;
+		RenderEffectParameter* model_view_param_;
+		RenderEffectParameter* far_plane_param_;
+		RenderEffectParameter* forward_vec_param_;
+		RenderEffectParameter* frame_size_param_;
+		RenderEffectParameter* height_offset_scale_param_;
+		RenderEffectParameter* tess_factors_param_;
+		RenderEffectParameter* pos_center_param_;
+		RenderEffectParameter* pos_extent_param_;
+		RenderEffectParameter* tc_center_param_;
+		RenderEffectParameter* tc_extent_param_;
+		RenderEffectParameter* shininess_tex_param_;
+		RenderEffectParameter* shininess_clr_param_;
+		RenderEffectParameter* specular_tex_param_;
+		RenderEffectParameter* specular_clr_param_;
+		RenderEffectParameter* normal_map_enabled_param_;
+		RenderEffectParameter* normal_tex_param_;
+		RenderEffectParameter* height_map_parallax_enabled_param_;
+		RenderEffectParameter* height_map_tess_enabled_param_;
+		RenderEffectParameter* height_tex_param_;
+		RenderEffectParameter* diffuse_tex_param_;
+		RenderEffectParameter* diffuse_clr_param_;
+		RenderEffectParameter* emit_tex_param_;
+		RenderEffectParameter* emit_clr_param_;
+		RenderEffectParameter* opacity_clr_param_;
+		RenderEffectParameter* opacity_map_enabled_param_;
+		RenderEffectParameter* opaque_depth_tex_param_;
+		RenderEffectParameter* reflection_tex_param_;
 
 		TexturePtr diffuse_tex_;
 		TexturePtr specular_tex_;

@@ -36,7 +36,7 @@ namespace KlayGE
 		: select_mode_on_(false),
 			model_mat_(float4x4::Identity()), effect_attrs_(0)
 	{
-		DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+		auto drl = Context::Instance().DeferredRenderingLayerInstance();
 		if (drl)
 		{
 			this->BindDeferredEffect(drl->GBufferEffect());
@@ -59,7 +59,7 @@ namespace KlayGE
 		AABBox const & pos_bb = this->PosBound();
 		AABBox const & tc_bb = this->TexcoordBound();
 
-		DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+		auto drl = Context::Instance().DeferredRenderingLayerInstance();
 
 		if (drl)
 		{
@@ -77,11 +77,18 @@ namespace KlayGE
 			*pos_extent_param_ = pos_bb.HalfSize();
 			*select_mode_object_id_param_ = select_mode_object_id_;
 		}
-		else if (deferred_effect_)
+		else if (drl)
 		{
 			*mvp_param_ = mvp;
 			*model_view_param_ = mv;
 			*far_plane_param_ = float2(camera.FarPlane(), 1.0f / camera.FarPlane());
+			*forward_vec_param_ = camera.ForwardVec();
+
+			FrameBufferPtr const & fb = re.CurFrameBuffer();
+			*frame_size_param_ = int2(fb->Width(), fb->Height());
+
+			*height_offset_scale_param_ = mtl_ ? mtl_->height_offset_scale : float2(-0.5f, 0.06f);
+			*tess_factors_param_ = mtl_ ? mtl_->tess_factors : float4(5, 5, 1, 9);
 
 			*pos_center_param_ = pos_bb.Center();
 			*pos_extent_param_ = pos_bb.HalfSize();
@@ -112,7 +119,14 @@ namespace KlayGE
 				*diffuse_clr_param_ = float4(mtl_ ? mtl_->diffuse.x() : 0, mtl_ ? mtl_->diffuse.y() : 0, mtl_ ? mtl_->diffuse.z() : 0, static_cast<float>(!!diffuse_tex_));
 				*normal_map_enabled_param_ = static_cast<int32_t>(!!normal_tex_);
 				*normal_tex_param_ = normal_tex_;
-				*height_map_enabled_param_ = static_cast<int32_t>(!!height_tex_);
+				if (!mtl_ || (RenderMaterial::SDM_Parallax == mtl_->detail_mode))
+				{
+					*height_map_parallax_enabled_param_ = static_cast<int32_t>(!!height_tex_);
+				}
+				else
+				{
+					*height_map_tess_enabled_param_ = static_cast<int32_t>(!!height_tex_);
+				}
 				*height_tex_param_ = height_tex_;
 				*specular_tex_param_ = specular_tex_;
 				*specular_clr_param_ = float4(mtl_ ? mtl_->specular.x() : 0, mtl_ ? mtl_->specular.y() : 0, mtl_ ? mtl_->specular.z() : 0, static_cast<float>(!!specular_tex_));
@@ -184,7 +198,7 @@ namespace KlayGE
 
 	void Renderable::AddToRenderQueue()
 	{
-		Context::Instance().SceneManagerInstance().AddRenderable(this->shared_from_this());
+		Context::Instance().SceneManagerInstance().AddRenderable(this);
 	}
 
 	void Renderable::Render()
@@ -193,15 +207,16 @@ namespace KlayGE
 
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
 
-		RenderLayoutPtr const & layout = this->GetRenderLayout();
-		GraphicsBufferPtr const & inst_stream = layout->InstanceStream();
-		RenderTechniquePtr const & tech = this->GetRenderTechnique();
+		RenderLayout const & layout = this->GetRenderLayout();
+		GraphicsBufferPtr const & inst_stream = layout.InstanceStream();
+		RenderTechnique const & tech = *this->GetRenderTechnique();
+		auto const & effect = *this->GetRenderEffect();
 		if (inst_stream)
 		{
-			if (layout->NumInstances() > 0)
+			if (layout.NumInstances() > 0)
 			{
 				this->OnRenderBegin();
-				re.Render(*tech, *layout);
+				re.Render(effect, tech, layout);
 				this->OnRenderEnd();
 			}
 		}
@@ -210,14 +225,14 @@ namespace KlayGE
 			this->OnRenderBegin();
 			if (instances_.empty())
 			{
-				re.Render(*tech, *layout);
+				re.Render(effect, tech, layout);
 			}
 			else
 			{
 				for (uint32_t i = 0; i < instances_.size(); ++ i)
 				{
 					this->OnInstanceBegin(i);
-					re.Render(*tech, *layout);
+					re.Render(effect, tech, layout);
 					this->OnInstanceEnd(i);
 				}
 			}
@@ -225,48 +240,54 @@ namespace KlayGE
 		}
 	}
 
-	void Renderable::AddInstance(SceneObjectPtr const & obj)
+	void Renderable::AddInstance(SceneObject const * obj)
 	{
-		instances_.push_back(std::weak_ptr<SceneObject>(obj));
+		instances_.push_back(obj);
 	}
 
 	void Renderable::UpdateInstanceStream()
 	{
-		if (!instances_.empty() && !instances_[0].lock()->InstanceFormat().empty())
+		if (!instances_.empty() && !instances_[0]->InstanceFormat().empty())
 		{
-			RenderLayoutPtr const & rl = this->GetRenderLayout();
+			vertex_elements_type const & vet = instances_[0]->InstanceFormat();
+			uint32_t size = 0;
+			for (size_t i = 0; i < vet.size(); ++ i)
+			{
+				size += vet[i].element_size();
+			}
 
-			GraphicsBufferPtr inst_stream = rl->InstanceStream();
-			if (inst_stream)
+			uint32_t const inst_size = static_cast<uint32_t>(size * instances_.size());
+
+			RenderLayout& rl = this->GetRenderLayout();
+
+			GraphicsBufferPtr inst_stream = rl.InstanceStream();
+			if (inst_stream && (inst_stream->Size() >= inst_size))
 			{
 				for (size_t i = 0; i < instances_.size(); ++ i)
 				{
-					BOOST_ASSERT(rl->InstanceStreamFormat() == instances_[i].lock()->InstanceFormat());
+					BOOST_ASSERT(rl.InstanceStreamFormat() == instances_[i]->InstanceFormat());
 				}
 			}
 			else
 			{
 				RenderFactory& rf(Context::Instance().RenderFactoryInstance());
-
-				inst_stream = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Write | EAH_GPU_Read, nullptr);
-				rl->BindVertexStream(inst_stream, instances_[0].lock()->InstanceFormat(), RenderLayout::ST_Instance, 1);
+				inst_stream = rf.MakeVertexBuffer(BU_Dynamic, EAH_CPU_Write | EAH_GPU_Read, inst_size, nullptr);
+				rl.BindVertexStream(inst_stream, vet, RenderLayout::ST_Instance, 1);
+				rl.InstanceStream(inst_stream);
 			}
 
-			uint32_t const size = rl->InstanceSize();
-
-			inst_stream->Resize(static_cast<uint32_t>(size * instances_.size()));
 			{
 				GraphicsBuffer::Mapper mapper(*inst_stream, BA_Write_Only);
 				for (size_t i = 0; i < instances_.size(); ++ i)
 				{
-					uint8_t const * src = static_cast<uint8_t const *>(instances_[i].lock()->InstanceData());
+					uint8_t const * src = static_cast<uint8_t const *>(instances_[i]->InstanceData());
 					std::copy(src, src + size, mapper.Pointer<uint8_t>() + i * size);
 				}
 			}
 
-			for (uint32_t i = 0; i < rl->NumVertexStreams(); ++ i)
+			for (uint32_t i = 0; i < rl.NumVertexStreams(); ++ i)
 			{
-				rl->VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, static_cast<uint32_t>(instances_.size()));
+				rl.VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, static_cast<uint32_t>(instances_.size()));
 			}
 		}
 	}
@@ -278,6 +299,36 @@ namespace KlayGE
 
 	void Renderable::UpdateBoundBox()
 	{
+	}
+
+	bool Renderable::AllHWResourceReady() const
+	{
+		bool ready = this->HWResourceReady();
+		if (ready && diffuse_tex_)
+		{
+			ready = diffuse_tex_->HWResourceReady();
+		}
+		if (ready && specular_tex_)
+		{
+			ready = specular_tex_->HWResourceReady();
+		}
+		if (ready && shininess_tex_)
+		{
+			ready = shininess_tex_->HWResourceReady();
+		}
+		if (ready && normal_tex_)
+		{
+			ready = normal_tex_->HWResourceReady();
+		}
+		if (ready && height_tex_)
+		{
+			ready = height_tex_->HWResourceReady();
+		}
+		if (ready && emit_tex_)
+		{
+			ready = emit_tex_->HWResourceReady();
+		}
+		return ready;
 	}
 
 	void Renderable::ObjectID(uint32_t id)
@@ -304,12 +355,17 @@ namespace KlayGE
 	void Renderable::BindDeferredEffect(RenderEffectPtr const & deferred_effect)
 	{
 		deferred_effect_ = deferred_effect;
+		effect_ = deferred_effect;
 
 		this->UpdateTechniques();
 
 		mvp_param_ = deferred_effect_->ParameterByName("mvp");
 		model_view_param_ = deferred_effect_->ParameterByName("model_view");
 		far_plane_param_ = deferred_effect_->ParameterByName("far_plane");
+		forward_vec_param_ = deferred_effect_->ParameterByName("forward_vec");
+		frame_size_param_ = deferred_effect_->ParameterByName("frame_size");
+		height_offset_scale_param_ = deferred_effect_->ParameterByName("height_offset_scale");
+		tess_factors_param_ = deferred_effect_->ParameterByName("tess_factors");
 		pos_center_param_ = deferred_effect_->ParameterByName("pos_center");
 		pos_extent_param_ = deferred_effect_->ParameterByName("pos_extent");
 		tc_center_param_ = deferred_effect_->ParameterByName("tc_center");
@@ -318,7 +374,8 @@ namespace KlayGE
 		shininess_tex_param_ = deferred_effect_->ParameterByName("shininess_tex");
 		normal_map_enabled_param_ = deferred_effect_->ParameterByName("normal_map_enabled");
 		normal_tex_param_ = deferred_effect_->ParameterByName("normal_tex");
-		height_map_enabled_param_ = deferred_effect_->ParameterByName("height_map_enabled");
+		height_map_parallax_enabled_param_ = deferred_effect_->ParameterByName("height_map_parallax_enabled");
+		height_map_tess_enabled_param_ = deferred_effect_->ParameterByName("height_map_tess_enabled");
 		height_tex_param_ = deferred_effect_->ParameterByName("height_tex");
 		diffuse_tex_param_ = deferred_effect_->ParameterByName("diffuse_tex");
 		diffuse_clr_param_ = deferred_effect_->ParameterByName("diffuse_clr");
@@ -329,32 +386,163 @@ namespace KlayGE
 		opacity_clr_param_ = deferred_effect_->ParameterByName("opacity_clr");
 		opacity_map_enabled_param_ = deferred_effect_->ParameterByName("opacity_map_enabled");
 		opaque_depth_tex_param_ = deferred_effect_->ParameterByName("opaque_depth_tex");
+		reflection_tex_param_ = nullptr;
 		select_mode_object_id_param_ = deferred_effect_->ParameterByName("object_id");
 	}
 
 	void Renderable::UpdateTechniques()
 	{
-		if (this->AlphaTest())
+		bool sss;
+		RenderMaterial::SurfaceDetailMode sdm;
+		if (mtl_)
 		{
-			depth_tech_ = deferred_effect_->TechniqueByName("DepthAlphaTestTech");
-			gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaTestRT0Tech");
-			gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaTestRT1Tech");
-			gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaTestMRTTech");
-			gen_rsm_tech_ = deferred_effect_->TechniqueByName("GenReflectiveShadowMapAlphaTestTech");
-			gen_sm_tech_ = deferred_effect_->TechniqueByName("GenShadowMapAlphaTestTech");
-			gen_cascaded_sm_tech_ = deferred_effect_->TechniqueByName("GenCascadedShadowMapAlphaTestTech");
-			gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("GenShadowMapWODepthTextureAlphaTestTech");
+			sss = mtl_->sss;
+			sdm = mtl_->detail_mode;
 		}
 		else
 		{
-			depth_tech_ = deferred_effect_->TechniqueByName("DepthTech");
-			gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("GBufferRT0Tech");
-			gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("GBufferRT1Tech");
-			gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferMRTTech");
-			gen_rsm_tech_ = deferred_effect_->TechniqueByName("GenReflectiveShadowMapTech");
-			gen_sm_tech_ = deferred_effect_->TechniqueByName("GenShadowMapTech");
-			gen_cascaded_sm_tech_ = deferred_effect_->TechniqueByName("GenCascadedShadowMapTech");
-			gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("GenShadowMapWODepthTextureTech");
+			sss = false;
+			sdm = RenderMaterial::SDM_Parallax;
+		}
+
+		switch (sdm)
+		{
+		case RenderMaterial::SDM_Parallax:
+			if (this->AlphaTest())
+			{
+				if (sss)
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferAlphaTestMRTTech");
+				}
+				else
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaTestMRTTech");
+				}
+			}
+			else
+			{
+				if (sss)
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferMRTTech");
+				}
+				else
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferMRTTech");
+				}
+			}
+			gbuffer_alpha_blend_back_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendBackMRTTech");
+			gbuffer_alpha_blend_front_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendFrontMRTTech");
+			special_shading_tech_ = deferred_effect_->TechniqueByName("SpecialShadingTech");
+			special_shading_alpha_blend_back_tech_ = deferred_effect_->TechniqueByName("SpecialShadingAlphaBlendBackTech");
+			special_shading_alpha_blend_front_tech_ = deferred_effect_->TechniqueByName("SpecialShadingAlphaBlendFrontTech");
+			break;
+		
+		case RenderMaterial::SDM_FlatTessellation:
+			if (this->AlphaTest())
+			{
+				if (sss)
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferFlatTessAlphaTestMRTTech");
+				}
+				else
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferFlatTessAlphaTestMRTTech");
+				}
+			}
+			else
+			{
+				if (sss)
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferFlatTessMRTTech");
+				}
+				else
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferFlatTessMRTTech");
+				}
+			}
+			gbuffer_alpha_blend_back_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferFlatTessAlphaBlendBackMRTTech");
+			gbuffer_alpha_blend_front_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferFlatTessAlphaBlendFrontMRTTech");
+			special_shading_tech_ = deferred_effect_->TechniqueByName("SpecialShadingFlatTessTech");
+			special_shading_alpha_blend_back_tech_ = deferred_effect_->TechniqueByName("SpecialShadingFlatTessAlphaBlendBackTech");
+			special_shading_alpha_blend_front_tech_ = deferred_effect_->TechniqueByName("SpecialShadingFlatTessAlphaBlendFrontTech");
+			break;
+
+		case RenderMaterial::SDM_SmoothTessellation:
+			if (this->AlphaTest())
+			{
+				if (sss)
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferSmoothTessAlphaTestMRTTech");
+				}
+				else
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferSmoothTessAlphaTestMRTTech");
+				}
+			}
+			else
+			{
+				if (sss)
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferSmoothTessMRTTech");
+				}
+				else
+				{
+					gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferSmoothTessMRTTech");
+				}
+			}
+			gbuffer_alpha_blend_back_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferSmoothTessAlphaBlendBackMRTTech");
+			gbuffer_alpha_blend_front_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferSmoothTessAlphaBlendFrontMRTTech");
+			special_shading_tech_ = deferred_effect_->TechniqueByName("SpecialShadingSmoothTessTech");
+			special_shading_alpha_blend_back_tech_ = deferred_effect_->TechniqueByName("SpecialShadingSmoothTessAlphaBlendBackTech");
+			special_shading_alpha_blend_front_tech_ = deferred_effect_->TechniqueByName("SpecialShadingSmoothTessAlphaBlendFrontTech");
+			break;
+
+		default:
+			BOOST_ASSERT(false);
+			break;
+		}
+
+		if (this->AlphaTest())
+		{
+			if (sss)
+			{
+				depth_tech_ = deferred_effect_->TechniqueByName("SSSDepthAlphaTestTech");
+				gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("SSSGBufferAlphaTestRT0Tech");
+				gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("SSSGBufferAlphaTestRT1Tech");
+				gen_sm_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapAlphaTestTech");
+				gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapWODepthTextureAlphaTestTech");
+			}
+			else
+			{
+				depth_tech_ = deferred_effect_->TechniqueByName("DepthAlphaTestTech");
+				gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaTestRT0Tech");
+				gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaTestRT1Tech");
+				gen_rsm_tech_ = deferred_effect_->TechniqueByName("GenReflectiveShadowMapAlphaTestTech");
+				gen_sm_tech_ = deferred_effect_->TechniqueByName("GenShadowMapAlphaTestTech");
+				gen_cascaded_sm_tech_ = deferred_effect_->TechniqueByName("GenCascadedShadowMapAlphaTestTech");
+				gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("GenShadowMapWODepthTextureAlphaTestTech");
+			}
+		}
+		else
+		{
+			if (sss)
+			{
+				depth_tech_ = deferred_effect_->TechniqueByName("SSSDepthTech");
+				gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("SSSGBufferRT0Tech");
+				gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("SSSGBufferRT1Tech");
+				gen_sm_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapTech");
+				gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapWODepthTextureTech");
+			}
+			else
+			{
+				depth_tech_ = deferred_effect_->TechniqueByName("DepthTech");
+				gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("GBufferRT0Tech");
+				gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("GBufferRT1Tech");
+				gen_rsm_tech_ = deferred_effect_->TechniqueByName("GenReflectiveShadowMapTech");
+				gen_sm_tech_ = deferred_effect_->TechniqueByName("GenShadowMapTech");
+				gen_cascaded_sm_tech_ = deferred_effect_->TechniqueByName("GenCascadedShadowMapTech");
+				gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("GenShadowMapWODepthTextureTech");
+			}
 		}
 		depth_alpha_blend_back_tech_ = deferred_effect_->TechniqueByName("DepthAlphaBlendBackTech");
 		depth_alpha_blend_front_tech_ = deferred_effect_->TechniqueByName("DepthAlphaBlendFrontTech");
@@ -362,15 +550,10 @@ namespace KlayGE
 		gbuffer_alpha_blend_front_rt0_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendFrontRT0Tech");
 		gbuffer_alpha_blend_back_rt1_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendBackRT1Tech");
 		gbuffer_alpha_blend_front_rt1_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendFrontRT1Tech");
-		gbuffer_alpha_blend_back_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendBackMRTTech");
-		gbuffer_alpha_blend_front_mrt_tech_ = deferred_effect_->TechniqueByName("GBufferAlphaBlendFrontMRTTech");
-		special_shading_tech_ = deferred_effect_->TechniqueByName("SpecialShadingTech");
-		special_shading_alpha_blend_back_tech_ = deferred_effect_->TechniqueByName("SpecialShadingAlphaBlendBackTech");
-		special_shading_alpha_blend_front_tech_ = deferred_effect_->TechniqueByName("SpecialShadingAlphaBlendFrontTech");
 		select_mode_tech_ = deferred_effect_->TechniqueByName("SelectModeTech");
 	}
 
-	RenderTechniquePtr const & Renderable::PassTech(PassType type) const
+	RenderTechnique* Renderable::PassTech(PassType type) const
 	{
 		switch (type)
 		{

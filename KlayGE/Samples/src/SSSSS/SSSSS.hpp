@@ -23,11 +23,11 @@ class SSSSSApp : public KlayGE::App3DFramework
 public:
 	SSSSSApp();
 
-	virtual bool ConfirmDevice() const KLAYGE_OVERRIDE;
+	virtual bool ConfirmDevice() const override;
 
 private:
-	virtual void OnCreate() KLAYGE_OVERRIDE;
-	virtual void OnResize(KlayGE::uint32_t width, KlayGE::uint32_t height) KLAYGE_OVERRIDE;
+	virtual void OnCreate() override;
+	virtual void OnResize(KlayGE::uint32_t width, KlayGE::uint32_t height) override;
 	virtual void DoUpdateOverlay();
 	virtual KlayGE::uint32_t DoUpdate(KlayGE::uint32_t pass);
 
@@ -38,7 +38,7 @@ private:
 	void TranslucencyHandler(KlayGE::UICheckBox const & sender);
 	void TranslucencyStrengthChangedHandler(KlayGE::UISlider const & sender);
 
-	KlayGE::DeferredRenderingLayerPtr deferred_rendering_;
+	KlayGE::DeferredRenderingLayer* deferred_rendering_;
 
 	KlayGE::FontPtr font_;
 	KlayGE::TrackballCameraController obj_controller_;

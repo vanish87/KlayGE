@@ -42,101 +42,17 @@
 #include <sstream>
 #include <cstring>
 #include <boost/assert.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/functional/hash.hpp>
 
 #ifdef KLAYGE_PLATFORM_WINDOWS
 
-#include <KlayGE/D3D11/D3D11MinGWDefs.hpp>
 #ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
-#include <D3DCompiler.h>
+#include <KlayGE/SALWrapper.hpp>
+#include <d3dcompiler.h>
 #endif
 
 #include "OfflineRenderEffect.hpp"
 #include "OfflineD3D11ShaderObject.hpp"
-
-DEFINE_GUID(IID_ID3D11ShaderReflection_47,
-	0x8d536ca1, 0x0cca, 0x4956, 0xa8, 0x37, 0x78, 0x69, 0x63, 0x75, 0x55, 0x84);
-
-struct D3D11_SIGNATURE_PARAMETER_DESC_47
-{
-	LPCSTR						SemanticName;
-	UINT						SemanticIndex;
-	UINT						Register;
-	D3D_NAME					SystemValueType;
-	D3D_REGISTER_COMPONENT_TYPE	ComponentType;
-	BYTE						Mask;
-	BYTE						ReadWriteMask;
-	UINT						Stream;
-	UINT						MinPrecision;
-};
-
-#if D3D_COMPILER_VERSION < 44
-#define D3DCOMPILER_STRIP_PRIVATE_DATA 8
-#endif
-
-#ifdef KLAYGE_PLATFORM_WINDOWS_DESKTOP
-class D3DCompilerInit
-{
-public:
-	D3DCompilerInit()
-	{
-		mod_d3dcompiler_ = ::LoadLibraryEx(TEXT("d3dcompiler_47.dll"), nullptr, 0);
-		if (mod_d3dcompiler_)
-		{
-			DynamicD3DCompile_ = reinterpret_cast<D3DCompileFunc>(::GetProcAddress(mod_d3dcompiler_, "D3DCompile"));
-			DynamicD3DReflect_ = reinterpret_cast<D3DReflectFunc>(::GetProcAddress(mod_d3dcompiler_, "D3DReflect"));
-			DynamicD3DStripShader_ = reinterpret_cast<D3DStripShaderFunc>(::GetProcAddress(mod_d3dcompiler_, "D3DStripShader"));
-		}
-		else
-		{
-			::MessageBoxW(nullptr, L"Can't load d3dcompiler_47.dll", L"Error", MB_OK);
-		}
-	}
-
-	~D3DCompilerInit()
-	{
-		if (mod_d3dcompiler_)
-		{
-			::FreeLibrary(mod_d3dcompiler_);
-		}
-	}
-
-	HRESULT D3DCompile(LPCVOID pSrcData, SIZE_T SrcDataSize, LPCSTR pSourceName,
-		D3D_SHADER_MACRO const * pDefines, ID3DInclude* pInclude, LPCSTR pEntrypoint,
-		LPCSTR pTarget, UINT Flags1, UINT Flags2, ID3DBlob** ppCode, ID3DBlob** ppErrorMsgs) const
-	{
-		return DynamicD3DCompile_(pSrcData, SrcDataSize, pSourceName, pDefines, pInclude, pEntrypoint,
-			pTarget, Flags1, Flags2, ppCode, ppErrorMsgs);
-	}
-
-	HRESULT D3DReflect(LPCVOID pSrcData, SIZE_T SrcDataSize, REFIID pInterface, void** ppReflector) const
-	{
-		return DynamicD3DReflect_(pSrcData, SrcDataSize, pInterface, ppReflector);
-	}
-
-	HRESULT D3DStripShader(LPCVOID pShaderBytecode, SIZE_T BytecodeLength, UINT uStripFlags, ID3DBlob** ppStrippedBlob) const
-	{
-		return DynamicD3DStripShader_(pShaderBytecode, BytecodeLength, uStripFlags, ppStrippedBlob);
-	}
-
-private:
-	typedef HRESULT(WINAPI *D3DCompileFunc)(LPCVOID pSrcData, SIZE_T SrcDataSize, LPCSTR pSourceName,
-		D3D_SHADER_MACRO const * pDefines, ID3DInclude* pInclude, LPCSTR pEntrypoint,
-		LPCSTR pTarget, UINT Flags1, UINT Flags2, ID3DBlob** ppCode, ID3DBlob** ppErrorMsgs);
-	typedef HRESULT(WINAPI *D3DReflectFunc)(LPCVOID pSrcData, SIZE_T SrcDataSize, REFIID pInterface, void** ppReflector);
-	typedef HRESULT(WINAPI *D3DStripShaderFunc)(LPCVOID pShaderBytecode, SIZE_T BytecodeLength, UINT uStripFlags, ID3DBlob** ppStrippedBlob);
-
-private:
-	HMODULE mod_d3dcompiler_;
-
-	D3DCompileFunc DynamicD3DCompile_;
-	D3DReflectFunc DynamicD3DReflect_;
-	D3DStripShaderFunc DynamicD3DStripShader_;
-};
-
-D3DCompilerInit d3dcompiler;
-#endif
 
 namespace KlayGE
 {
@@ -149,15 +65,25 @@ namespace KlayGE
 
 			switch (caps.major_version)
 			{
+			case 12:
+				switch (caps.minor_version)
+				{
+				case 1:
+					feature_level_ = D3D_FEATURE_LEVEL_12_1;
+					break;
+
+				default:
+				case 0:
+					feature_level_ = D3D_FEATURE_LEVEL_12_0;
+					break;
+				}
+				break;
+
 			case 11:
 				switch (caps.minor_version)
 				{
 				case 1:
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 					feature_level_ = D3D_FEATURE_LEVEL_11_1;
-#else
-					feature_level_ = D3D_FEATURE_LEVEL_11_0;
-#endif
 					break;
 
 				default:
@@ -202,9 +128,9 @@ namespace KlayGE
 
 			switch (feature_level_)
 			{
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
+			case D3D_FEATURE_LEVEL_12_1:
+			case D3D_FEATURE_LEVEL_12_0:
 			case D3D_FEATURE_LEVEL_11_1:
-#endif
 			case D3D_FEATURE_LEVEL_11_0:
 				vs_profile_ = "vs_5_0";
 				ps_profile_ = "ps_5_0";
@@ -252,297 +178,20 @@ namespace KlayGE
 			}
 		}
 
-		std::string D3D11ShaderObject::GenShaderText(ShaderType type, RenderEffect const & effect,
-			RenderTechnique const & tech, RenderPass const & pass) const
-		{
-			OfflineRenderDeviceCaps const & caps = caps_;
-
-			std::stringstream ss;
-
-			for (uint32_t i = 0; i < effect.NumMacros(); ++ i)
-			{
-				std::pair<std::string, std::string> const & name_value = effect.MacroByIndex(i);
-				ss << "#define " << name_value.first << " " << name_value.second << std::endl;
-			}
-			ss << std::endl;
-
-			for (uint32_t i = 0; i < tech.NumMacros(); ++ i)
-			{
-				std::pair<std::string, std::string> const & name_value = tech.MacroByIndex(i);
-				ss << "#define " << name_value.first << " " << name_value.second << std::endl;
-			}
-			ss << std::endl;
-
-			for (uint32_t i = 0; i < pass.NumMacros(); ++ i)
-			{
-				std::pair<std::string, std::string> const & name_value = pass.MacroByIndex(i);
-				ss << "#define " << name_value.first << " " << name_value.second << std::endl;
-			}
-			ss << std::endl;
-
-			for (uint32_t i = 0; i < effect.NumCBuffers(); ++ i)
-			{
-				RenderEffectConstantBufferPtr const & cbuff = effect.CBufferByIndex(i);
-				ss << "cbuffer " << *cbuff->Name() << std::endl;
-				ss << "{" << std::endl;
-
-				for (uint32_t j = 0; j < cbuff->NumParameters(); ++ j)
-				{
-					RenderEffectParameter& param = *effect.ParameterByIndex(cbuff->ParameterIndex(j));
-					switch (param.Type())
-					{
-					case REDT_texture1D:
-					case REDT_texture2D:
-					case REDT_texture3D:
-					case REDT_textureCUBE:
-					case REDT_texture1DArray:
-					case REDT_texture2DArray:
-					case REDT_texture3DArray:
-					case REDT_textureCUBEArray:
-					case REDT_sampler:
-					case REDT_buffer:
-					case REDT_structured_buffer:
-					case REDT_byte_address_buffer:
-					case REDT_rw_buffer:
-					case REDT_rw_structured_buffer:
-					case REDT_rw_texture1D:
-					case REDT_rw_texture2D:
-					case REDT_rw_texture3D:
-					case REDT_rw_texture1DArray:
-					case REDT_rw_texture2DArray:
-					case REDT_rw_byte_address_buffer:
-					case REDT_append_structured_buffer:
-					case REDT_consume_structured_buffer:
-						break;
-
-					default:
-						ss << effect.TypeName(param.Type()) << " " << *param.Name();
-						if (param.ArraySize())
-						{
-							ss << "[" << *param.ArraySize() << "]";
-						}
-						ss << ";" << std::endl;
-						break;
-					}
-				}
-
-				ss << "};" << std::endl;
-			}
-
-			for (uint32_t i = 0; i < effect.NumParameters(); ++ i)
-			{
-				RenderEffectParameter& param = *effect.ParameterByIndex(i);
-
-				switch (param.Type())
-				{
-				case REDT_texture1D:
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "Texture1D<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_texture2D:
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "Texture2D<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_texture3D:
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "Texture3D<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_textureCUBE:
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "TextureCube<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_texture1DArray:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "Texture1DArray<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_texture2DArray:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "Texture2DArray<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_textureCUBEArray:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "TextureCubeArray<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_buffer:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "Buffer<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_sampler:
-					ss << "sampler " << *param.Name() << ";" << std::endl;
-					break;
-
-				case REDT_structured_buffer:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "StructuredBuffer<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_byte_address_buffer:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						ss << "ByteAddressBuffer " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_buffer:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWBuffer<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_structured_buffer:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWStructuredBuffer<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_texture1D:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWTexture1D<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_texture2D:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWTexture2D<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_texture3D:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWTexture3D<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-				case REDT_rw_texture1DArray:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWTexture1DArray<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_texture2DArray:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "RWTexture2DArray<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_rw_byte_address_buffer:
-					if (caps.max_shader_model >= ShaderModel(4, 0))
-					{
-						ss << "RWByteAddressBuffer " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_append_structured_buffer:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "AppendStructuredBuffer<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				case REDT_consume_structured_buffer:
-					if (caps.max_shader_model >= ShaderModel(5, 0))
-					{
-						std::string elem_type;
-						param.Var()->Value(elem_type);
-						ss << "ConsumeStructuredBuffer<" << elem_type << "> " << *param.Name() << ";" << std::endl;
-					}
-					break;
-
-				default:
-					break;
-				}
-			}
-
-			for (uint32_t i = 0; i < effect.NumShaders(); ++ i)
-			{
-				RenderShaderFunc const & effect_shader = effect.ShaderByIndex(i);
-				ShaderType shader_type = effect_shader.Type();
-				if ((ST_NumShaderTypes == shader_type) || (type == shader_type))
-				{
-					if (caps.max_shader_model >= effect_shader.Version())
-					{
-						ss << effect_shader.str() << std::endl;
-					}
-				}
-			}
-
-			return ss.str();
-		}
-
 		void D3D11ShaderObject::StreamOut(std::ostream& os, ShaderType type)
 		{
-			std::vector<uint8_t> native_shader_block;
+			std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
+
+			{
+				uint8_t len = static_cast<uint8_t>(shader_code_[type].second.size());
+				oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
+				oss.write(reinterpret_cast<char const *>(&shader_code_[type].second[0]), len);
+			}
 
 			std::shared_ptr<std::vector<uint8_t>> code_blob = shader_code_[type].first;
 			if (code_blob)
 			{
-				std::ostringstream oss(std::ios_base::binary | std::ios_base::out);
-
-				uint8_t len = static_cast<uint8_t>(shader_code_[type].second.size());
-				oss.write(reinterpret_cast<char const *>(&len), sizeof(len));
-				oss.write(reinterpret_cast<char const *>(&shader_code_[type].second[0]), len);
+				uint8_t len;
 
 				uint32_t blob_size = Native2LE(static_cast<uint32_t>(code_blob->size()));
 				oss.write(reinterpret_cast<char const *>(&blob_size), sizeof(blob_size));
@@ -616,12 +265,9 @@ namespace KlayGE
 					uint32_t cs_block_size_z = Native2LE(cs_block_size_z_);
 					oss.write(reinterpret_cast<char const *>(&cs_block_size_z), sizeof(cs_block_size_z));
 				}
-
-				std::string out_str = oss.str();
-				native_shader_block.resize(out_str.size());
-				std::memcpy(&native_shader_block[0], &out_str[0], out_str.size());
 			}
 
+			std::string native_shader_block = oss.str();
 			uint32_t len = static_cast<uint32_t>(native_shader_block.size());
 			{
 				uint32_t tmp = Native2LE(len);
@@ -640,22 +286,12 @@ namespace KlayGE
 			D3D_FEATURE_LEVEL const feature_level = feature_level_;
 			OfflineRenderDeviceCaps const & caps = caps_;
 
-			std::string max_sm_str = boost::lexical_cast<std::string>(caps.max_shader_model.FullVersion());
-			std::string max_tex_array_str = boost::lexical_cast<std::string>(caps.max_texture_array_length);
-			std::string max_tex_depth_str = boost::lexical_cast<std::string>(caps.max_texture_depth);
-			std::string max_tex_units_str = boost::lexical_cast<std::string>(static_cast<int>(caps.max_pixel_texture_units));
-			std::string flipping_str = boost::lexical_cast<std::string>(caps.requires_flipping ? -1 : +1);
-			std::string standard_derivatives_str = boost::lexical_cast<std::string>(caps.standard_derivatives_support ? 1 : 0);
-			std::string no_tex_lod_str = boost::lexical_cast<std::string>((ST_PixelShader == type) ? (caps.shader_texture_lod_support ? 0 : 1) : 1);
-
 			ShaderDesc const & sd = effect.GetShaderDesc(shader_desc_ids[type]);
-
-			std::string shader_text = this->GenShaderText(static_cast<ShaderType>(type), effect, tech, pass);
 
 			is_shader_validate_[type] = true;
 
-			std::string shader_profile = sd.profile;
-			size_t const shader_profile_hash = RT_HASH(shader_profile.c_str());
+			char const * shader_profile = sd.profile.c_str();
+			size_t const shader_profile_hash = RT_HASH(shader_profile);
 			switch (type)
 			{
 			case ST_VertexShader:
@@ -738,204 +374,28 @@ namespace KlayGE
 			}
 			shader_code_[type].second = shader_profile;
 
-			ID3DBlob* code = nullptr;
+			std::shared_ptr<std::vector<uint8_t>> code = MakeSharedPtr<std::vector<uint8_t>>();
 			if (is_shader_validate_[type])
 			{
-				ID3DBlob* err_msg;
-				std::vector<D3D_SHADER_MACRO> macros;
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_D3D11", "1" };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_SHADER_MODEL", max_sm_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_MAX_TEX_ARRAY_LEN", max_tex_array_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_MAX_TEX_DEPTH", max_tex_depth_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_MAX_TEX_UNITS", max_tex_units_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_FLIPPING", flipping_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_DERIVATIVES", standard_derivatives_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
-				{
-					D3D_SHADER_MACRO macro_d3d11 = { "KLAYGE_NO_TEX_LOD", no_tex_lod_str.c_str() };
-					macros.push_back(macro_d3d11);
-				}
+				std::vector<std::pair<char const *, char const *>> macros;
+				macros.emplace_back("KLAYGE_D3D11", "1");
 				if (feature_level <= D3D_FEATURE_LEVEL_9_3)
 				{
-					D3D_SHADER_MACRO macro_bc5_as_bc3 = { "KLAYGE_BC5_AS_AG", "1" };
-					macros.push_back(macro_bc5_as_bc3);
-
-					D3D_SHADER_MACRO macro_bc4_as_bc1 = { "KLAYGE_BC4_AS_G", "1" };
-					macros.push_back(macro_bc4_as_bc1);
+					macros.emplace_back("KLAYGE_BC5_AS_AG", "1");
+					macros.emplace_back("KLAYGE_BC4_AS_G", "1");
 				}
-				if (!caps.fp_color_support)
-				{
-					D3D_SHADER_MACRO macro_no_fp_tex = { "KLAYGE_NO_FP_COLOR", "1" };
-					macros.push_back(macro_no_fp_tex);
-				}
-				if (caps.pack_to_rgba_required)
-				{
-					D3D_SHADER_MACRO macro_pack_to_rgba = { "KLAYGE_PACK_TO_RGBA", "1" };
-					macros.push_back(macro_pack_to_rgba);
-				}
-				{
-					D3D_SHADER_MACRO macro_frag_depth = { "KLAYGE_FRAG_DEPTH", "1" };
-					macros.push_back(macro_frag_depth);
-				}
-				{
-					D3D_SHADER_MACRO macro_shader_type = { "", "1" };
-					switch (type)
-					{
-					case ST_VertexShader:
-						macro_shader_type.Name = "KLAYGE_VERTEX_SHADER";
-						break;
+				macros.emplace_back("KLAYGE_FRAG_DEPTH", "1");
 
-					case ST_PixelShader:
-						macro_shader_type.Name = "KLAYGE_PIXEL_SHADER";
-						break;
-
-					case ST_GeometryShader:
-						macro_shader_type.Name = "KLAYGE_GEOMETRY_SHADER";
-						break;
-
-					case ST_ComputeShader:
-						macro_shader_type.Name = "KLAYGE_COMPUTE_SHADER";
-						break;
-
-					case ST_HullShader:
-						macro_shader_type.Name = "KLAYGE_HULL_SHADER";
-						break;
-
-					case ST_DomainShader:
-						macro_shader_type.Name = "KLAYGE_DOMAIN_SHADER";
-						break;
-
-					default:
-						BOOST_ASSERT(false);
-						break;
-					}
-					macros.push_back(macro_shader_type);
-				}
-				{
-					D3D_SHADER_MACRO macro_end = { nullptr, nullptr };
-					macros.push_back(macro_end);
-				}
 				uint32_t flags = 0;
 #if !defined(KLAYGE_DEBUG)
 				flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
 #endif
-				d3dcompiler.D3DCompile(shader_text.c_str(), static_cast<UINT>(shader_text.size()), nullptr, &macros[0],
-					nullptr, sd.func_name.c_str(), shader_profile.c_str(),
-					flags, 0, &code, &err_msg);
-				if (err_msg != nullptr)
-				{
-					LogError("Error when compiling %s:", sd.func_name.c_str());
+				*code = this->CompileToDXBC(type, effect, tech, pass, macros, sd.func_name.c_str(), shader_profile, flags);
 
-					std::map<int, std::vector<std::string>> err_lines;
-					{
-						std::istringstream err_iss(static_cast<char*>(err_msg->GetBufferPointer()));
-						std::string err_str;
-						while (err_iss)
-						{
-							std::getline(err_iss, err_str);
-
-							int err_line = -1;
-							std::string::size_type pos = err_str.find("): error X");
-							if (pos == std::string::npos)
-							{
-								pos = err_str.find("): warning X");
-							}
-							if (pos != std::string::npos)
-							{
-								std::string part_err_str = err_str.substr(0, pos);
-								pos = part_err_str.rfind("(");
-								part_err_str = part_err_str.substr(pos + 1);
-								std::istringstream(part_err_str) >> err_line;
-							}
-
-							std::vector<std::string>& msgs = err_lines[err_line];
-							bool found = false;
-							for (auto const & msg : msgs)
-							{
-								if (msg == err_str)
-								{
-									found = true;
-									break;
-								}
-							}
-
-							if (!found)
-							{
-								// To make the error message unrecognized by Visual Studio
-								if ((0 == err_str.find("error X")) || (0 == err_str.find("warning X")))
-								{
-									err_str = "(0): " + err_str;
-								}
-
-								msgs.push_back(err_str);
-							}
-						}
-					}
-
-					for (auto iter = err_lines.begin(); iter != err_lines.end(); ++ iter)
-					{
-						if (iter->first >= 0)
-						{
-							std::istringstream iss(shader_text);
-							std::string s;
-							int line = 1;
-
-							LogInfo("...");
-							while (iss && ((iter->first - line) >= 3))
-							{
-								std::getline(iss, s);
-								++ line;
-							}
-							while (iss && (abs(line - iter->first) < 3))
-							{
-								std::getline(iss, s);
-							
-								while (!s.empty() && (('\r' == s[s.size() - 1]) || ('\n' == s[s.size() - 1])))
-								{
-									s.resize(s.size() - 1);
-								}
-
-								LogInfo("%d %s", line, s.c_str());
-
-								++ line;
-							}
-							LogInfo("...");
-						}
-
-						for (auto const & msg : iter->second)
-						{
-							LogError(msg.c_str());
-						}
-					}
-
-					err_msg->Release();
-				}
-
-				if (code)
+				if (!code->empty())
 				{
 					ID3D11ShaderReflection* reflection;
-					d3dcompiler.D3DReflect(code->GetBufferPointer(), code->GetBufferSize(),
-						IID_ID3D11ShaderReflection_47, reinterpret_cast<void**>(&reflection));
+					this->ReflectDXBC(*code, reinterpret_cast<void**>(&reflection));
 					if (reflection != nullptr)
 					{
 						D3D11_SHADER_DESC desc;
@@ -1003,6 +463,7 @@ namespace KlayGE
 							case D3D_SIT_UAV_RWBYTEADDRESS:
 							case D3D_SIT_UAV_APPEND_STRUCTURED:
 							case D3D_SIT_UAV_CONSUME_STRUCTURED:
+							case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
 								num_uavs = std::max(num_uavs, static_cast<int>(si_desc.BindPoint));
 								break;
 
@@ -1031,16 +492,14 @@ namespace KlayGE
 							case D3D_SIT_UAV_RWBYTEADDRESS:
 							case D3D_SIT_UAV_APPEND_STRUCTURED:
 							case D3D_SIT_UAV_CONSUME_STRUCTURED:
+							case D3D_SIT_UAV_RWSTRUCTURED_WITH_COUNTER:
+								if (effect.ParameterByName(si_desc.Name))
 								{
-									RenderEffectParameterPtr const & p = effect.ParameterByName(si_desc.Name);
-									if (p)
-									{
-										D3D11ShaderDesc::BoundResourceDesc brd;
-										brd.name = si_desc.Name;
-										brd.type = static_cast<uint8_t>(si_desc.Type);
-										brd.bind_point = static_cast<uint16_t>(si_desc.BindPoint);
-										shader_desc_[type].res_desc.push_back(brd);
-									}
+									D3D11ShaderDesc::BoundResourceDesc brd;
+									brd.name = si_desc.Name;
+									brd.type = static_cast<uint8_t>(si_desc.Type);
+									brd.bind_point = static_cast<uint16_t>(si_desc.BindPoint);
+									shader_desc_[type].res_desc.push_back(brd);
 								}
 								break;
 
@@ -1052,10 +511,10 @@ namespace KlayGE
 						if (ST_VertexShader == type)
 						{
 							vs_signature_ = 0;
-							D3D11_SIGNATURE_PARAMETER_DESC_47 signature;
+							D3D11_SIGNATURE_PARAMETER_DESC signature;
 							for (uint32_t i = 0; i < desc.InputParameters; ++ i)
 							{
-								reflection->GetInputParameterDesc(i, reinterpret_cast<D3D11_SIGNATURE_PARAMETER_DESC*>(&signature));
+								reflection->GetInputParameterDesc(i, &signature);
 
 								size_t seed = boost::hash_range(signature.SemanticName, signature.SemanticName + strlen(signature.SemanticName));
 								boost::hash_combine(seed, signature.SemanticIndex);
@@ -1080,36 +539,25 @@ namespace KlayGE
 						reflection->Release();
 					}
 
-					ID3DBlob* strip_code = nullptr;
-					d3dcompiler.D3DStripShader(code->GetBufferPointer(), code->GetBufferSize(),
-						D3DCOMPILER_STRIP_REFLECTION_DATA | D3DCOMPILER_STRIP_DEBUG_INFO
-						| D3DCOMPILER_STRIP_TEST_BLOBS | D3DCOMPILER_STRIP_PRIVATE_DATA,
-						&strip_code);
-					if (strip_code)
-					{
-						code->Release();
-						code = strip_code;
-					}
+					*code = this->StripDXBC(*code, D3DCOMPILER_STRIP_REFLECTION_DATA | D3DCOMPILER_STRIP_DEBUG_INFO
+						| D3DCOMPILER_STRIP_TEST_BLOBS | D3DCOMPILER_STRIP_PRIVATE_DATA);
 				}
 			}
 
-			std::shared_ptr<std::vector<uint8_t>> ret;
-			if (code)
+			if (code->empty())
 			{
-				ret = MakeSharedPtr<std::vector<uint8_t>>(code->GetBufferSize());
-				std::memcpy(&((*ret)[0]), code->GetBufferPointer(), code->GetBufferSize());
-				code->Release();
+				code.reset();
 			}
 
-			return ret;
+			return code;
 	#else
-			UNREF_PARAM(type);
-			UNREF_PARAM(effect);
-			UNREF_PARAM(tech);
-			UNREF_PARAM(pass);
-			UNREF_PARAM(shader_desc_ids);
+			KFL_UNUSED(type);
+			KFL_UNUSED(effect);
+			KFL_UNUSED(tech);
+			KFL_UNUSED(pass);
+			KFL_UNUSED(shader_desc_ids);
 
-			return shared_ptr<std::vector<uint8_t>>();
+			return std::shared_ptr<std::vector<uint8_t>>();
 	#endif
 		}
 
@@ -1221,7 +669,7 @@ namespace KlayGE
 						}
 					}
 					BOOST_ASSERT(found);
-					UNREF_PARAM(found);
+					KFL_UNUSED(found);
 				}
 			}
 			else

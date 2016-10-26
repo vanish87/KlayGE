@@ -31,50 +31,10 @@
 #include "SampleCommon.hpp"
 #include "SSSSS.hpp"
 
-KlayGE::uint32_t const SHADOW_MAP_SIZE = 512;
-
 using namespace KlayGE;
 
 namespace
 {
-	class SSSMesh : public StaticMesh
-	{
-	public:
-		SSSMesh(RenderModelPtr const & model, std::wstring const & name)
-			: StaticMesh(model, name)
-		{
-		}
-
-		void BuildMeshInfo()
-		{
-			StaticMesh::BuildMeshInfo();
-
-			mtl_->shininess = 32;
-			mtl_->specular = float3(0.028f, 0.028f, 0.028f);
-
-			if (this->AlphaTest())
-			{
-				depth_tech_ = deferred_effect_->TechniqueByName("SSSDepthAlphaTestTech");
-				gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("SSSGBufferAlphaTestRT0Tech");
-				gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("SSSGBufferAlphaTestRT1Tech");
-				gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferAlphaTestMRTTech");
-				gen_sm_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapAlphaTestTech");
-				gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapWODepthTextureAlphaTestTech");
-			}
-			else
-			{
-				depth_tech_ = deferred_effect_->TechniqueByName("SSSDepthTech");
-				gbuffer_rt0_tech_ = deferred_effect_->TechniqueByName("SSSGBufferRT0Tech");
-				gbuffer_rt1_tech_ = deferred_effect_->TechniqueByName("SSSGBufferRT1Tech");
-				gbuffer_mrt_tech_ = deferred_effect_->TechniqueByName("SSSGBufferMRTTech");
-				gen_sm_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapTech");
-				gen_sm_wo_dt_tech_ = deferred_effect_->TechniqueByName("SSSGenShadowMapWODepthTextureTech");
-			}
-
-			effect_attrs_ |= EA_SSS;
-		}
-	};
-
 	enum
 	{
 		Exit,
@@ -114,14 +74,13 @@ bool SSSSSApp::ConfirmDevice() const
 
 void SSSSSApp::OnCreate()
 {
-	std::function<RenderablePtr()> sponza_model_ml = ASyncLoadModel("ScifiRoom.7z//ScifiRoom.meshml",
+	RenderablePtr scene_model = ASyncLoadModel("ScifiRoom.7z//ScifiRoom.meshml",
 		EAH_GPU_Read | EAH_Immutable);
-	std::function<RenderablePtr()> sss_model_ml = ASyncLoadModel("Infinite-Level_02.meshml",
-		EAH_GPU_Read | EAH_Immutable,
-		CreateModelFactory<RenderModel>(), CreateMeshFactory<SSSMesh>());
-	std::function<TexturePtr()> c_cube_tl = ASyncLoadTexture("Lake_CraterLake03_filtered_c.dds",
+	RenderablePtr sss_model = ASyncLoadModel("Infinite-Level_02.meshml",
 		EAH_GPU_Read | EAH_Immutable);
-	std::function<TexturePtr()> y_cube_tl = ASyncLoadTexture("Lake_CraterLake03_filtered_y.dds",
+	TexturePtr c_cube = ASyncLoadTexture("Lake_CraterLake03_filtered_c.dds",
+		EAH_GPU_Read | EAH_Immutable);
+	TexturePtr y_cube = ASyncLoadTexture("Lake_CraterLake03_filtered_y.dds",
 		EAH_GPU_Read | EAH_Immutable);
 
 	font_ = SyncLoadFont("gkai00mp.kfont");
@@ -133,7 +92,7 @@ void SSSSSApp::OnCreate()
 	this->Proj(0.05f, 200.0f);
 
 	AmbientLightSourcePtr ambient_light = MakeSharedPtr<AmbientLightSource>();
-	ambient_light->SkylightTex(y_cube_tl, c_cube_tl);
+	ambient_light->SkylightTex(y_cube, c_cube);
 	ambient_light->Color(float3(0.3f, 0.3f, 0.3f));
 	ambient_light->AddToSceneManager();
 	
@@ -194,15 +153,15 @@ void SSSSSApp::OnCreate()
 	dialog_params_->Control<UISlider>(id_translucency_strength_slider_)->OnValueChangedEvent().connect(std::bind(&SSSSSApp::TranslucencyStrengthChangedHandler, this, std::placeholders::_1));
 	this->TranslucencyStrengthChangedHandler(*dialog_params_->Control<UISlider>(id_translucency_strength_slider_));
 
-	SceneObjectPtr subsurface_obj = MakeSharedPtr<SceneObjectHelper>(sss_model_ml, SceneObject::SOA_Cullable, 0);
+	SceneObjectPtr subsurface_obj = MakeSharedPtr<SceneObjectHelper>(sss_model, SceneObject::SOA_Cullable);
 	subsurface_obj->ModelMatrix(MathLib::translation(0.0f, 5.0f, 0.0f));
 	subsurface_obj->AddToSceneManager();
 
-	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(sponza_model_ml, SceneObject::SOA_Cullable, 0);
+	SceneObjectPtr scene_obj = MakeSharedPtr<SceneObjectHelper>(scene_model, SceneObject::SOA_Cullable);
 	scene_obj->AddToSceneManager();
 
 	SceneObjectSkyBoxPtr sky_box = MakeSharedPtr<SceneObjectSkyBox>();
-	sky_box->CompressedCubeMap(y_cube_tl, c_cube_tl);
+	sky_box->CompressedCubeMap(y_cube, c_cube);
 	sky_box->AddToSceneManager();
 }
 

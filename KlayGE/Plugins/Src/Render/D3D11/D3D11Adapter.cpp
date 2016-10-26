@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <array>
 #include <boost/assert.hpp>
 
 #include <KlayGE/D3D11/D3D11Adapter.hpp>
@@ -60,12 +61,12 @@ namespace KlayGE
 	/////////////////////////////////////////////////////////////////////////////////
 	void D3D11Adapter::Enumerate()
 	{
-		std::vector<DXGI_FORMAT> formats;
-		formats.push_back(DXGI_FORMAT_R8G8B8A8_UNORM);
-		formats.push_back(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
-		formats.push_back(DXGI_FORMAT_B8G8R8A8_UNORM);
-		formats.push_back(DXGI_FORMAT_B8G8R8A8_UNORM_SRGB);
-		formats.push_back(DXGI_FORMAT_R10G10B10A2_UNORM);
+		std::array<DXGI_FORMAT, 5> formats;
+		formats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+		formats[1] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+		formats[2] = DXGI_FORMAT_B8G8R8A8_UNORM;
+		formats[3] = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+		formats[4] = DXGI_FORMAT_R10G10B10A2_UNORM;
 
 		UINT i = 0;
 		IDXGIOutput* output = nullptr;
@@ -112,7 +113,6 @@ namespace KlayGE
 		adapter_->GetDesc1(&adapter_desc_);
 		modes_.resize(0);
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 		IDXGIAdapter2* adapter2;
 		adapter_->QueryInterface(IID_IDXGIAdapter2, reinterpret_cast<void**>(&adapter2));
 		if (adapter2 != nullptr)
@@ -120,8 +120,16 @@ namespace KlayGE
 			DXGI_ADAPTER_DESC2 desc2;
 			adapter2->GetDesc2(&desc2);
 			memcpy(adapter_desc_.Description, desc2.Description, sizeof(desc2.Description));
+			adapter_desc_.VendorId = desc2.VendorId;
+			adapter_desc_.DeviceId = desc2.DeviceId;
+			adapter_desc_.SubSysId = desc2.SubSysId;
+			adapter_desc_.Revision = desc2.Revision;
+			adapter_desc_.DedicatedVideoMemory = desc2.DedicatedVideoMemory;
+			adapter_desc_.DedicatedSystemMemory = desc2.DedicatedSystemMemory;
+			adapter_desc_.SharedSystemMemory = desc2.SharedSystemMemory;
+			adapter_desc_.AdapterLuid = desc2.AdapterLuid;
+			adapter_desc_.Flags = desc2.Flags;
 			adapter2->Release();
 		}
-#endif
 	}
 }

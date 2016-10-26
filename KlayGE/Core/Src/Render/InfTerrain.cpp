@@ -78,11 +78,8 @@ namespace KlayGE
 			}
 		}
 
-		ElementInitData init_data;
-		init_data.data = &vertices[0];
-		init_data.slice_pitch = init_data.row_pitch = static_cast<uint32_t>(vertices.size() * sizeof(vertices[0]));
-
-		GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+			static_cast<uint32_t>(vertices.size() * sizeof(vertices[0])), &vertices[0]);
 		rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 
 		std::vector<uint32_t> indices;
@@ -100,10 +97,8 @@ namespace KlayGE
 			}
 		}
 
-		init_data.data = &indices[0];
-		init_data.slice_pitch = init_data.row_pitch = static_cast<uint32_t>(indices.size() * sizeof(indices[0]));
-
-		GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable,
+			static_cast<uint32_t>(indices.size() * sizeof(indices[0])), &indices[0]);
 		rl_->BindIndexStream(ib, EF_R32UI);
 	}
 
@@ -113,17 +108,17 @@ namespace KlayGE
 
 	void InfTerrainRenderable::SetStretch(float stretch)
 	{
-		*(technique_->Effect().ParameterByName("stretch")) = stretch;
+		*(effect_->ParameterByName("stretch")) = stretch;
 	}
 
 	void InfTerrainRenderable::SetBaseLevel(float base_level)
 	{
-		*(technique_->Effect().ParameterByName("base_level")) = base_level;
+		*(effect_->ParameterByName("base_level")) = base_level;
 	}
 
 	void InfTerrainRenderable::OffsetY(float y)
 	{
-		*(technique_->Effect().ParameterByName("offset_y")) = y;
+		*(effect_->ParameterByName("offset_y")) = y;
 	}
 
 	void InfTerrainRenderable::OnRenderBegin()
@@ -137,7 +132,7 @@ namespace KlayGE
 		}
 		else
 		{
-			*(technique_->Effect().ParameterByName("mvp")) = camera.ViewProjMatrix();
+			*(effect_->ParameterByName("mvp")) = camera.ViewProjMatrix();
 		}
 
 		float3 look_at_vec = float3(camera.LookAt().x() - camera.EyePos().x(), 0, camera.LookAt().z() - camera.EyePos().z());
@@ -148,8 +143,8 @@ namespace KlayGE
 		float4x4 virtual_view = MathLib::look_at_lh(camera.EyePos(), camera.EyePos() + look_at_vec);
 		float4x4 inv_virtual_view = MathLib::inverse(virtual_view);
 
-		*(technique_->Effect().ParameterByName("inv_virtual_view")) = inv_virtual_view;
-		*(technique_->Effect().ParameterByName("eye_pos")) = camera.EyePos();
+		*(effect_->ParameterByName("inv_virtual_view")) = inv_virtual_view;
+		*(effect_->ParameterByName("eye_pos")) = camera.EyePos();
 	}
 
 
@@ -335,13 +330,8 @@ namespace KlayGE
 		}
 		BOOST_ASSERT(index == num_tiles_);
 
-		ElementInitData init_data;
-		init_data.data = &vb_data[0];
-		init_data.row_pitch = num_tiles_ * sizeof(InstanceData);
-		init_data.slice_pitch = init_data.row_pitch;
-
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-		vb_ = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		vb_ = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, num_tiles_ * sizeof(InstanceData), &vb_data[0]);
 
 		tile_non_tess_rl_ = rf.MakeRenderLayout();
 		tile_non_tess_rl_->TopologyType(RenderLayout::TT_TriangleStrip);
@@ -365,9 +355,10 @@ namespace KlayGE
 	}
 
 
-	HQTerrainRenderable::HQTerrainRenderable(RenderEffectPtr const & effect)
+	HQTerrainRenderable::HQTerrainRenderable(RenderEffectPtr const & effect,
+			float world_scale, float vertical_scale, int world_uv_repeats)
 		: RenderableHelper(L"HQTerrain"),
-			world_scale_(800), vertical_scale_(2.5f), world_uv_repeats_(8),
+			world_scale_(world_scale), vertical_scale_(vertical_scale), world_uv_repeats_(world_uv_repeats),
 			ridge_octaves_(3), fBm_octaves_(3), tex_twist_octaves_(1), detail_noise_scale_(0.02f),
 			tessellated_tri_size_(6), wireframe_(false), show_patches_(false), show_tiles_(false)
 	{
@@ -382,6 +373,7 @@ namespace KlayGE
 
 		int widths[] = { 0, 16, 16, 16, 16 };
 		uint32_t const rings = sizeof(widths) / sizeof(widths[0]) - 1;
+		KFL_UNUSED(MAX_RINGS);
 		BOOST_ASSERT(rings <= MAX_RINGS);
 
 		tile_rings_.resize(rings);
@@ -442,7 +434,7 @@ namespace KlayGE
 
 	void HQTerrainRenderable::ModelMatrix(float4x4 const & mat)
 	{
-		UNREF_PARAM(mat);
+		KFL_UNUSED(mat);
 		// Calculate matrix in SetMatrices.
 	}
 
@@ -494,13 +486,8 @@ namespace KlayGE
 		}
 		BOOST_ASSERT(NON_TESS_INDEX_COUNT == index);
 
-		ElementInitData init_data;
-		init_data.data = &indices[0];
-		init_data.row_pitch = sizeof(indices);
-		init_data.slice_pitch = init_data.row_pitch;
-
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-		tile_non_tess_ib_ = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		tile_non_tess_ib_ = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(indices), &indices[0]);
 	}
 
 	void HQTerrainRenderable::CreateNonTessVIDVB()
@@ -517,13 +504,8 @@ namespace KlayGE
 			}
 		}
 
-		ElementInitData init_data;
-		init_data.data = &vid[0];
-		init_data.row_pitch = sizeof(vid);
-		init_data.slice_pitch = init_data.row_pitch;
-
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-		tile_non_tess_vid_vb_ = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		tile_non_tess_vid_vb_ = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(vid), &vid[0]);
 	}
 
 	void HQTerrainRenderable::CreateTessIB()
@@ -549,13 +531,8 @@ namespace KlayGE
 		}
 		BOOST_ASSERT(TESS_INDEX_COUNT == index);
 
-		ElementInitData init_data;
-		init_data.data = &indices[0];
-		init_data.row_pitch = sizeof(indices);
-		init_data.slice_pitch = init_data.row_pitch;
-
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-		tile_tess_ib_ = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		tile_tess_ib_ = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(indices), &indices[0]);
 	}
 
 	void HQTerrainRenderable::TextureLayer(uint32_t layer, TexturePtr const & tex)
@@ -691,8 +668,8 @@ namespace KlayGE
 		*height_map_param_ = height_map_tex_;
 		*gradient_map_param_ = gradient_map_tex_;
 		*mask_map_param_ = mask_map_tex_;
-		*frame_size_param_ = float2(static_cast<float>(re.CurFrameBuffer()->Width()),
-			static_cast<float>(re.CurFrameBuffer()->Height()));
+		*frame_size_param_ = int2(static_cast<int>(re.CurFrameBuffer()->Width()),
+			static_cast<int>(re.CurFrameBuffer()->Height()));
 
 		bool need_tess = false;
 		if (hw_tessellation_)
@@ -727,14 +704,14 @@ namespace KlayGE
 			}
 
 			*tile_size_param_ = ring->TileSize();
-			re.Render(*technique_, *rl_);
+			re.Render(*effect_, *technique_, *rl_);
 		}
 	}
 
 	float HQTerrainRenderable::GetHeight(float x, float z)
 	{
-		uint32_t width = height_map_cpu_tex_->Width(0);
-		uint32_t height = height_map_cpu_tex_->Height(0);
+		uint32_t const width = height_map_cpu_tex_->Width(0);
+		uint32_t const height = height_map_cpu_tex_->Height(0);
 
 		float2 uv((x - snapped_x_) / world_scale_ / (world_uv_repeats_ * 2) + 0.5f,
 			(z - snapped_z_) / world_scale_ / (world_uv_repeats_ * 2) + 0.5f);
@@ -744,17 +721,17 @@ namespace KlayGE
 		float fu = uv.x() * width;
 		float fv = uv.y() * height;
 		uint32_t iu0 = MathLib::clamp(static_cast<uint32_t>(fu), 0U, width - 1);
-		uint32_t iv0 = MathLib::clamp(static_cast<uint32_t>(fv), 0U, width - 1);
+		uint32_t iv0 = MathLib::clamp(static_cast<uint32_t>(fv), 0U, height - 1);
 		uint32_t iu1 = MathLib::clamp(iu0 + 1, 0U, width - 1);
-		uint32_t iv1 = MathLib::clamp(iv0 + 1, 0U, width - 1);
+		uint32_t iv1 = MathLib::clamp(iv0 + 1, 0U, height - 1);
 		float wu = fu - iu0;
 		float wv = fv - iv0;
 		Texture::Mapper mapper(*height_map_cpu_tex_, 0, 0, TMA_Read_Only, 0, 0, width, height);
 		half const * src = mapper.Pointer<half>();
-		float t0 = static_cast<float>(src[iv0 * mapper.RowPitch() / sizeof(half)+ iu0]);
-		float t1 = static_cast<float>(src[iv0 * mapper.RowPitch() / sizeof(half)+ iu1]);
-		float t2 = static_cast<float>(src[iv1 * mapper.RowPitch() / sizeof(half)+ iu0]);
-		float t3 = static_cast<float>(src[iv1 * mapper.RowPitch() / sizeof(half)+ iu1]);
+		float t0 = static_cast<float>(src[iv0 * mapper.RowPitch() / sizeof(half) + iu0]);
+		float t1 = static_cast<float>(src[iv0 * mapper.RowPitch() / sizeof(half) + iu1]);
+		float t2 = static_cast<float>(src[iv1 * mapper.RowPitch() / sizeof(half) + iu0]);
+		float t3 = static_cast<float>(src[iv1 * mapper.RowPitch() / sizeof(half) + iu1]);
 		return MathLib::lerp(MathLib::lerp(t0, t1, wu), MathLib::lerp(t2, t3, wu), wv) * world_scale_ * vertical_scale_;
 	}
 
@@ -776,20 +753,20 @@ namespace KlayGE
 
 	bool HQTerrainSceneObject::MainThreadUpdate(float app_time, float elapsed_time)
 	{
-		UNREF_PARAM(app_time);
-		UNREF_PARAM(elapsed_time);
+		KFL_UNUSED(app_time);
+		KFL_UNUSED(elapsed_time);
 
 		RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-		CameraPtr const & camera = re.ScreenFrameBuffer()->GetViewport()->camera;
+		Camera const & camera = *re.ScreenFrameBuffer()->GetViewport()->camera;
 
-		checked_pointer_cast<HQTerrainRenderable>(renderable_)->SetMatrices(*camera);
+		checked_pointer_cast<HQTerrainRenderable>(renderable_)->SetMatrices(camera);
 
-		reset_terrain_ = reset_terrain_ || (last_eye_pos_ != camera->EyePos());
+		reset_terrain_ = reset_terrain_ || (last_eye_pos_ != camera.EyePos());
 		if (reset_terrain_)
 		{
 			checked_pointer_cast<HQTerrainRenderable>(renderable_)->FlushTerrainData();
 			reset_terrain_ = false;
-			last_eye_pos_ = camera->EyePos();
+			last_eye_pos_ = camera.EyePos();
 		}
 
 		return false;

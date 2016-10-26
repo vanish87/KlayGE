@@ -56,7 +56,7 @@ namespace KlayGE
 		InfTerrainSceneObject();
 		virtual ~InfTerrainSceneObject();
 
-		virtual bool MainThreadUpdate(float app_time, float elapsed_time) KLAYGE_OVERRIDE;
+		virtual bool MainThreadUpdate(float app_time, float elapsed_time) override;
 
 	protected:
 		float base_level_;
@@ -162,14 +162,15 @@ namespace KlayGE
 		};
 
 	public:
-		explicit HQTerrainRenderable(RenderEffectPtr const & effect);
+		explicit HQTerrainRenderable(RenderEffectPtr const & effect,
+			float world_scale = 800, float vertical_scale = 2.5f, int world_uv_repeats = 8);
 		virtual ~HQTerrainRenderable()
 		{
 		}
 
-		virtual void Render() KLAYGE_OVERRIDE;
+		virtual void Render() override;
 
-		virtual void ModelMatrix(float4x4 const & mat) KLAYGE_OVERRIDE;
+		virtual void ModelMatrix(float4x4 const & mat) override;
 
 		void Tessellation(bool tess);
 		void ShowPatches(bool sp);
@@ -184,7 +185,7 @@ namespace KlayGE
 		float GetHeight(float x, float z);
 
 	protected:
-		virtual void BindDeferredEffect(RenderEffectPtr const & deferred_effect) KLAYGE_OVERRIDE;
+		virtual void BindDeferredEffect(RenderEffectPtr const & deferred_effect) override;
 		void CreateNonTessIB();
 		void CreateNonTessVIDVB();
 		void CreateTessIB();
@@ -216,27 +217,27 @@ namespace KlayGE
 
 		float3 texture_world_offset_;
 
-		RenderTechniquePtr terrain_depth_techs_[2];
-		RenderTechniquePtr terrain_gbuffer_rt0_techs_[4];
-		RenderTechniquePtr terrain_gbuffer_rt1_techs_[4];
-		RenderTechniquePtr terrain_gbuffer_mrt_techs_[4];
-		RenderEffectParameterPtr height_map_param_;
-		RenderEffectParameterPtr gradient_map_param_;
-		RenderEffectParameterPtr mask_map_param_;
-		RenderEffectParameterPtr eye_pos_param_;
-		RenderEffectParameterPtr view_dir_param_;
-		RenderEffectParameterPtr proj_mat_param_;
-		RenderEffectParameterPtr texture_world_offset_param_;
-		RenderEffectParameterPtr tri_size_param_;
-		RenderEffectParameterPtr tile_size_param_;
-		RenderEffectParameterPtr debug_show_patches_param_;
-		RenderEffectParameterPtr debug_show_tiles_param_;
-		RenderEffectParameterPtr detail_noise_param_;
-		RenderEffectParameterPtr detail_uv_param_;
-		RenderEffectParameterPtr sample_spacing_param_;
-		RenderEffectParameterPtr frame_size_param_;
-		std::array<RenderEffectParameterPtr, 4> terrain_tex_layer_params_;
-		std::array<RenderEffectParameterPtr, 4> terrain_tex_layer_scale_params_;
+		RenderTechnique* terrain_depth_techs_[2];
+		RenderTechnique* terrain_gbuffer_rt0_techs_[4];
+		RenderTechnique* terrain_gbuffer_rt1_techs_[4];
+		RenderTechnique* terrain_gbuffer_mrt_techs_[4];
+		RenderEffectParameter* height_map_param_;
+		RenderEffectParameter* gradient_map_param_;
+		RenderEffectParameter* mask_map_param_;
+		RenderEffectParameter* eye_pos_param_;
+		RenderEffectParameter* view_dir_param_;
+		RenderEffectParameter* proj_mat_param_;
+		RenderEffectParameter* texture_world_offset_param_;
+		RenderEffectParameter* tri_size_param_;
+		RenderEffectParameter* tile_size_param_;
+		RenderEffectParameter* debug_show_patches_param_;
+		RenderEffectParameter* debug_show_tiles_param_;
+		RenderEffectParameter* detail_noise_param_;
+		RenderEffectParameter* detail_uv_param_;
+		RenderEffectParameter* sample_spacing_param_;
+		RenderEffectParameter* frame_size_param_;
+		std::array<RenderEffectParameter*, 4> terrain_tex_layer_params_;
+		std::array<RenderEffectParameter*, 4> terrain_tex_layer_scale_params_;
 
 		GraphicsBufferPtr tile_non_tess_ib_;
 		GraphicsBufferPtr tile_non_tess_vid_vb_;
@@ -255,7 +256,7 @@ namespace KlayGE
 		explicit HQTerrainSceneObject(RenderablePtr const & renderable);
 		virtual ~HQTerrainSceneObject();
 
-		virtual bool MainThreadUpdate(float app_time, float elapsed_time) KLAYGE_OVERRIDE;
+		virtual bool MainThreadUpdate(float app_time, float elapsed_time) override;
 
 		void Tessellation(bool tess);
 		void ShowPatches(bool sp);

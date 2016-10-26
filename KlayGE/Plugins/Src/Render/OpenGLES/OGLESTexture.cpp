@@ -28,9 +28,12 @@
 namespace KlayGE
 {
 	OGLESTexture::OGLESTexture(TextureType type, uint32_t array_size, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
-					: Texture(type, sample_count, sample_quality, access_hint)
+					: Texture(type, sample_count, sample_quality, access_hint),
+						hw_res_ready_(false)
 	{
-		if (array_size > 1)
+		array_size_ = array_size;
+
+		if ((array_size > 1) && !glloader_GLES_VERSION_3_0())
 		{
 			THR(errc::function_not_supported);
 		}
@@ -39,7 +42,14 @@ namespace KlayGE
 		{
 		case TT_1D:
 		case TT_2D:
-			target_type_ = GL_TEXTURE_2D;
+			if (array_size > 1)
+			{
+				target_type_ = GL_TEXTURE_2D_ARRAY;
+			}
+			else
+			{
+				target_type_ = GL_TEXTURE_2D;
+			}
 			break;
 
 		case TT_3D:
@@ -66,11 +76,18 @@ namespace KlayGE
 			target_type_ = GL_TEXTURE_2D;
 			break;
 		}
+
+		glGenTextures(1, &texture_);
+		glBindTexture(target_type_, texture_);
+		glTexParameteri(target_type_, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(target_type_, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	}
 
 	OGLESTexture::~OGLESTexture()
 	{
-		this->OfferHWResource();
+		this->DeleteHWResource();
+
+		glDeleteTextures(1, &texture_);
 	}
 
 	std::wstring const & OGLESTexture::Name() const
@@ -81,7 +98,7 @@ namespace KlayGE
 
 	uint32_t OGLESTexture::Width(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -89,7 +106,7 @@ namespace KlayGE
 
 	uint32_t OGLESTexture::Height(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -97,7 +114,7 @@ namespace KlayGE
 
 	uint32_t OGLESTexture::Depth(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -234,9 +251,13 @@ namespace KlayGE
 		}
 	}
 
-	void OGLESTexture::OfferHWResource()
+	void OGLESTexture::DeleteHWResource()
 	{
-		tex_data_.clear();
-		glDeleteTextures(1, &texture_);
+		hw_res_ready_ = false;
+	}
+
+	bool OGLESTexture::HWResourceReady() const
+	{
+		return hw_res_ready_;
 	}
 }

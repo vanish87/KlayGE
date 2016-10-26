@@ -41,14 +41,12 @@ namespace KlayGE
 		static D3D11_TEXTURE_ADDRESS_MODE Mapping(TexAddressingMode mode);
 		static D3D11_FILTER Mapping(TexFilterOp filter);
 		static D3D11_DEPTH_WRITE_MASK Mapping(bool depth_write_mask);
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN8)
 		static D3D11_LOGIC_OP Mapping(LogicOperation lo);
-#endif
 
 		static D3D11_PRIMITIVE_TOPOLOGY Mapping(RenderLayout::topology_type tt);
 		static void Mapping(std::vector<D3D11_INPUT_ELEMENT_DESC>& elements, size_t stream, vertex_elements_type const & vet, RenderLayout::stream_type type, uint32_t freq);
 
-		static D3D11_SO_DECLARATION_ENTRY Mapping(ShaderDesc::StreamOutputDecl const & decl, uint8_t slot);
+		static D3D11_SO_DECLARATION_ENTRY Mapping(ShaderDesc::StreamOutputDecl const & decl);
 
 		static DXGI_FORMAT MappingFormat(ElementFormat pf);
 		static ElementFormat MappingFormat(DXGI_FORMAT d3dfmt);

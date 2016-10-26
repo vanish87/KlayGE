@@ -34,9 +34,9 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("MVUtil.fxml");
-			simple_forward_tech_ = effect->TechniqueByName("AxisTech");
-			mvp_param_ = effect->ParameterByName("mvp");
+			effect_ = SyncLoadRenderEffect("MVUtil.fxml");
+			simple_forward_tech_ = effect_->TechniqueByName("AxisTech");
+			mvp_param_ = effect_->ParameterByName("mvp");
 
 			float4 xyzs[] =
 			{
@@ -51,11 +51,7 @@ namespace
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_LineList);
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(xyzs);
-			init_data.slice_pitch = 0;
-			init_data.data = xyzs;
-			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(xyzs), xyzs);
 
 			rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_ABGR32F)));
 
@@ -80,9 +76,9 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("MVUtil.fxml");
-			simple_forward_tech_ = effect->TechniqueByName("GridTech");
-			mvp_param_ = effect->ParameterByName("mvp");
+			effect_ = SyncLoadRenderEffect("MVUtil.fxml");
+			simple_forward_tech_ = effect_->TechniqueByName("GridTech");
+			mvp_param_ = effect_->ParameterByName("mvp");
 
 			float3 xyzs[(21 + 21) * 2];
 			for (int i = 0; i < 21; ++ i)
@@ -97,11 +93,7 @@ namespace
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_LineList);
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(xyzs);
-			init_data.slice_pitch = 0;
-			init_data.data = xyzs;
-			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(xyzs), xyzs);
 
 			rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_BGR32F)));
 
@@ -127,6 +119,11 @@ namespace
 			renderable_ = SyncLoadModel(name, EAH_GPU_Read | EAH_Immutable,
 				CreateModelFactory<DetailedSkinnedModel>(), CreateMeshFactory<DetailedSkinnedMesh>());
 			checked_pointer_cast<DetailedSkinnedModel>(renderable_)->SetTime(0);
+		}
+
+		virtual ~ModelObject()
+		{
+			ResLoader::Instance().Unload(renderable_);
 		}
 
 		uint32_t NumFrames() const
@@ -190,17 +187,12 @@ namespace
 		}
 	};
 
-	class PointLightSourceUpdate
+	class LightSourceUpdate
 	{
 	public:
-		PointLightSourceUpdate()
-		{
-		}
-
 		void operator()(LightSource& light, float /*app_time*/, float /*elapsed_time*/)
 		{
-			float4x4 inv_view = Context::Instance().AppInstance().ActiveCamera().InverseViewMatrix();
-			light.Position(MathLib::transform_coord(float3(0, 2.0f, 0), inv_view));
+			light.Direction(Context::Instance().AppInstance().ActiveCamera().ForwardVec());
 		}
 	};
 }
@@ -211,14 +203,18 @@ namespace KlayGE
 				: App3DFramework("MtlEditor", native_wnd),
 					fps_controller_(false), tb_controller_(false), is_fps_camera_(false),
 					skinning_(true), curr_frame_(0), mouse_down_in_wnd_(false), mouse_tracking_mode_(false),
-					update_selective_buffer_(false), selected_obj_(0),
-					end_command_index_(0)
+					update_selective_buffer_(false), selected_obj_(0)
 	{
 		ResLoader::Instance().AddPath("../../Tools/media/MtlEditor");
 	}
 
 	bool MtlEditorCore::ConfirmDevice() const
 	{
+		RenderDeviceCaps const & caps = Context::Instance().RenderFactoryInstance().RenderEngineInstance().DeviceCaps();
+		if (caps.max_simultaneous_rts < 2)
+		{
+			return false;
+		}
 		return true;
 	}
 
@@ -260,13 +256,11 @@ namespace KlayGE
 		deferred_rendering_ = Context::Instance().DeferredRenderingLayerInstance();
 		deferred_rendering_->SSVOEnabled(0, false);
 
-		point_light_ = MakeSharedPtr<PointLightSource>();
-		point_light_->Attrib(LightSource::LSA_NoShadow);
-		point_light_->Color(float3(1.0f, 1.0f, 1.0f));
-		point_light_->Position(float3(0, 2.0f, 0));
-		point_light_->Falloff(float3(1, 0, 0));
-		point_light_->BindUpdateFunc(PointLightSourceUpdate());
-		point_light_->AddToSceneManager();
+		light_ = MakeSharedPtr<DirectionalLightSource>();
+		light_->Attrib(LightSource::LSA_NoShadow);
+		light_->Color(float3(1.0f, 1.0f, 1.0f));
+		light_->BindUpdateFunc(LightSourceUpdate());
+		light_->AddToSceneManager();
 
 		axis_ = MakeSharedPtr<SceneObjectHelper>(MakeSharedPtr<RenderAxis>(),
 			SceneObject::SOA_Cullable | SceneObject::SOA_Moveable | SceneObject::SOA_NotCastShadow);
@@ -336,10 +330,9 @@ namespace KlayGE
 		sky_box_.reset();
 		grid_.reset();
 		axis_.reset();
-		point_light_.reset();
+		light_.reset();
 		selected_bb_.reset();
 
-		deferred_rendering_.reset();
 		font_.reset();
 	}
 
@@ -366,6 +359,7 @@ namespace KlayGE
 		{
 			model_->DelFromSceneManager();
 		}
+
 		model_ = MakeSharedPtr<ModelObject>(name);
 		model_->AddToSceneManager();
 		for (size_t i = 0; i < model_->GetRenderable()->NumSubrenderables(); ++ i)
@@ -547,9 +541,31 @@ namespace KlayGE
 		return model_->GetRenderable()->NumSubrenderables();
 	}
 
-	std::wstring const & MtlEditorCore::MeshName(uint32_t index) const
+	wchar_t const * MtlEditorCore::MeshName(uint32_t index) const
 	{
-		return model_->GetRenderable()->Subrenderable(index)->Name();
+		return model_->GetRenderable()->Subrenderable(index)->Name().c_str();
+	}
+
+	uint32_t MtlEditorCore::NumVertexStreams(uint32_t mesh_id) const
+	{
+		Renderable const & mesh = *model_->GetRenderable()->Subrenderable(mesh_id);
+		RenderLayout const & rl = mesh.GetRenderLayout();
+		return rl.NumVertexStreams();
+	}
+
+	uint32_t MtlEditorCore::NumVertexStreamUsages(uint32_t mesh_id, uint32_t stream_index) const
+	{
+		Renderable const & mesh = *model_->GetRenderable()->Subrenderable(mesh_id);
+		RenderLayout const & rl = mesh.GetRenderLayout();
+		return static_cast<uint32_t>(rl.VertexStreamFormat(stream_index).size());
+	}
+
+	uint32_t MtlEditorCore::VertexStreamUsage(uint32_t mesh_id, uint32_t stream_index, uint32_t usage_index) const
+	{
+		Renderable const & mesh = *model_->GetRenderable()->Subrenderable(mesh_id);
+		RenderLayout const & rl = mesh.GetRenderLayout();
+		return (rl.VertexStreamFormat(stream_index)[usage_index].usage << 16)
+			| (rl.VertexStreamFormat(stream_index)[usage_index].usage_index);
 	}
 
 	uint32_t MtlEditorCore::MaterialID(uint32_t mesh_id) const
@@ -594,7 +610,7 @@ namespace KlayGE
 		return model->GetMaterial(mtl_id)->opacity;
 	}
 
-	std::string const & MtlEditorCore::DiffuseTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::DiffuseTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -603,14 +619,13 @@ namespace KlayGE
 			if ((CT_HASH("Color") == slot_type_hash) || (CT_HASH("Diffuse Color") == slot_type_hash)
 				|| (CT_HASH("Diffuse Color Map") == slot_type_hash))
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
 	}
 
-	std::string const & MtlEditorCore::SpecularTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::SpecularTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -618,14 +633,13 @@ namespace KlayGE
 			size_t const slot_type_hash = RT_HASH(slot.first.c_str());
 			if ((CT_HASH("Specular Level") == slot_type_hash) || (CT_HASH("Specular Color") == slot_type_hash))
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
 	}
 
-	std::string const & MtlEditorCore::ShininessTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::ShininessTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -633,14 +647,13 @@ namespace KlayGE
 			size_t const slot_type_hash = RT_HASH(slot.first.c_str());
 			if ((CT_HASH("Glossiness") == slot_type_hash) || (CT_HASH("Reflection Glossiness Map") == slot_type_hash))
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
 	}
 
-	std::string const & MtlEditorCore::NormalTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::NormalTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -648,14 +661,13 @@ namespace KlayGE
 			size_t const slot_type_hash = RT_HASH(slot.first.c_str());
 			if ((CT_HASH("Bump") == slot_type_hash) || (CT_HASH("Bump Map") == slot_type_hash))
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
 	}
 
-	std::string const & MtlEditorCore::HeightTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::HeightTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -663,14 +675,13 @@ namespace KlayGE
 			size_t const slot_type_hash = RT_HASH(slot.first.c_str());
 			if ((CT_HASH("Height") == slot_type_hash) || (CT_HASH("Height Map") == slot_type_hash))
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
 	}
 
-	std::string const & MtlEditorCore::EmitTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::EmitTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -678,14 +689,13 @@ namespace KlayGE
 			size_t const slot_type_hash = RT_HASH(slot.first.c_str());
 			if (CT_HASH("Self-Illumination") == slot_type_hash)
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
 	}
 
-	std::string const & MtlEditorCore::OpacityTexture(uint32_t mtl_id) const
+	char const * MtlEditorCore::OpacityTexture(uint32_t mtl_id) const
 	{
 		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
 		for (auto const & slot : model->GetMaterial(mtl_id)->texture_slots)
@@ -693,11 +703,52 @@ namespace KlayGE
 			size_t const slot_type_hash = RT_HASH(slot.first.c_str());
 			if (CT_HASH("Opacity") == slot_type_hash)
 			{
-				return slot.second;
+				return slot.second.c_str();
 			}
 		}
-		static std::string const empty;
-		return empty;
+		return nullptr;
+	}
+
+	uint32_t MtlEditorCore::DetailMode(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->detail_mode;
+	}
+
+	float MtlEditorCore::HeightOffset(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->height_offset_scale.x();
+	}
+
+	float MtlEditorCore::HeightScale(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->height_offset_scale.y();
+	}
+
+	float MtlEditorCore::EdgeTessHint(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->tess_factors.x();
+	}
+
+	float MtlEditorCore::InsideTessHint(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->tess_factors.y();
+	}
+
+	float MtlEditorCore::MinTess(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->tess_factors.z();
+	}
+
+	float MtlEditorCore::MaxTess(uint32_t mtl_id) const
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		return model->GetMaterial(mtl_id)->tess_factors.w();
 	}
 
 	void MtlEditorCore::AmbientMaterial(uint32_t mtl_id, float3 const & value)
@@ -1007,6 +1058,56 @@ namespace KlayGE
 		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateMaterial(mtl_id);
 	}
 
+	void MtlEditorCore::DetailMode(uint32_t mtl_id, uint32_t value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->detail_mode = static_cast<RenderMaterial::SurfaceDetailMode>(value);
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateTechniques(mtl_id);
+	}
+
+	void MtlEditorCore::HeightOffset(uint32_t mtl_id, float value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->height_offset_scale.x() = value;
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+	}
+
+	void MtlEditorCore::HeightScale(uint32_t mtl_id, float value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->height_offset_scale.y() = value;
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+	}
+
+	void MtlEditorCore::EdgeTessHint(uint32_t mtl_id, float value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->tess_factors.x() = value;
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+	}
+
+	void MtlEditorCore::InsideTessHint(uint32_t mtl_id, float value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->tess_factors.y() = value;
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+	}
+
+	void MtlEditorCore::MinTess(uint32_t mtl_id, float value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->tess_factors.z() = value;
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+	}
+
+	void MtlEditorCore::MaxTess(uint32_t mtl_id, float value)
+	{
+		RenderModelPtr model = checked_pointer_cast<RenderModel>(model_->GetRenderable());
+		model->GetMaterial(mtl_id)->tess_factors.w() = value;
+		checked_pointer_cast<DetailedSkinnedModel>(model)->UpdateEffectAttrib(mtl_id);
+	}
+
 	uint32_t MtlEditorCore::SelectedMesh() const
 	{
 		return selected_obj_;
@@ -1044,6 +1145,11 @@ namespace KlayGE
 			fps_controller_.DetachCamera();
 			tb_controller_.AttachCamera(this->ActiveCamera());
 		}
+	}
+
+	void MtlEditorCore::LineModeOn(bool on)
+	{
+		deferred_rendering_->ForceLineMode(on);
 	}
 
 	void MtlEditorCore::Visualize(int index)
@@ -1164,8 +1270,7 @@ namespace KlayGE
 						entity_id = 0;
 					}
 
-					this->ExecuteCommand(MakeSharedPtr<MtlEditorCommandSelectMesh>(this, entity_id));
-					this->UpdateSelectedMesh();
+					update_select_entity_event_(entity_id);
 				}
 			}
 		}
@@ -1173,7 +1278,7 @@ namespace KlayGE
 
 	void MtlEditorCore::MouseDown(int x, int y, uint32_t button)
 	{
-		UNREF_PARAM(button);
+		KFL_UNUSED(button);
 
 		mouse_down_in_wnd_ = true;
 		last_mouse_pt_ = int2(x, y);
@@ -1240,50 +1345,5 @@ namespace KlayGE
 		{
 			selected_bb_->Visible(false);
 		}
-	}
-
-	uint32_t MtlEditorCore::NumHistroyCmds() const
-	{
-		return static_cast<uint32_t>(command_history_.size());
-	}
-
-	char const * MtlEditorCore::HistroyCmdName(uint32_t index) const
-	{
-		return command_history_[index]->Name();
-	}
-
-	uint32_t MtlEditorCore::EndCmdIndex() const
-	{
-		return end_command_index_;
-	}
-
-	void MtlEditorCore::ExecuteCommand(MtlEditorCommandPtr const & cmd)
-	{
-		cmd->Execute();
-		++ end_command_index_;
-		command_history_.resize(end_command_index_);
-		command_history_.back() = cmd;
-	}
-
-	void MtlEditorCore::Undo()
-	{
-		BOOST_ASSERT(end_command_index_ != 0);
-
-		-- end_command_index_;
-		command_history_[end_command_index_]->Revoke();
-	}
-
-	void MtlEditorCore::Redo()
-	{
-		BOOST_ASSERT(end_command_index_ != command_history_.size());
-
-		command_history_[end_command_index_]->Execute();
-		++ end_command_index_;
-	}
-
-	void MtlEditorCore::ClearHistroy()
-	{
-		command_history_.clear();
-		end_command_index_ = 0;
 	}
 }

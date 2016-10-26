@@ -38,7 +38,8 @@
 namespace KlayGE
 {
 	OGLTexture::OGLTexture(TextureType type, uint32_t array_size, uint32_t sample_count, uint32_t sample_quality, uint32_t access_hint)
-					: Texture(type, sample_count, sample_quality, access_hint)
+					: Texture(type, sample_count, sample_quality, access_hint),
+						hw_res_ready_(false)
 	{
 		array_size_ = array_size;
 
@@ -84,11 +85,42 @@ namespace KlayGE
 			target_type_ = GL_TEXTURE_1D;
 			break;
 		}
+
+		if (sample_count_ <= 1)
+		{
+			glGenTextures(1, &texture_);
+			glBindTexture(target_type_, texture_);
+			glTexParameteri(target_type_, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(target_type_, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		}
+		else
+		{
+			glGenRenderbuffers(1, &texture_);
+		}
 	}
 
 	OGLTexture::~OGLTexture()
 	{
-		this->OfferHWResource();
+		this->DeleteHWResource();
+
+		if (Context::Instance().RenderFactoryValid())
+		{
+			OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
+			re.DeleteBuffers(static_cast<GLsizei>(pbos_.size()), &pbos_[0]);
+		}
+		else
+		{
+			glDeleteBuffers(static_cast<GLsizei>(pbos_.size()), &pbos_[0]);
+		}
+
+		if (sample_count_ <= 1)
+		{
+			glDeleteTextures(1, &texture_);
+		}
+		else
+		{
+			glDeleteRenderbuffers(1, &texture_);
+		}
 	}
 
 	std::wstring const & OGLTexture::Name() const
@@ -99,7 +131,7 @@ namespace KlayGE
 
 	uint32_t OGLTexture::Width(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -107,7 +139,7 @@ namespace KlayGE
 
 	uint32_t OGLTexture::Height(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -115,7 +147,7 @@ namespace KlayGE
 
 	uint32_t OGLTexture::Depth(uint32_t level) const
 	{
-		UNREF_PARAM(level);
+		KFL_UNUSED(level);
 		BOOST_ASSERT(level < num_mip_maps_);
 
 		return 1;
@@ -299,25 +331,13 @@ namespace KlayGE
 		}
 	}
 
-	void OGLTexture::OfferHWResource()
+	void OGLTexture::DeleteHWResource()
 	{
-		if (Context::Instance().RenderFactoryValid())
-		{
-			OGLRenderEngine& re = *checked_cast<OGLRenderEngine*>(&Context::Instance().RenderFactoryInstance().RenderEngineInstance());
-			re.DeleteBuffers(static_cast<GLsizei>(pbos_.size()), &pbos_[0]);
-		}
-		else
-		{
-			glDeleteBuffers(static_cast<GLsizei>(pbos_.size()), &pbos_[0]);
-		}
+		hw_res_ready_ = false;
+	}
 
-		if (sample_count_ <= 1)
-		{
-			glDeleteTextures(1, &texture_);
-		}
-		else
-		{
-			glDeleteRenderbuffers(1, &texture_);
-		}
+	bool OGLTexture::HWResourceReady() const
+	{
+		return hw_res_ready_;
 	}
 }

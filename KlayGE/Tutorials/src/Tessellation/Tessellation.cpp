@@ -40,10 +40,10 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("Tessellation.fxml");
+			effect_ = SyncLoadRenderEffect("TessellationApp.fxml");
 
-			technique_ = effect->TechniqueByName("NoTessellation");
-			tess_factors_param_ = effect->ParameterByName("tess_factors");
+			technique_ = effect_->TechniqueByName("NoTessellation");
+			tess_factors_param_ = effect_->ParameterByName("tess_factors");
 
 			float3 xyzs[] =
 			{
@@ -54,11 +54,7 @@ namespace
 
 			rl_ = rf.MakeRenderLayout();
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(xyzs);
-			init_data.slice_pitch = 0;
-			init_data.data = xyzs;
-			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(xyzs), xyzs);
 			rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_BGR32F)));
 
 			pos_aabb_ = MathLib::compute_aabbox(&xyzs[0], &xyzs[sizeof(xyzs) / sizeof(xyzs[0])]);
@@ -70,12 +66,12 @@ namespace
 			if (enabled)
 			{
 				rl_->TopologyType(RenderLayout::TT_3_Ctrl_Pt_PatchList);
-				technique_ = technique_->Effect().TechniqueByName("Tessellation");
+				technique_ = effect_->TechniqueByName("Tessellation");
 			}
 			else
 			{
 				rl_->TopologyType(RenderLayout::TT_TriangleList);
-				technique_ = technique_->Effect().TechniqueByName("NoTessellation");
+				technique_ = effect_->TechniqueByName("NoTessellation");
 			}
 		}
 
@@ -85,7 +81,7 @@ namespace
 		}
 
 	private:
-		RenderEffectParameterPtr tess_factors_param_;
+		RenderEffectParameter* tess_factors_param_;
 	};
 
 	class TriangleObject : public SceneObjectHelper
@@ -136,7 +132,8 @@ int SampleMain()
 }
 
 TessellationApp::TessellationApp()
-					: App3DFramework("Tessellation")
+					: App3DFramework("Tessellation"),
+						tess_factor_(0, 0, 0, 0)
 {
 	ResLoader::Instance().AddPath("../../Tutorials/media/Tessellation");
 }

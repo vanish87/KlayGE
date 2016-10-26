@@ -17,19 +17,15 @@
 
 #include <KlayGE/PreDeclare.hpp>
 
-#ifdef KLAYGE_HAS_DECLSPEC
-	#ifdef KLAYGE_OV_ADS_SOURCE				// Build dll
-		#define KLAYGE_OV_ADS_API __declspec(dllexport)
-	#else									// Use dll
-		#define KLAYGE_OV_ADS_API __declspec(dllimport)
-	#endif
-#else
-	#define KLAYGE_OV_ADS_API
-#endif // KLAYGE_HAS_DECLSPEC
+#ifdef KLAYGE_OV_ADS_SOURCE				// Build dll
+	#define KLAYGE_OV_ADS_API KLAYGE_SYMBOL_EXPORT
+#else									// Use dll
+	#define KLAYGE_OV_ADS_API KLAYGE_SYMBOL_IMPORT
+#endif
 
 extern "C"
 {
-	KLAYGE_OV_ADS_API void MakeAudioDataSourceFactory(KlayGE::AudioDataSourceFactoryPtr& ptr);
+	KLAYGE_OV_ADS_API void MakeAudioDataSourceFactory(std::unique_ptr<KlayGE::AudioDataSourceFactory>& ptr);
 }
 
 #endif			// _OGGVORBISSOURCEFACTORY_HPP

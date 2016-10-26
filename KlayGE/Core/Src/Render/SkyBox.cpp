@@ -60,11 +60,11 @@ namespace KlayGE
 			gbuffer_rt1_tech_ = effect->TechniqueByName("GBufferSkyBoxRT1Tech");
 			gbuffer_mrt_tech_ = effect->TechniqueByName("GBufferSkyBoxMRTTech");
 			special_shading_tech_ = effect->TechniqueByName("SkyBoxTech");
-			this->Technique(gbuffer_rt0_tech_);
+			this->Technique(effect, gbuffer_rt0_tech_);
 		}
 		else
 		{
-			this->Technique(effect->TechniqueByName("SkyBoxTech"));
+			this->Technique(effect, effect->TechniqueByName("SkyBoxTech"));
 		}
 
 		float3 xyzs[] =
@@ -75,29 +75,26 @@ namespace KlayGE
 			float3(-1.0f, -1.0f, 1.0f),
 		};
 
-		ElementInitData init_data;
-		init_data.row_pitch = sizeof(xyzs);
-		init_data.slice_pitch = 0;
-		init_data.data = xyzs;
-
 		rl_ = rf.MakeRenderLayout();
 		rl_->TopologyType(RenderLayout::TT_TriangleStrip);
 
-		GraphicsBufferPtr vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+		GraphicsBufferPtr vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(xyzs), xyzs);
 		rl_->BindVertexStream(vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_BGR32F)));
 
 		pos_aabb_ = MathLib::compute_aabbox(&xyzs[0], &xyzs[4]);
 		tc_aabb_ = AABBox(float3(0, 0, 0), float3(0, 0, 0));
 	}
 
-	void RenderableSkyBox::Technique(RenderTechniquePtr const & tech)
+	void RenderableSkyBox::Technique(RenderEffectPtr const & effect, RenderTechnique* tech)
 	{
+		effect_ = effect;
 		technique_ = tech;
-		skybox_cube_tex_ep_ = technique_->Effect().ParameterByName("skybox_tex");
-		skybox_Ccube_tex_ep_ = technique_->Effect().ParameterByName("skybox_C_tex");
-		skybox_compressed_ep_ = technique_->Effect().ParameterByName("skybox_compressed");
-		depth_far_ep_ = technique_->Effect().ParameterByName("depth_far");
-		inv_mvp_ep_ = technique_->Effect().ParameterByName("inv_mvp");
+
+		skybox_cube_tex_ep_ = effect_->ParameterByName("skybox_tex");
+		skybox_Ccube_tex_ep_ = effect_->ParameterByName("skybox_C_tex");
+		skybox_compressed_ep_ = effect_->ParameterByName("skybox_compressed");
+		depth_far_ep_ = effect_->ParameterByName("depth_far");
+		inv_mvp_ep_ = effect_->ParameterByName("inv_mvp");
 	}
 
 	void RenderableSkyBox::CubeMap(TexturePtr const & cube)
@@ -106,24 +103,10 @@ namespace KlayGE
 		*skybox_compressed_ep_ = static_cast<int32_t>(0);
 	}
 
-	void RenderableSkyBox::CubeMap(std::function<TexturePtr()> const & cube_tl)
-	{
-		*skybox_cube_tex_ep_ = cube_tl;
-		*skybox_compressed_ep_ = static_cast<int32_t>(0);
-	}
-
 	void RenderableSkyBox::CompressedCubeMap(TexturePtr const & y_cube, TexturePtr const & c_cube)
 	{
 		*skybox_cube_tex_ep_ = y_cube;
 		*skybox_Ccube_tex_ep_ = c_cube;
-		*skybox_compressed_ep_ = static_cast<int32_t>(1);
-	}
-
-	void RenderableSkyBox::CompressedCubeMap(std::function<TexturePtr()> const & y_cube_tl,
-			std::function<TexturePtr()> const & c_cube_tl)
-	{
-		*skybox_cube_tex_ep_ = y_cube_tl;
-		*skybox_Ccube_tex_ep_ = c_cube_tl;
 		*skybox_compressed_ep_ = static_cast<int32_t>(1);
 	}
 

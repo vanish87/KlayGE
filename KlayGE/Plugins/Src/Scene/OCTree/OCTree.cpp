@@ -121,14 +121,14 @@ namespace KlayGE
 			AABBox bb_root(float3(0, 0, 0), float3(0, 0, 0));
 			octree_[0].first_child_index = -1;
 			octree_[0].visible = BO_No;
-			for (SceneObjsType::const_reference obj : scene_objs_)
+			for (auto const & obj : scene_objs_)
 			{
 				uint32_t const attr = obj->Attrib();
 				if ((attr & SceneObject::SOA_Cullable)
 					&& !(attr & SceneObject::SOA_Moveable))
 				{
-					bb_root |= *obj->PosBoundWS();
-					octree_[0].obj_ptrs.push_back(obj);
+					bb_root |= obj->PosBoundWS();
+					octree_[0].obj_ptrs.push_back(obj.get());
 				}
 			}
 			float3 const & center = bb_root.Center();
@@ -159,7 +159,7 @@ namespace KlayGE
 		Camera& camera = app.ActiveCamera();
 
 		float4x4 view_proj = camera.ViewProjMatrix();
-		DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+		auto drl = Context::Instance().DeferredRenderingLayerInstance();
 		if (drl)
 		{
 			int32_t cas_index = drl->CurrCascadeIndex();
@@ -171,7 +171,7 @@ namespace KlayGE
 
 		if (camera.OmniDirectionalMode())
 		{
-			for (SceneObjsType::const_reference obj : scene_objs_)
+			for (auto const & obj : scene_objs_)
 			{
 				if (obj->Visible())
 				{
@@ -183,9 +183,9 @@ namespace KlayGE
 
 					if (attr & SceneObject::SOA_Cullable)
 					{
-						AABBoxPtr aabb_ws = obj->PosBoundWS();
+						AABBox const & aabb_ws = obj->PosBoundWS();
 						obj->VisibleMark((MathLib::perspective_area(camera.EyePos(), view_proj,
-							*aabb_ws) > small_obj_threshold_) ? BO_Yes : BO_No);
+							aabb_ws) > small_obj_threshold_) ? BO_Yes : BO_No);
 					}
 				}
 				else
@@ -201,11 +201,11 @@ namespace KlayGE
 				this->MarkNodeObjs(0, false);
 			}
 
-			for (SceneObjsType::const_reference obj : scene_objs_)
+			for (auto const & obj : scene_objs_)
 			{
 				if (obj->Visible())
 				{
-					BoundOverlap visible = this->VisibleTestFromParent(obj, camera.EyePos(), view_proj);
+					BoundOverlap visible = this->VisibleTestFromParent(obj.get(), camera.EyePos(), view_proj);
 					if (BO_Partial == visible)
 					{
 						uint32_t const attr = obj->Attrib();
@@ -218,7 +218,7 @@ namespace KlayGE
 						{
 							if (attr & SceneObject::SOA_Moveable)
 							{
-								obj->VisibleMark(this->AABBVisible(*obj->PosBoundWS()));
+								obj->VisibleMark(this->AABBVisible(obj->PosBoundWS()));
 							}
 							else
 							{
@@ -261,7 +261,7 @@ namespace KlayGE
 		}
 	}
 
-	void OCTree::OnDelSceneObject(SceneObjsType::iterator iter)
+	void OCTree::OnDelSceneObject(std::vector<SceneObjectPtr>::iterator iter)
 	{
 		BOOST_ASSERT(iter != scene_objs_.end());
 
@@ -294,9 +294,9 @@ namespace KlayGE
 			octree_[index].visible = BO_No;
 
 			octree_.resize(this_size + 8);
-			for (SceneObjsType::const_reference so : octree_[index].obj_ptrs)
+			for (auto so : octree_[index].obj_ptrs)
 			{
-				AABBox const & aabb = *so->PosBoundWS();
+				AABBox const & aabb = so->PosBoundWS();
 				int mark[6];
 				mark[0] = aabb.Min().x() >= parent_center.x() ? 1 : 0;
 				mark[1] = aabb.Min().y() >= parent_center.y() ? 2 : 0;
@@ -332,8 +332,8 @@ namespace KlayGE
 				}
 			}
 
-			SceneObjsType empty;
-			octree_[index].obj_ptrs.swap(empty);
+			octree_[index].obj_ptrs.clear();
+			octree_[index].obj_ptrs.shrink_to_fit();
 		}
 	}
 
@@ -345,7 +345,7 @@ namespace KlayGE
 		Camera& camera = app.ActiveCamera();
 
 		float4x4 view_proj = camera.ViewProjMatrix();
-		DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+		auto drl = Context::Instance().DeferredRenderingLayerInstance();
 		if (drl)
 		{
 			int32_t cas_index = drl->CurrCascadeIndex();
@@ -392,7 +392,7 @@ namespace KlayGE
 		Camera& camera = app.ActiveCamera();
 
 		float4x4 view_proj = camera.ViewProjMatrix();
-		DeferredRenderingLayerPtr const & drl = Context::Instance().DeferredRenderingLayerInstance();
+		auto drl = Context::Instance().DeferredRenderingLayerInstance();
 		if (drl)
 		{
 			int32_t cas_index = drl->CurrCascadeIndex();
@@ -405,17 +405,17 @@ namespace KlayGE
 		octree_node_t const & node = octree_[index];
 		if ((node.visible != BO_No) || force)
 		{
-			for (SceneObjsType::const_reference so : node.obj_ptrs)
+			for (auto so : node.obj_ptrs)
 			{
 				if ((BO_No == so->VisibleMark()) && so->Visible())
 				{
 					BoundOverlap visible = this->VisibleTestFromParent(so, camera.EyePos(), view_proj);
 					if (BO_Partial == visible)
 					{
-						if (so->Parent() || (MathLib::perspective_area(camera.EyePos(), view_proj,
-							*so->PosBoundWS()) > small_obj_threshold_))
+						AABBox const & aabb_ws = so->PosBoundWS();
+						if (so->Parent() || (MathLib::perspective_area(camera.EyePos(), view_proj, aabb_ws) > small_obj_threshold_))
 						{
-							so->VisibleMark(frustum_->Intersect(*so->PosBoundWS()));
+							so->VisibleMark(frustum_->Intersect(aabb_ws));
 						}
 						else
 						{

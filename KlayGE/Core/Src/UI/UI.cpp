@@ -16,8 +16,6 @@
 #include <KlayGE/KlayGE.hpp>
 #include <KFL/Math.hpp>
 #include <KFL/Util.hpp>
-#include <KlayGE/App3D.hpp>
-#include <KlayGE/Window.hpp>
 #include <KlayGE/Font.hpp>
 #include <KlayGE/Renderable.hpp>
 #include <KlayGE/RenderableHelper.hpp>
@@ -81,7 +79,7 @@ namespace
 
 namespace KlayGE
 {
-	UIManagerPtr UIManager::ui_mgr_instance_;
+	std::unique_ptr<UIManager> UIManager::ui_mgr_instance_;
 
 
 	class UIRectRenderable : public RenderableHelper
@@ -115,6 +113,7 @@ namespace KlayGE
 												vertex_element(VEU_TextureCoord, 0, EF_GR32F)));
 			rl_->BindIndexStream(tb_ib_->GetBuffer(), EF_R16UI);
 
+			effect_ = effect;
 			if (texture)
 			{
 				technique_ = effect->TechniqueByName("UITec");
@@ -124,8 +123,8 @@ namespace KlayGE
 				technique_ = effect->TechniqueByName("UITecNoTex");
 			}
 
-			ui_tex_ep_ = technique_->Effect().ParameterByName("ui_tex");
-			half_width_height_ep_ = technique_->Effect().ParameterByName("half_width_height");
+			ui_tex_ep_ = effect->ParameterByName("ui_tex");
+			half_width_height_ep_ = effect->ParameterByName("half_width_height");
 		}
 
 		bool Empty() const
@@ -188,7 +187,7 @@ namespace KlayGE
 				rl_->StartIndexLocation(ind_offset / sizeof(uint16_t));
 				rl_->NumIndices(ind_length / sizeof(uint16_t));
 
-				re.Render(*this->GetRenderTechnique(), *rl_);
+				re.Render(*this->GetRenderEffect(), *this->GetRenderTechnique(), *rl_);
 			}
 
 			for (size_t i = 0; i < tb_vb_sub_allocs_.size(); ++ i)
@@ -230,8 +229,8 @@ namespace KlayGE
 	private:
 		bool restart_;
 
-		RenderEffectParameterPtr ui_tex_ep_;
-		RenderEffectParameterPtr half_width_height_ep_;
+		RenderEffectParameter* ui_tex_ep_;
+		RenderEffectParameter* half_width_height_ep_;
 
 		TexturePtr texture_;
 
@@ -310,7 +309,7 @@ namespace KlayGE
 			std::lock_guard<std::mutex> lock(singleton_mutex);
 			if (!ui_mgr_instance_)
 			{
-				ui_mgr_instance_ = MakeSharedPtr<UIManager>();
+				ui_mgr_instance_ = MakeUniquePtr<UIManager>();
 			}
 		}
 
@@ -782,7 +781,7 @@ namespace KlayGE
 
 	size_t UIManager::AddFont(FontPtr const & font, float font_size)
 	{
-		font_cache_.push_back(std::make_pair(font, font_size));
+		font_cache_.emplace_back(font, font_size);
 		return font_cache_.size() - 1;
 	}
 
@@ -1212,9 +1211,9 @@ namespace KlayGE
 
 
 	UIDialog::UIDialog(TexturePtr const & control_tex)
-			: keyboard_input_(false), mouse_input_(true), default_control_id_(0xFFFF),
+			: keyboard_input_(false), mouse_input_(true),
 					visible_(true), show_caption_(true),
-					minimized_(false), drag_(false),
+					minimized_(false),
 					bounding_box_(0, 0, 0, 0),
 					caption_height_(18),
 					top_left_clr_(0, 0, 0, 0), top_right_clr_(0, 0, 0, 0),

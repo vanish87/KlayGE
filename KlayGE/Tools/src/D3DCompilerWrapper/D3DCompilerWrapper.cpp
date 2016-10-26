@@ -34,20 +34,15 @@
 
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
-#elif defined(__GNUC__) || defined(__clang__)
-#define __in
-#define __in_ecount(size)
-#define __out
-#define __out_ecount(size)
-#define __in_bcount(size)
-#define __in_opt
-#define __in_ecount_opt(size)
-#define __out_opt
-#define __in_xcount_opt(size) 
+#elif defined(__GNUC__)
+#define KLAYGE_COMPILER_GCC
+#elif defined(__clang__)
+#define KLAYGE_COMPILER_CLANG
 #endif
 
 #include <stdio.h>
 #include <windows.h>
+#include <KlayGE/SALWrapper.hpp>
 #include <d3d11shader.h>
 
 #ifndef D3D11_SHVER_GET_TYPE
@@ -86,10 +81,10 @@ class D3DCompiler
 {
 public:
 	D3DCompiler()
-		: mod_d3dcompiler_(nullptr),
-			DynamicD3DCompile_(nullptr),
-			DynamicD3DReflect_(nullptr),
-			DynamicD3DStripShader_(nullptr)
+		: mod_d3dcompiler_(NULL),
+			DynamicD3DCompile_(NULL),
+			DynamicD3DReflect_(NULL),
+			DynamicD3DStripShader_(NULL)
 	{
 		mod_d3dcompiler_ = LoadLibraryEx(TEXT("d3dcompiler_47.dll"), NULL, 0);
 		if (mod_d3dcompiler_)

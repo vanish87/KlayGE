@@ -138,8 +138,6 @@ namespace KlayGE
 		RenderLayout();
 		virtual ~RenderLayout() = 0;
 
-		static RenderLayoutPtr NullObject();
-
 		void TopologyType(topology_type type)
 		{
 			topo_type_ = type;
@@ -226,6 +224,7 @@ namespace KlayGE
 		}
 
 		GraphicsBufferPtr const & InstanceStream() const;
+		void InstanceStream(GraphicsBufferPtr const & buffer);
 		vertex_elements_type const & InstanceStreamFormat() const
 		{
 			return instance_stream_.format;

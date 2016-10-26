@@ -948,7 +948,7 @@ namespace KlayGE
 			}
 		}
 
-		this->EncodeBC1Internal(bc1, argb, alpha, method);
+		this->EncodeBC1Internal(bc1, &tmp_argb[0], alpha, method);
 	}
 
 	void TexCompressionBC1::DecodeBlock(void* output, void const * input)
@@ -1211,7 +1211,7 @@ namespace KlayGE
 				vfb = b;
 			}
 
-			float magn = std::max(std::max(abs(vfr), abs(vfg)), abs(vfb));
+			float magn = std::max(std::max(std::abs(vfr), std::abs(vfg)), std::abs(vfb));
 			int v_r, v_g, v_b;
 
 			if (magn < 4.0f) // too small, default to luminance
@@ -1553,7 +1553,7 @@ namespace KlayGE
 		BOOST_ASSERT(output);
 		BOOST_ASSERT(input);
 
-		UNREF_PARAM(method);
+		KFL_UNUSED(method);
 
 		BC4Block& bc4 = *static_cast<BC4Block*>(output);
 		uint8_t const * r = static_cast<uint8_t const *>(input);
@@ -1666,8 +1666,8 @@ namespace KlayGE
 		BC5Block& bc5 = *static_cast<BC5Block*>(output);
 		uint16_t const * gr = static_cast<uint16_t const *>(input);
 
-		std::array<uint8_t, 16> r;
-		std::array<uint8_t, 16> g;
+		std::array<uint8_t, 16> r = { { 0 } };
+		std::array<uint8_t, 16> g = { { 0 } };
 		for (size_t i = 0; i < r.size(); ++ i)
 		{
 			r[i] = gr[i] & 0xFF;
@@ -1963,9 +1963,9 @@ namespace KlayGE
 
 	void TexCompressionBC6U::EncodeBlock(void* output, void const * input, TexCompressionMethod method)
 	{
-		UNREF_PARAM(output);
-		UNREF_PARAM(input);
-		UNREF_PARAM(method);
+		KFL_UNUSED(output);
+		KFL_UNUSED(input);
+		KFL_UNUSED(method);
 
 		// TODO
 	}
@@ -2217,9 +2217,9 @@ namespace KlayGE
 
 	void TexCompressionBC6S::EncodeBlock(void* output, void const * input, TexCompressionMethod method)
 	{
-		UNREF_PARAM(output);
-		UNREF_PARAM(input);
-		UNREF_PARAM(method);
+		KFL_UNUSED(output);
+		KFL_UNUSED(input);
+		KFL_UNUSED(method);
 
 		// TODO
 	}
@@ -3176,7 +3176,7 @@ namespace KlayGE
 
 			uint4 const & error_weights = ERROR_METRICS[error_metric_];
 			uint64_t error = 0;
-			for (uint32_t i = 0; i < dist.size(); ++i)
+			for (uint32_t i = 0; i < dist.size(); ++ i)
 			{
 				uint32_t e = dist[i] * error_weights[i];
 				error += e * e;
@@ -3228,7 +3228,7 @@ namespace KlayGE
 
 		float min_dp = std::numeric_limits<float>::max();
 		float max_dp = -std::numeric_limits<float>::max();
-		for (uint32_t i = 0; i < cluster.NumValidPoints(); ++i)
+		for (uint32_t i = 0; i < cluster.NumValidPoints(); ++ i)
 		{
 			float dp = MathLib::dot(cluster.Point(i) - cluster.Avg(), axis);
 			if (dp < min_dp)
@@ -3523,11 +3523,11 @@ namespace KlayGE
 			// Assign each value to a bucket
 			for (uint32_t i = 0; i < BC67_MAX_NUM_DATA_POINTS; ++ i)
 			{
-
 				float min_dist = 255;
+				buckets[i] = num_buckets;
 				for (uint32_t j = 0; j < num_buckets; ++ j)
 				{
-					float dist = abs(alpha_vals[i] - vals[j]);
+					float dist = std::abs(alpha_vals[i] - vals[j]);
 					if (dist < min_dist)
 					{
 						min_dist = dist;
@@ -3585,7 +3585,7 @@ namespace KlayGE
 					float min_dist = 255.0f;
 					for (uint32_t j = 0; j < num_buckets; ++ j)
 					{
-						float dist = abs(alpha_vals[i] - vals[j]);
+						float dist = std::abs(alpha_vals[i] - vals[j]);
 						if (dist < min_dist)
 						{
 							min_dist = dist;

@@ -20,14 +20,6 @@
 
 namespace KlayGE
 {
-	class NullRenderLayout : public RenderLayout
-	{
-	public:
-		NullRenderLayout()
-		{
-		}
-	};
-
 	RenderLayout::RenderLayout()
 			: topo_type_(TT_PointList),
 				index_format_(EF_Unknown),
@@ -45,12 +37,6 @@ namespace KlayGE
 
 	RenderLayout::~RenderLayout()
 	{
-	}
-
-	RenderLayoutPtr RenderLayout::NullObject()
-	{
-		static RenderLayoutPtr obj = MakeSharedPtr<NullRenderLayout>();
-		return obj;
 	}
 
 	void RenderLayout::NumVertices(uint32_t n)
@@ -167,6 +153,12 @@ namespace KlayGE
 		return instance_stream_.stream;
 	}
 
+	void RenderLayout::InstanceStream(GraphicsBufferPtr const & buffer)
+	{
+		instance_stream_.stream = buffer;
+		streams_dirty_ = true;
+	}
+
 	void RenderLayout::NumInstances(uint32_t n)
 	{
 		force_num_instances_ = n;
@@ -257,10 +249,11 @@ namespace KlayGE
 		RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
 		uint32_t const num_vertices = this->NumVertices();
+		uint32_t const size_in_byte = instance_stream_.vertex_size * num_vertices;
 
 		if (!hint)
 		{
-			hint = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read, nullptr);
+			hint = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read, size_in_byte, nullptr);
 		}
 
 		std::vector<uint8_t> instance_buffer(instance_stream_.stream->Size());
@@ -269,15 +262,16 @@ namespace KlayGE
 			std::copy(mapper.Pointer<uint8_t>(), mapper.Pointer<uint8_t>() + instance_stream_.stream->Size(),
 				instance_buffer.begin());
 		}
-		GraphicsBufferPtr hint_sys_mem = rf.MakeVertexBuffer(BU_Static, EAH_CPU_Write, nullptr);
-		hint->Resize(instance_stream_.vertex_size * num_vertices);
-		GraphicsBuffer::Mapper dst_mapper(*hint_sys_mem, BA_Write_Only);
 
-		for (uint32_t i = 0; i < num_vertices; ++ i)
+		GraphicsBufferPtr hint_sys_mem = rf.MakeVertexBuffer(BU_Static, EAH_CPU_Write, size_in_byte, nullptr);
 		{
-			std::copy(&instance_buffer[0] + inst_no * instance_stream_.vertex_size,
-				&instance_buffer[0] + (inst_no + 1) * instance_stream_.vertex_size,
-				dst_mapper.Pointer<uint8_t>() + i * instance_stream_.vertex_size);
+			GraphicsBuffer::Mapper dst_mapper(*hint_sys_mem, BA_Write_Only);
+			for (uint32_t i = 0; i < num_vertices; ++ i)
+			{
+				std::copy(&instance_buffer[0] + inst_no * instance_stream_.vertex_size,
+					&instance_buffer[0] + (inst_no + 1) * instance_stream_.vertex_size,
+					dst_mapper.Pointer<uint8_t>() + i * instance_stream_.vertex_size);
+			}
 		}
 
 		hint_sys_mem->CopyToBuffer(*hint);

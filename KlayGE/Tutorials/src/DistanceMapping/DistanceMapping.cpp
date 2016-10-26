@@ -40,17 +40,17 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			RenderEffectPtr effect = SyncLoadRenderEffect("DistanceMapping.fxml");
+			effect_ = SyncLoadRenderEffect("DistanceMapping.fxml");
 
-			technique_ = effect->TechniqueByName("DistanceMapping2a");
+			technique_ = effect_->TechniqueByName("DistanceMapping2a");
 			if (!technique_->Validate())
 			{
-				technique_ = effect->TechniqueByName("DistanceMapping20");
+				technique_ = effect_->TechniqueByName("DistanceMapping20");
 			}
 
-			*(technique_->Effect().ParameterByName("diffuse_tex")) = ASyncLoadTexture("diffuse.dds", EAH_GPU_Read | EAH_Immutable);
-			*(technique_->Effect().ParameterByName("normal_tex")) = ASyncLoadTexture("normal.dds", EAH_GPU_Read | EAH_Immutable);
-			*(technique_->Effect().ParameterByName("distance_tex")) = ASyncLoadTexture("distance.dds", EAH_GPU_Read | EAH_Immutable);
+			*(effect_->ParameterByName("diffuse_tex")) = ASyncLoadTexture("diffuse.dds", EAH_GPU_Read | EAH_Immutable);
+			*(effect_->ParameterByName("normal_tex")) = ASyncLoadTexture("normal.dds", EAH_GPU_Read | EAH_Immutable);
+			*(effect_->ParameterByName("distance_tex")) = ASyncLoadTexture("distance.dds", EAH_GPU_Read | EAH_Immutable);
 
 			float3 xyzs[] =
 			{
@@ -76,16 +76,8 @@ namespace
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_TriangleList);
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(xyzs);
-			init_data.slice_pitch = 0;
-			init_data.data = xyzs;
-			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
-
-			init_data.row_pitch = sizeof(texs);
-			init_data.slice_pitch = 0;
-			init_data.data = texs;
-			GraphicsBufferPtr tex0_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr pos_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(xyzs), xyzs);
+			GraphicsBufferPtr tex0_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(texs), texs);
 
 			rl_->BindVertexStream(pos_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_BGR32F)));
 			rl_->BindVertexStream(tex0_vb, std::make_tuple(vertex_element(VEU_TextureCoord, 0, EF_GR32F)));
@@ -142,16 +134,10 @@ namespace
 				}
 			}
 			
-			init_data.row_pitch = sizeof(tangent);
-			init_data.slice_pitch = 0;
-			init_data.data = tangent;
-			GraphicsBufferPtr tan_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr tan_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(tangent), tangent);
 			rl_->BindVertexStream(tan_vb, std::make_tuple(vertex_element(VEU_Tangent, 0, fmt)));
 
-			init_data.row_pitch = sizeof(indices);
-			init_data.slice_pitch = 0;
-			init_data.data = indices;
-			GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(indices), indices);
 			rl_->BindIndexStream(ib, EF_R16UI);
 
 			pos_aabb_ = MathLib::compute_aabbox(&xyzs[0], &xyzs[sizeof(xyzs) / sizeof(xyzs[0])]);
@@ -166,25 +152,25 @@ namespace
 
 		void LightPos(float3 const & light_pos)
 		{
-			*(technique_->Effect().ParameterByName("light_pos")) = MathLib::transform_coord(light_pos, inv_model_mat_);
+			*(effect_->ParameterByName("light_pos")) = MathLib::transform_coord(light_pos, inv_model_mat_);
 		}
 
 		void LightColor(float3 const & light_color)
 		{
-			*(technique_->Effect().ParameterByName("light_color")) = light_color;			
+			*(effect_->ParameterByName("light_color")) = light_color;			
 		}
 
 		void LightFalloff(float3 const & light_falloff)
 		{
-			*(technique_->Effect().ParameterByName("light_falloff")) = light_falloff;			
+			*(effect_->ParameterByName("light_falloff")) = light_falloff;			
 		}
 
 		void OnRenderBegin()
 		{
 			App3DFramework const & app = Context::Instance().AppInstance();
 
-			*(technique_->Effect().ParameterByName("worldviewproj")) = model_mat_ * app.ActiveCamera().ViewProjMatrix();
-			*(technique_->Effect().ParameterByName("eye_pos")) = MathLib::transform_coord(app.ActiveCamera().EyePos(), inv_model_mat_);
+			*(effect_->ParameterByName("worldviewproj")) = model_mat_ * app.ActiveCamera().ViewProjMatrix();
+			*(effect_->ParameterByName("eye_pos")) = MathLib::transform_coord(app.ActiveCamera().EyePos(), inv_model_mat_);
 		}
 
 	private:

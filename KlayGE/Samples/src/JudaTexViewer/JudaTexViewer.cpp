@@ -52,7 +52,8 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			technique_ = SyncLoadRenderEffect("JudaTexViewer.fxml")->TechniqueByName("Render");
+			effect_ = SyncLoadRenderEffect("JudaTexViewer.fxml");
+			technique_ = effect_->TechniqueByName("Render");
 
 			float2 texs[] =
 			{
@@ -70,17 +71,10 @@ namespace
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_TriangleStrip);
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(texs);
-			init_data.slice_pitch = 0;
-			init_data.data = texs;
-			GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(texs), texs);
 			rl_->BindVertexStream(tex_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 
-			init_data.row_pitch = sizeof(indices);
-			init_data.slice_pitch = 0;
-			init_data.data = indices;
-			GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(indices), indices);
 			rl_->BindIndexStream(ib, EF_R16UI);
 		}
 
@@ -99,7 +93,7 @@ namespace
 		void OnRenderBegin()
 		{
 			FrameBufferPtr const & fb = Context::Instance().RenderFactoryInstance().RenderEngineInstance().CurFrameBuffer();
-			*(technique_->Effect().ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
+			*(effect_->ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
 		}
 
 	private:
@@ -158,7 +152,8 @@ namespace
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 
-			technique_ = SyncLoadRenderEffect("JudaTexViewer.fxml")->TechniqueByName("GridBorder");
+			effect_ = SyncLoadRenderEffect("JudaTexViewer.fxml");
+			technique_ = effect_->TechniqueByName("GridBorder");
 
 			float2 texs[] =
 			{
@@ -176,17 +171,10 @@ namespace
 			rl_ = rf.MakeRenderLayout();
 			rl_->TopologyType(RenderLayout::TT_LineStrip);
 
-			ElementInitData init_data;
-			init_data.row_pitch = sizeof(texs);
-			init_data.slice_pitch = 0;
-			init_data.data = texs;
-			GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr tex_vb = rf.MakeVertexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(texs), texs);
 			rl_->BindVertexStream(tex_vb, std::make_tuple(vertex_element(VEU_Position, 0, EF_GR32F)));
 
-			init_data.row_pitch = sizeof(indices);
-			init_data.slice_pitch = 0;
-			init_data.data = indices;
-			GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, &init_data);
+			GraphicsBufferPtr ib = rf.MakeIndexBuffer(BU_Static, EAH_GPU_Read | EAH_Immutable, sizeof(indices), indices);
 			rl_->BindIndexStream(ib, EF_R16UI);
 		}
 
@@ -205,7 +193,7 @@ namespace
 		void OnRenderBegin()
 		{
 			FrameBufferPtr const & fb = Context::Instance().RenderFactoryInstance().RenderEngineInstance().CurFrameBuffer();
-			*(technique_->Effect().ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
+			*(effect_->ParameterByName("world_mat")) = model_ * MathLib::scaling(2.0f / fb->Width(), 2.0f / fb->Height(), 1.0f);
 		}
 
 	private:
@@ -298,26 +286,20 @@ JudaTexViewer::JudaTexViewer()
 	ResLoader::Instance().AddPath("../../Samples/media/JudaTexViewer");
 }
 
-bool JudaTexViewer::ConfirmDevice()
+bool JudaTexViewer::ConfirmDevice() const
 {
 	return true;
 }
 
 void JudaTexViewer::OnCreate()
 {
-	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
-
 	font_ = SyncLoadFont("gkai00mp.kfont");
-
-	tile_pos_vb_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write, nullptr);
 
 	tile_ = MakeSharedPtr<TileObject>();
 	tile_->AddToSceneManager();
-	checked_pointer_cast<TileObject>(tile_)->SetPosBuffer(tile_pos_vb_);
 
 	grid_border_ = MakeSharedPtr<GridBorderObject>();
 	grid_border_->AddToSceneManager();
-	checked_pointer_cast<GridBorderObject>(grid_border_)->SetPosBuffer(tile_pos_vb_);
 
 	this->OpenJudaTex("klayge_logo.jdt");
 
@@ -422,7 +404,7 @@ void JudaTexViewer::OpenJudaTex(std::string const & name)
 	position_ = float2(0, 0);
 	scale_ = 1;
 
-	juda_tex_->SetParams(tile_->GetRenderable()->GetRenderTechnique());
+	juda_tex_->SetParams(*tile_->GetRenderable()->GetRenderEffect());
 
 	checked_pointer_cast<TileObject>(tile_)->TileSize(tile_size_);
 	checked_pointer_cast<TileObject>(tile_)->Position(position_);
@@ -505,7 +487,8 @@ void JudaTexViewer::DoUpdateOverlay()
 
 uint32_t JudaTexViewer::DoUpdate(uint32_t /*pass*/)
 {
-	RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+	RenderFactory& rf = Context::Instance().RenderFactoryInstance();
+	RenderEngine& re = rf.RenderEngineInstance();
 	
 	uint32_t const level = juda_tex_->TreeLevels() - 1;
 		
@@ -517,7 +500,11 @@ uint32_t JudaTexViewer::DoUpdate(uint32_t /*pass*/)
 	uint32_t ny = ey_ - sy_;
 
 	std::vector<uint32_t> tile_ids(nx * ny);
-	tile_pos_vb_->Resize(sizeof(tile_instance) * nx * ny);
+	uint32_t const new_tile_pos_size = sizeof(tile_instance) * nx * ny;
+	if (!tile_pos_vb_ || (tile_pos_vb_->Size() < new_tile_pos_size))
+	{
+		tile_pos_vb_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_CPU_Write, new_tile_pos_size, nullptr);
+	}
 	{
 		GraphicsBuffer::Mapper mapper(*tile_pos_vb_, BA_Write_Only);
 		tile_instance* instance_data = mapper.Pointer<tile_instance>();
@@ -533,16 +520,19 @@ uint32_t JudaTexViewer::DoUpdate(uint32_t /*pass*/)
 		}
 	}
 
-	RenderLayoutPtr const & rl_tile = tile_->GetRenderable()->GetRenderLayout();
-	for (uint32_t i = 0; i < rl_tile->NumVertexStreams(); ++ i)
+	checked_pointer_cast<TileObject>(tile_)->SetPosBuffer(tile_pos_vb_);
+	checked_pointer_cast<GridBorderObject>(grid_border_)->SetPosBuffer(tile_pos_vb_);
+
+	RenderLayout& rl_tile = tile_->GetRenderable()->GetRenderLayout();
+	for (uint32_t i = 0; i < rl_tile.NumVertexStreams(); ++ i)
 	{
-		rl_tile->VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
+		rl_tile.VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
 	}
 
-	RenderLayoutPtr const & rl_border = grid_border_->GetRenderable()->GetRenderLayout();
-	for (uint32_t i = 0; i < rl_border->NumVertexStreams(); ++ i)
+	RenderLayout& rl_border = grid_border_->GetRenderable()->GetRenderLayout();
+	for (uint32_t i = 0; i < rl_border.NumVertexStreams(); ++ i)
 	{
-		rl_border->VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
+		rl_border.VertexStreamFrequencyDivider(i, RenderLayout::ST_Geometry, nx * ny);
 	}
 
 	juda_tex_->UpdateCache(tile_ids);

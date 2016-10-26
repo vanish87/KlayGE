@@ -36,19 +36,15 @@
 #include <KlayGE/PreDeclare.hpp>
 #include <KlayGE/ScriptFactory.hpp>
 
-#ifdef KLAYGE_HAS_DECLSPEC
-	#ifdef KLAYGE_PYTHON_SE_SOURCE				// Build dll
-		#define KLAYGE_PYTHON_SCRIPT_API __declspec(dllexport)
-	#else										// Use dll
-		#define KLAYGE_PYTHON_SCRIPT_API __declspec(dllimport)
-	#endif
-#else
-	#define KLAYGE_PYTHON_SCRIPT_API
-#endif  // KLAYGE_HAS_DECLSPEC
+#ifdef KLAYGE_PYTHON_SE_SOURCE				// Build dll
+	#define KLAYGE_PYTHON_SCRIPT_API KLAYGE_SYMBOL_EXPORT
+#else										// Use dll
+	#define KLAYGE_PYTHON_SCRIPT_API KLAYGE_SYMBOL_IMPORT
+#endif
 
 extern "C"
 {
-	KLAYGE_PYTHON_SCRIPT_API void MakeScriptFactory(KlayGE::ScriptFactoryPtr& ptr);
+	KLAYGE_PYTHON_SCRIPT_API void MakeScriptFactory(std::unique_ptr<KlayGE::ScriptFactory>& ptr);
 }
 
 #endif  // _PYTHONFACTORY_HPP

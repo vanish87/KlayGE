@@ -6,31 +6,9 @@ import sys
 from blib_util import *
 
 def build_KlayGE(build_info):
+	additional_options = " -DKLAYGE_SHADER_PLATFORM_NAME:STRING=\"%s\"" % build_info.shader_platform_name
 	for compiler_info in build_info.compilers:
-		build_a_project("KlayGE", "KlayGE", build_info, compiler_info)
-
-def build_Tests(build_info):
-	for compiler_info in build_info.compilers:
-		if compiler_info.is_dev_platform:
-			build_a_project("Tests", "KlayGE/Tests", build_info, compiler_info)
-
-def build_Samples(build_info):
-	for compiler_info in build_info.compilers:
-		build_a_project("Samples", "KlayGE/Samples", build_info, compiler_info)
-
-def build_Tools(build_info):
-	for compiler_info in build_info.compilers:
-		if compiler_info.is_dev_platform:
-			build_a_project("Tools", "KlayGE/Tools", build_info, compiler_info)
-
-def build_Tutorials(build_info):
-	for compiler_info in build_info.compilers:
-		build_a_project("Tutorials", "KlayGE/Tutorials", build_info, compiler_info)
-
-def build_Exporters(build_info):
-	for compiler_info in build_info.compilers:
-		if compiler_info.is_dev_platform:
-			build_a_project("Exporters", "KlayGE/Exporters", build_info, compiler_info)
+		build_a_project("KlayGE", "KlayGE", build_info, compiler_info, False, additional_options)
 
 if __name__ == "__main__":
 	cfg = cfg_from_argv(sys.argv)
@@ -38,18 +16,3 @@ if __name__ == "__main__":
 
 	print("Building KlayGE...")
 	build_KlayGE(bi)
-
-	print("Building KlayGE Tests...")
-	build_Tests(bi)
-
-	print("Building KlayGE Samples...")
-	build_Samples(bi)
-
-	print("Building KlayGE Tools...")
-	build_Tools(bi)
-
-	print("Building KlayGE Tutorials...")
-	build_Tutorials(bi)
-
-	print("Building KlayGE Exporters...")
-	build_Exporters(bi)

@@ -52,17 +52,12 @@
 		}
 	}
 #endif
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(push)
-#pragma warning(disable: 4512) // boost::program_options::options_description doesn't have assignment operator
-#elif defined(KLAYGE_COMPILER_GCC)
+#if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations" // Ignore auto_ptr declaration
 #endif
 #include <boost/program_options.hpp>
-#if defined(KLAYGE_COMPILER_MSVC)
-#pragma warning(pop)
-#elif defined(KLAYGE_COMPILER_GCC)
+#if defined(KLAYGE_COMPILER_GCC)
 #pragma GCC diagnostic pop
 #endif
 
@@ -106,7 +101,7 @@ namespace
 	}
 
 	std::string const JIT_EXT_NAME = ".model_bin";
-	uint32_t const MODEL_BIN_VERSION = 9;
+	uint32_t const MODEL_BIN_VERSION = 11;
 
 	struct KeyFrames
 	{
@@ -218,6 +213,15 @@ namespace
 				mtl.specular *= attr->ValueFloat();
 			}
 			mtl.shininess = mtl_node->Attrib("shininess")->ValueFloat();
+			attr = mtl_node->Attrib("sss");
+			if (attr)
+			{
+				mtl.sss = attr->ValueInt() ? true : false;
+			}
+			else
+			{
+				mtl.sss = false;
+			}
 
 			XMLNodePtr tex_node = mtl_node->FirstNode("texture");
 			if (!tex_node)
@@ -232,8 +236,80 @@ namespace
 			{
 				for (; tex_node; tex_node = tex_node->NextSibling("texture"))
 				{
-					mtl.texture_slots.push_back(std::make_pair(tex_node->Attrib("type")->ValueString(), 
-						tex_node->Attrib("name")->ValueString()));
+					mtl.texture_slots.emplace_back(tex_node->Attrib("type")->ValueString(),
+						tex_node->Attrib("name")->ValueString());
+				}
+			}
+
+			XMLNodePtr detail_node = mtl_node->FirstNode("detail");
+			if (detail_node)
+			{
+				attr = detail_node->Attrib("mode");
+				if (attr)
+				{
+					std::string const & mode_str = attr->ValueString();
+					size_t const mode_hash = RT_HASH(mode_str.c_str());
+					if (CT_HASH("Flat Tessellation") == mode_hash)
+					{
+						mtl.detail_mode = RenderMaterial::SDM_FlatTessellation;
+					}
+					else if (CT_HASH("Smooth Tessellation") == mode_hash)
+					{
+						mtl.detail_mode = RenderMaterial::SDM_SmoothTessellation;
+					}
+					else
+					{
+						mtl.detail_mode = RenderMaterial::SDM_Parallax;
+					}
+				}
+				else
+				{
+					mtl.detail_mode = RenderMaterial::SDM_Parallax;
+				}
+
+				mtl.height_offset_scale = float2(-0.5f, 0.06f);
+
+				attr = detail_node->Attrib("height_offset");
+				if (attr)
+				{
+					mtl.height_offset_scale.x() = attr->ValueFloat();
+				}
+				else
+				{
+					mtl.height_offset_scale.x() = -0.5f;
+				}
+
+				attr = detail_node->Attrib("height_scale");
+				if (attr)
+				{
+					mtl.height_offset_scale.y() = attr->ValueFloat();
+				}
+				else
+				{
+					mtl.height_offset_scale.y() = 0.06f;
+				}
+
+				mtl.tess_factors = float4(5, 5, 1, 9);
+
+				attr = detail_node->Attrib("edge_tess_hint");
+				if (attr)
+				{
+					mtl.tess_factors.x() = attr->ValueFloat();
+				}
+				attr = detail_node->Attrib("inside_tess_hint");
+				if (attr)
+				{
+					mtl.tess_factors.y() = attr->ValueFloat();
+				}
+				attr = detail_node->Attrib("min_tess");
+				if (attr)
+				{
+					mtl.tess_factors.z() = attr->ValueFloat();
+				}
+				attr = detail_node->Attrib("max_tess");
+				if (attr)
+				{
+					mtl.tess_factors.w() = attr->ValueFloat();
 				}
 			}
 
@@ -1512,6 +1588,9 @@ namespace
 			mtl.shininess = Native2LE(mtl.shininess);
 			os.write(reinterpret_cast<char*>(&mtl.shininess), sizeof(mtl.shininess));
 
+			uint8_t sss = mtl.sss;
+			os.write(reinterpret_cast<char*>(&sss), sizeof(sss));
+
 			uint32_t num_texs = Native2LE(static_cast<uint32_t>(mtl.texture_slots.size()));
 			os.write(reinterpret_cast<char*>(&num_texs), sizeof(num_texs));
 
@@ -1523,6 +1602,23 @@ namespace
 					WriteShortString(os, mtl.texture_slots[j].second);
 				}
 			}
+
+			uint8_t detail_mode = static_cast<uint8_t>(mtl.detail_mode);
+			os.write(reinterpret_cast<char*>(&detail_mode), sizeof(detail_mode));
+
+			float height_offset = Native2LE(mtl.height_offset_scale.x());
+			os.write(reinterpret_cast<char*>(&height_offset), sizeof(height_offset));
+			float height_scale = Native2LE(mtl.height_offset_scale.y());
+			os.write(reinterpret_cast<char*>(&height_scale), sizeof(height_scale));
+
+			float tess_factor = Native2LE(mtl.tess_factors.x());
+			os.write(reinterpret_cast<char*>(&tess_factor), sizeof(tess_factor));
+			tess_factor = Native2LE(mtl.tess_factors.y());
+			os.write(reinterpret_cast<char*>(&tess_factor), sizeof(tess_factor));
+			tess_factor = Native2LE(mtl.tess_factors.z());
+			os.write(reinterpret_cast<char*>(&tess_factor), sizeof(tess_factor));
+			tess_factor = Native2LE(mtl.tess_factors.w());
+			os.write(reinterpret_cast<char*>(&tess_factor), sizeof(tess_factor));
 		}
 	}
 
@@ -1700,7 +1796,7 @@ namespace
 		{
 			for (size_t j = 0; j < mtls[i].texture_slots.size(); ++ j)
 			{
-				all_texture_slots[filesystem::path(mtls[i].texture_slots[j].second)].push_back(std::make_pair(i, j));
+				all_texture_slots[filesystem::path(mtls[i].texture_slots[j].second)].emplace_back(i, j);
 			}
 		}
 
@@ -1722,8 +1818,8 @@ namespace
 #else
 				std::string tex_base = (slot.first.parent_path() / slot.first.stem()).string();
 #endif
-				deploy_files.push_back(std::make_pair(filesystem::path(tex_base + ".dds"),
-					mtls[slot.second[0].first].texture_slots[slot.second[0].second].first));
+				deploy_files.emplace_back(filesystem::path(tex_base + ".dds"),
+					mtls[slot.second[0].first].texture_slots[slot.second[0].second].first);
 			}
 		}
 
@@ -1759,8 +1855,8 @@ namespace
 
 					if (augmented_texture_slots.find(new_name) == augmented_texture_slots.end())
 					{
-						dup_files.push_back(std::make_pair(filesystem::path(tex_base + ".dds"), new_name));
-						deploy_files.push_back(std::make_pair(new_name, type));
+						dup_files.emplace_back(filesystem::path(tex_base + ".dds"), new_name);
+						deploy_files.emplace_back(new_name, type);
 					}
 					augmented_texture_slots[new_name].push_back(slot_index);
 				}
@@ -2069,7 +2165,7 @@ int main(int argc, char* argv[])
 		cout << "Binary model has been saved to " << output_name << "." << endl;
 	}
 
-	ResLoader::Destroy();
+	Context::Destroy();
 
 	return 0;
 }

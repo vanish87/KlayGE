@@ -108,11 +108,13 @@ namespace KlayGE
 				uint8_t usage_index;
 				uint8_t start_component;
 				uint8_t component_count;
+				uint8_t slot;
 
 				friend bool operator==(StreamOutputDecl const & lhs, StreamOutputDecl const & rhs)
 				{
 					return (lhs.usage == rhs.usage) && (lhs.usage_index == rhs.usage_index)
-						&& (lhs.start_component == rhs.start_component) && (lhs.component_count == rhs.component_count);
+						&& (lhs.start_component == rhs.start_component) && (lhs.component_count == rhs.component_count)
+						&& (lhs.slot == rhs.slot);
 				}
 				friend bool operator!=(StreamOutputDecl const & lhs, StreamOutputDecl const & rhs)
 				{
@@ -185,6 +187,14 @@ namespace KlayGE
 			{
 				return cs_block_size_z_;
 			}
+
+		protected:
+			std::vector<uint8_t> CompileToDXBC(ShaderType type, RenderEffect const & effect,
+				RenderTechnique const & tech, RenderPass const & pass,
+				std::vector<std::pair<char const *, char const *>> const & api_special_macros,
+				char const * func_name, char const * shader_profile, uint32_t flags);
+			void ReflectDXBC(std::vector<uint8_t> const & code, void** reflector);
+			std::vector<uint8_t> StripDXBC(std::vector<uint8_t> const & code, uint32_t strip_flags);
 
 		protected:
 			OfflineRenderDeviceCaps caps_;

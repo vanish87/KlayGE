@@ -44,16 +44,22 @@ namespace KlayGE
 		StaticMesh(RenderModelPtr const & model, std::wstring const & name);
 		virtual ~StaticMesh();
 
-		virtual void BuildMeshInfo();
-
-		void SetRenderTechnique(RenderTechniquePtr const & tech)
+		void BuildMeshInfo()
 		{
+			this->DoBuildMeshInfo();
+
+			hw_res_ready_ = true;
+		}
+
+		virtual void Technique(RenderEffectPtr const & effect, RenderTechnique* tech)
+		{
+			effect_ = effect;
 			technique_ = tech;
 		}
 
-		RenderLayoutPtr const & GetRenderLayout() const
+		virtual RenderLayout& GetRenderLayout() const override
 		{
-			return rl_;
+			return *rl_;
 		}
 
 		virtual AABBox const & PosBound() const;
@@ -62,8 +68,6 @@ namespace KlayGE
 		virtual void TexcoordBound(AABBox const & aabb);
 
 		virtual std::wstring const & Name() const;
-
-		virtual void OnRenderBegin();
 
 		void NumVertices(uint32_t n)
 		{
@@ -124,6 +128,14 @@ namespace KlayGE
 			mtl_id_ = mid;
 		}
 
+		virtual bool HWResourceReady() const override
+		{
+			return hw_res_ready_;
+		}
+
+	protected:
+		virtual void DoBuildMeshInfo();
+
 	protected:
 		std::wstring name_;
 
@@ -136,12 +148,7 @@ namespace KlayGE
 
 		std::weak_ptr<RenderModel> model_;
 
-		std::function<TexturePtr()> diffuse_tl_;
-		std::function<TexturePtr()> specular_tl_;
-		std::function<TexturePtr()> shininess_tl_;
-		std::function<TexturePtr()> normal_tl_;
-		std::function<TexturePtr()> height_tl_;
-		std::function<TexturePtr()> emit_tl_;
+		bool hw_res_ready_;
 	};
 
 	class KLAYGE_CORE_API RenderModel : public Renderable
@@ -152,8 +159,11 @@ namespace KlayGE
 		{
 		}
 
-		virtual void BuildModelInfo()
+		void BuildModelInfo()
 		{
+			this->DoBuildModelInfo();
+
+			hw_res_ready_ = true;
 		}
 
 		virtual bool IsSkinned() const
@@ -161,14 +171,15 @@ namespace KlayGE
 			return false;
 		}
 
-		void SetRenderTechnique(RenderTechniquePtr const & tech)
+		virtual void Technique(RenderEffectPtr const & effect, RenderTechnique* tech)
 		{
+			effect_ = effect;
 			technique_ = tech;
 		}
 
-		RenderLayoutPtr const & GetRenderLayout() const
+		virtual RenderLayout& GetRenderLayout() const override
 		{
-			return rl_;
+			return *rl_;
 		}
 
 		void OnRenderBegin();
@@ -209,8 +220,13 @@ namespace KlayGE
 		virtual bool Reflection() const;
 		virtual bool SimpleForward() const;
 
+		virtual bool HWResourceReady() const override;
+
 	protected:
-		virtual void UpdateBoundBox() KLAYGE_OVERRIDE;
+		virtual void UpdateBoundBox() override;
+		virtual void DoBuildModelInfo()
+		{
+		}
 
 	protected:
 		std::wstring name_;
@@ -221,6 +237,8 @@ namespace KlayGE
 		AABBox tc_aabb_;
 
 		std::vector<RenderMaterialPtr> materials_;
+
+		bool hw_res_ready_;
 	};
 
 
@@ -430,7 +448,7 @@ namespace KlayGE
 	KLAYGE_CORE_API RenderModelPtr SyncLoadModel(std::string const & meshml_name, uint32_t access_hint,
 		std::function<RenderModelPtr(std::wstring const &)> CreateModelFactoryFunc = CreateModelFactory<RenderModel>(),
 		std::function<StaticMeshPtr(RenderModelPtr const &, std::wstring const &)> CreateMeshFactoryFunc = CreateMeshFactory<StaticMesh>());
-	KLAYGE_CORE_API std::function<RenderModelPtr()> ASyncLoadModel(std::string const & meshml_name, uint32_t access_hint,
+	KLAYGE_CORE_API RenderModelPtr ASyncLoadModel(std::string const & meshml_name, uint32_t access_hint,
 		std::function<RenderModelPtr(std::wstring const &)> CreateModelFactoryFunc = CreateModelFactory<RenderModel>(),
 		std::function<StaticMeshPtr(RenderModelPtr const &, std::wstring const &)> CreateMeshFactoryFunc = CreateMeshFactory<StaticMesh>());
 
@@ -450,7 +468,7 @@ namespace KlayGE
 	{
 	public:
 		RenderableLightSourceProxy(RenderModelPtr const & model, std::wstring const & name);
-		virtual void Technique(RenderTechniquePtr const & tech);
+		void Technique(RenderEffectPtr const & effect, RenderTechnique* tech) override;
 
 		virtual void Update();
 
@@ -458,23 +476,33 @@ namespace KlayGE
 
 		virtual void AttachLightSrc(LightSourcePtr const & light);
 
+	protected:
+		void DoBuildMeshInfo() override
+		{
+		}
+
 	private:
 		LightSourcePtr light_;
 
-		RenderEffectParameterPtr model_param_;
-		RenderEffectParameterPtr light_color_param_;
-		RenderEffectParameterPtr light_is_projective_param_;
-		RenderEffectParameterPtr projective_map_2d_tex_param_;
-		RenderEffectParameterPtr projective_map_cube_tex_param_;
+		RenderEffectParameter* model_param_;
+		RenderEffectParameter* light_color_param_;
+		RenderEffectParameter* light_is_projective_param_;
+		RenderEffectParameter* projective_map_2d_tex_param_;
+		RenderEffectParameter* projective_map_cube_tex_param_;
 	};
 
 	class KLAYGE_CORE_API RenderableCameraProxy : public StaticMesh
 	{
 	public:
 		RenderableCameraProxy(RenderModelPtr const & model, std::wstring const & name);
-		virtual void Technique(RenderTechniquePtr const & tech);
+		void Technique(RenderEffectPtr const & effect, RenderTechnique* tech) override;
 
 		virtual void AttachCamera(CameraPtr const & camera);
+
+	protected:
+		void DoBuildMeshInfo() override
+		{
+		}
 
 	private:
 		CameraPtr camera_;

@@ -37,32 +37,42 @@ namespace
 	{
 	public:
 		RenderPolygon(RenderModelPtr const & model, std::wstring const & name)
-			: StaticMesh(model, name)
+			: StaticMesh(model, name),
+				no_oit_tech_(nullptr),
+				dp_1st_tech_(nullptr), dp_nth_tech_(nullptr), dp_1st_depth_tech_(nullptr), dp_nth_depth_tech_(nullptr),
+				gen_ppll_tech_(nullptr),
+				ppll_render_tech_(nullptr),
+				at_render_tech_(nullptr)
 		{
 			RenderFactory& rf = Context::Instance().RenderFactoryInstance();
 			RenderDeviceCaps const & caps = rf.RenderEngineInstance().DeviceCaps();
 
-			no_oit_tech_ = SyncLoadRenderEffect("NoOIT.fxml")->TechniqueByName("NoOIT");
+			no_oit_effect_ = SyncLoadRenderEffect("NoOIT.fxml");
+			no_oit_tech_ = no_oit_effect_->TechniqueByName("NoOIT");
 
-			dp_1st_tech_ = SyncLoadRenderEffect("DepthPeeling.fxml")->TechniqueByName("DepthPeeling1st");
-			dp_nth_tech_ = dp_1st_tech_->Effect().TechniqueByName("DepthPeelingNth");
+			dp_effect_ = SyncLoadRenderEffect("DepthPeeling.fxml");
+			dp_1st_tech_ = dp_effect_->TechniqueByName("DepthPeeling1st");
+			dp_nth_tech_ = dp_effect_->TechniqueByName("DepthPeelingNth");
 			if (!caps.depth_texture_support)
 			{
-				dp_nth_tech_ = dp_1st_tech_->Effect().TechniqueByName("DepthPeelingNthWODepthTexture");
-				dp_1st_depth_tech_ = dp_1st_tech_->Effect().TechniqueByName("DepthPeeling1stDepth");
-				dp_nth_depth_tech_ = dp_1st_tech_->Effect().TechniqueByName("DepthPeelingNthDepth");
+				dp_nth_tech_ = dp_effect_->TechniqueByName("DepthPeelingNthWODepthTexture");
+				dp_1st_depth_tech_ = dp_effect_->TechniqueByName("DepthPeeling1stDepth");
+				dp_nth_depth_tech_ = dp_effect_->TechniqueByName("DepthPeelingNthDepth");
 			}
 
-			if (caps.max_shader_model >= ShaderModel(5, 0))
+			if (caps.max_simultaneous_uavs > 0)
 			{
-				gen_ppll_tech_ = SyncLoadRenderEffect("FragmentList.fxml")->TechniqueByName("GenPerPixelLinkedLists");
+				gen_ppll_effect_ = SyncLoadRenderEffect("FragmentList.fxml");
+				gen_ppll_tech_ = gen_ppll_effect_->TechniqueByName("GenPerPixelLinkedLists");
 				rl_quad_ = rf.MakeRenderLayout();
 				rl_quad_->TopologyType(RenderLayout::TT_TriangleStrip);
 				rl_quad_->NumVertices(4);
 
-				ppll_render_tech_ = SyncLoadRenderEffect("PerPixelLinkedLists.fxml")->TechniqueByName("RenderPerPixelLinkedLists");
+				ppll_effect_ = SyncLoadRenderEffect("PerPixelLinkedLists.fxml");
+				ppll_render_tech_ = ppll_effect_->TechniqueByName("RenderPerPixelLinkedLists");
 
-				at_render_tech_ = SyncLoadRenderEffect("AdaptiveTransparency.fxml")->TechniqueByName("RenderAdaptiveTransparency");
+				at_effect_ = SyncLoadRenderEffect("AdaptiveTransparency.fxml");
+				at_render_tech_ = at_effect_->TechniqueByName("RenderAdaptiveTransparency");
 			}
 			
 			technique_ = dp_1st_tech_;
@@ -70,49 +80,49 @@ namespace
 			effect_attrs_ = EA_TransparencyFront;
 		}
 
-		void BuildMeshInfo()
+		virtual void DoBuildMeshInfo() override
 		{
 			AABBox const & pos_bb = this->PosBound();
-			*(no_oit_tech_->Effect().ParameterByName("pos_center")) = pos_bb.Center();
-			*(no_oit_tech_->Effect().ParameterByName("pos_extent")) = pos_bb.HalfSize();
-			*(dp_1st_tech_->Effect().ParameterByName("pos_center")) = pos_bb.Center();
-			*(dp_1st_tech_->Effect().ParameterByName("pos_extent")) = pos_bb.HalfSize();
+			*(no_oit_effect_->ParameterByName("pos_center")) = pos_bb.Center();
+			*(no_oit_effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
+			*(dp_effect_->ParameterByName("pos_center")) = pos_bb.Center();
+			*(dp_effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
 			if (gen_ppll_tech_)
 			{
-				*(gen_ppll_tech_->Effect().ParameterByName("pos_center")) = pos_bb.Center();
-				*(gen_ppll_tech_->Effect().ParameterByName("pos_extent")) = pos_bb.HalfSize();
+				*(gen_ppll_effect_->ParameterByName("pos_center")) = pos_bb.Center();
+				*(gen_ppll_effect_->ParameterByName("pos_extent")) = pos_bb.HalfSize();
 			}
 
 			AABBox const & tc_bb = this->TexcoordBound();
-			*(no_oit_tech_->Effect().ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
-			*(no_oit_tech_->Effect().ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
-			*(dp_1st_tech_->Effect().ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
-			*(dp_1st_tech_->Effect().ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
+			*(no_oit_effect_->ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
+			*(no_oit_effect_->ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
+			*(dp_effect_->ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
+			*(dp_effect_->ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
 			if (gen_ppll_tech_)
 			{
-				*(gen_ppll_tech_->Effect().ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
-				*(gen_ppll_tech_->Effect().ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
+				*(gen_ppll_effect_->ParameterByName("tc_center")) = float2(tc_bb.Center().x(), tc_bb.Center().y());
+				*(gen_ppll_effect_->ParameterByName("tc_extent")) = float2(tc_bb.HalfSize().x(), tc_bb.HalfSize().y());
 			}
 
-			TexturePtr diffuse_tex = SyncLoadTexture("robot-clean_diffuse.dds", EAH_GPU_Read | EAH_Immutable);
-			TexturePtr specular_tex = SyncLoadTexture("robot-clean_specular.dds", EAH_GPU_Read | EAH_Immutable);
-			TexturePtr normal_tex = SyncLoadTexture("robot-clean_normal.dds", EAH_GPU_Read | EAH_Immutable);
-			TexturePtr emit_tex = SyncLoadTexture("robot-clean_selfillumination.dds", EAH_GPU_Read | EAH_Immutable);
+			TexturePtr diffuse_tex = ASyncLoadTexture("robot-clean_diffuse.dds", EAH_GPU_Read | EAH_Immutable);
+			TexturePtr specular_tex = ASyncLoadTexture("robot-clean_specular.dds", EAH_GPU_Read | EAH_Immutable);
+			TexturePtr normal_tex = ASyncLoadTexture("robot-clean_normal.dds", EAH_GPU_Read | EAH_Immutable);
+			TexturePtr emit_tex = ASyncLoadTexture("robot-clean_selfillumination.dds", EAH_GPU_Read | EAH_Immutable);
 
-			*(no_oit_tech_->Effect().ParameterByName("diffuse_tex")) = diffuse_tex;
-			*(no_oit_tech_->Effect().ParameterByName("specular_tex")) = specular_tex;
-			*(no_oit_tech_->Effect().ParameterByName("normal_tex")) = normal_tex;
-			*(no_oit_tech_->Effect().ParameterByName("emit_tex")) = emit_tex;
-			*(dp_1st_tech_->Effect().ParameterByName("diffuse_tex")) = diffuse_tex;
-			*(dp_1st_tech_->Effect().ParameterByName("specular_tex")) = specular_tex;
-			*(dp_1st_tech_->Effect().ParameterByName("normal_tex")) = normal_tex;
-			*(dp_1st_tech_->Effect().ParameterByName("emit_tex")) = emit_tex;
+			*(no_oit_effect_->ParameterByName("diffuse_tex")) = diffuse_tex;
+			*(no_oit_effect_->ParameterByName("specular_tex")) = specular_tex;
+			*(no_oit_effect_->ParameterByName("normal_tex")) = normal_tex;
+			*(no_oit_effect_->ParameterByName("emit_tex")) = emit_tex;
+			*(dp_effect_->ParameterByName("diffuse_tex")) = diffuse_tex;
+			*(dp_effect_->ParameterByName("specular_tex")) = specular_tex;
+			*(dp_effect_->ParameterByName("normal_tex")) = normal_tex;
+			*(dp_effect_->ParameterByName("emit_tex")) = emit_tex;
 			if (gen_ppll_tech_)
 			{
-				*(gen_ppll_tech_->Effect().ParameterByName("diffuse_tex")) = diffuse_tex;
-				*(gen_ppll_tech_->Effect().ParameterByName("specular_tex")) = specular_tex;
-				*(gen_ppll_tech_->Effect().ParameterByName("normal_tex")) = normal_tex;
-				*(gen_ppll_tech_->Effect().ParameterByName("emit_tex")) = emit_tex;
+				*(gen_ppll_effect_->ParameterByName("diffuse_tex")) = diffuse_tex;
+				*(gen_ppll_effect_->ParameterByName("specular_tex")) = specular_tex;
+				*(gen_ppll_effect_->ParameterByName("normal_tex")) = normal_tex;
+				*(gen_ppll_effect_->ParameterByName("emit_tex")) = emit_tex;
 			}
 		}
 
@@ -123,11 +133,11 @@ namespace
 
 		void SetAlpha(float alpha)
 		{
-			*(no_oit_tech_->Effect().ParameterByName("alpha")) = alpha;
-			*(dp_1st_tech_->Effect().ParameterByName("alpha")) = alpha;
+			*(no_oit_effect_->ParameterByName("alpha")) = alpha;
+			*(dp_effect_->ParameterByName("alpha")) = alpha;
 			if (gen_ppll_tech_)
 			{
-				*(gen_ppll_tech_->Effect().ParameterByName("alpha")) = alpha;
+				*(gen_ppll_effect_->ParameterByName("alpha")) = alpha;
 			}
 		}
 
@@ -139,15 +149,18 @@ namespace
 				switch (mode_)
 				{
 				case OM_No:
+					effect_ = no_oit_effect_;
 					technique_ = no_oit_tech_;
 					break;
 
 				case OM_DepthPeeling:
+					effect_ = dp_effect_;
 					technique_ = dp_1st_tech_;
 					break;
 
 				case OM_PerPixelLinkedLists:
 				case OM_AdaptiveTransparency:
+					effect_ = gen_ppll_effect_;
 					technique_ = gen_ppll_tech_;
 					break;
 
@@ -161,18 +174,22 @@ namespace
 				switch (mode_)
 				{
 				case OM_No:
+					effect_ = no_oit_effect_;
 					technique_ = no_oit_tech_;
 					break;
 
 				case OM_DepthPeeling:
+					effect_ = dp_effect_;
 					technique_ = dp_nth_tech_;
 					break;
 
 				case OM_PerPixelLinkedLists:
+					effect_ = ppll_effect_;
 					technique_ = ppll_render_tech_;
 					break;
 
 				case OM_AdaptiveTransparency:
+					effect_ = at_effect_;
 					technique_ = at_render_tech_;
 					break;
 
@@ -187,6 +204,7 @@ namespace
 		{
 			BOOST_ASSERT(OM_DepthPeeling == mode_);
 
+			effect_ = dp_effect_;
 			if (dp)
 			{
 				if (first_pass_)
@@ -215,7 +233,7 @@ namespace
 		{
 			if (dp_nth_tech_)
 			{
-				*(dp_nth_tech_->Effect().ParameterByName("last_depth_tex")) = depth_tex;
+				*(dp_effect_->ParameterByName("last_depth_tex")) = depth_tex;
 			}
 		}
 
@@ -223,48 +241,55 @@ namespace
 		{
 			if (ppll_render_tech_)
 			{
-				*(ppll_render_tech_->Effect().ParameterByName("bg_tex")) = bg_tex;
+				*(ppll_effect_->ParameterByName("bg_tex")) = bg_tex;
 			}
 		}
 		void LinkedListBuffer(GraphicsBufferPtr const & fragment_link_buf, GraphicsBufferPtr const & start_offset_buf)
 		{
 			if (gen_ppll_tech_)
 			{
-				*(gen_ppll_tech_->Effect().ParameterByName("rw_frags_buffer")) = fragment_link_buf;
-				*(gen_ppll_tech_->Effect().ParameterByName("rw_start_offset_buffer")) = start_offset_buf;
+				*(gen_ppll_effect_->ParameterByName("rw_frags_buffer")) = fragment_link_buf;
+				*(gen_ppll_effect_->ParameterByName("rw_start_offset_buffer")) = start_offset_buf;
 			}
 
 			if (ppll_render_tech_)
 			{
-				*(ppll_render_tech_->Effect().ParameterByName("frags_buffer")) = fragment_link_buf;
-				*(ppll_render_tech_->Effect().ParameterByName("start_offset_buffer")) = start_offset_buf;
+				*(ppll_effect_->ParameterByName("frags_buffer")) = fragment_link_buf;
+				*(ppll_effect_->ParameterByName("start_offset_buffer")) = start_offset_buf;
 			}
 			if (at_render_tech_)
 			{
-				*(at_render_tech_->Effect().ParameterByName("frags_buffer")) = fragment_link_buf;
-				*(at_render_tech_->Effect().ParameterByName("start_offset_buffer")) = start_offset_buf;
+				*(at_effect_->ParameterByName("frags_buffer")) = fragment_link_buf;
+				*(at_effect_->ParameterByName("start_offset_buffer")) = start_offset_buf;
 			}
 		}
 
 		void RenderQuad()
 		{
-			RenderTechniquePtr tech;
-			RenderLayoutPtr rl;
+			RenderEffect* effect = nullptr;
+			RenderTechnique* tech = nullptr;
+			RenderLayout* rl = nullptr;
 			if (OM_PerPixelLinkedLists == mode_)
 			{
+				effect = ppll_effect_.get();
 				tech = ppll_render_tech_;
-				rl = rl_quad_;
+				rl = rl_quad_.get();
 			}
 			else if (OM_AdaptiveTransparency == mode_)
 			{
+				effect = at_effect_.get();
 				tech = at_render_tech_;
-				rl = rl_quad_;
+				rl = rl_quad_.get();
 			}
 
-			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-			*(tech->Effect().ParameterByName("frame_width")) = static_cast<int32_t>(re.CurFrameBuffer()->GetViewport()->width);
+			BOOST_ASSERT(effect != nullptr);
+			BOOST_ASSERT(tech != nullptr);
+			BOOST_ASSERT(rl != nullptr);
 
-			re.Render(*tech, *rl);
+			RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
+			*(effect->ParameterByName("frame_width")) = static_cast<int32_t>(re.CurFrameBuffer()->GetViewport()->width);
+
+			re.Render(*effect, *tech, *rl);
 		}
 
 		void OnRenderBegin()
@@ -274,8 +299,8 @@ namespace
 
 			float4x4 const & model = float4x4::Identity();
 
-			*(technique_->Effect().ParameterByName("mvp")) = model * camera.ViewProjMatrix();
-			*(technique_->Effect().ParameterByName("eye_pos")) = camera.EyePos();
+			*(effect_->ParameterByName("mvp")) = model * camera.ViewProjMatrix();
+			*(effect_->ParameterByName("eye_pos")) = camera.EyePos();
 
 			switch (mode_)
 			{
@@ -285,8 +310,8 @@ namespace
 			case OM_DepthPeeling:
 				{
 					float q = camera.FarPlane() / (camera.FarPlane() - camera.NearPlane());
-					*(technique_->Effect().ParameterByName("near_q")) = float2(camera.NearPlane() * q, q);
-					*(technique_->Effect().ParameterByName("far_plane")) = float2(camera.FarPlane(), 1.0f / camera.FarPlane());
+					*(effect_->ParameterByName("near_q")) = float2(camera.NearPlane() * q, q);
+					*(effect_->ParameterByName("far_plane")) = float2(camera.FarPlane(), 1.0f / camera.FarPlane());
 					break;
 				}
 			
@@ -294,7 +319,7 @@ namespace
 			case OM_AdaptiveTransparency:
 				{
 					RenderEngine& re = Context::Instance().RenderFactoryInstance().RenderEngineInstance();
-					*(technique_->Effect().ParameterByName("frame_width")) = static_cast<int32_t>(re.CurFrameBuffer()->GetViewport()->width);
+					*(effect_->ParameterByName("frame_width")) = static_cast<int32_t>(re.CurFrameBuffer()->GetViewport()->width);
 					break;
 				}
 
@@ -306,11 +331,11 @@ namespace
 
 		void LightPos(float3 const & light_pos)
 		{
-			*(no_oit_tech_->Effect().ParameterByName("light_pos")) = light_pos;
-			*(dp_1st_tech_->Effect().ParameterByName("light_pos")) = light_pos;
+			*(no_oit_effect_->ParameterByName("light_pos")) = light_pos;
+			*(dp_effect_->ParameterByName("light_pos")) = light_pos;
 			if (gen_ppll_tech_)
 			{
-				*(gen_ppll_tech_->Effect().ParameterByName("light_pos")) = light_pos;
+				*(gen_ppll_effect_->ParameterByName("light_pos")) = light_pos;
 			}
 		}
 
@@ -318,19 +343,24 @@ namespace
 		OITMode mode_;
 		bool first_pass_;
 		
-		RenderTechniquePtr no_oit_tech_;
+		RenderEffectPtr no_oit_effect_;
+		RenderTechnique* no_oit_tech_;
 
-		RenderTechniquePtr dp_1st_tech_;
-		RenderTechniquePtr dp_nth_tech_;
-		RenderTechniquePtr dp_1st_depth_tech_;
-		RenderTechniquePtr dp_nth_depth_tech_;
+		RenderEffectPtr dp_effect_;
+		RenderTechnique* dp_1st_tech_;
+		RenderTechnique* dp_nth_tech_;
+		RenderTechnique* dp_1st_depth_tech_;
+		RenderTechnique* dp_nth_depth_tech_;
 
-		RenderTechniquePtr gen_ppll_tech_;
+		RenderEffectPtr gen_ppll_effect_;
+		RenderTechnique* gen_ppll_tech_;
 		RenderLayoutPtr rl_quad_;
 
-		RenderTechniquePtr ppll_render_tech_;
-		
-		RenderTechniquePtr at_render_tech_;
+		RenderEffectPtr ppll_effect_;
+		RenderTechnique* ppll_render_tech_;
+
+		RenderEffectPtr at_effect_;
+		RenderTechnique* at_render_tech_;
 	};
 
 	class PolygonObject : public SceneObjectHelper
@@ -469,8 +499,8 @@ void OrderIndependentTransparencyApp::OnCreate()
 	RenderEngine& re = rf.RenderEngineInstance();
 	RenderDeviceCaps const & caps = re.DeviceCaps();
 
-	TexturePtr y_cube_map = SyncLoadTexture("uffizi_cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
-	TexturePtr c_cube_map = SyncLoadTexture("uffizi_cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr y_cube_map = ASyncLoadTexture("uffizi_cross_filtered_y.dds", EAH_GPU_Read | EAH_Immutable);
+	TexturePtr c_cube_map = ASyncLoadTexture("uffizi_cross_filtered_c.dds", EAH_GPU_Read | EAH_Immutable);
 	sky_box_ = MakeSharedPtr<SceneObjectSkyBox>(0);
 	checked_pointer_cast<SceneObjectSkyBox>(sky_box_)->CompressedCubeMap(y_cube_map, c_cube_map);
 	sky_box_->AddToSceneManager();
@@ -499,12 +529,10 @@ void OrderIndependentTransparencyApp::OnCreate()
 		oc_queries_[i] = checked_pointer_cast<ConditionalRender>(rf.MakeConditionalRender());
 	}
 
-	if (caps.max_shader_model >= ShaderModel(5, 0))
+	if (caps.max_simultaneous_uavs > 0)
 	{
 		opaque_bg_fb_ = rf.MakeFrameBuffer();
 		opaque_bg_fb_->GetViewport()->camera = re.CurFrameBuffer()->GetViewport()->camera;
-		frag_link_buf_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_GPU_Structured | EAH_Counter, nullptr, EF_ABGR32F);
-		start_offset_buf_ = rf.MakeVertexBuffer(BU_Dynamic, EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_Raw, nullptr, EF_R32UI);
 		linked_list_fb_ = rf.MakeFrameBuffer();
 		linked_list_fb_->GetViewport()->camera = re.CurFrameBuffer()->GetViewport()->camera;
 	}
@@ -532,7 +560,7 @@ void OrderIndependentTransparencyApp::OnCreate()
 	id_layer_combo_ = dialog_layer_->IDFromName("LayerCombo");
 	id_layer_tex_ = dialog_layer_->IDFromName("LayerTexButton");
 
-	if (caps.max_shader_model < ShaderModel(5, 0))
+	if (0 == caps.max_simultaneous_uavs)
 	{
 		dialog_oit_->Control<UIComboBox>(id_oit_mode_)->RemoveItem(3);
 		dialog_oit_->Control<UIComboBox>(id_oit_mode_)->RemoveItem(2);
@@ -628,7 +656,7 @@ void OrderIndependentTransparencyApp::OnResize(uint32_t width, uint32_t height)
 		}
 	}
 
-	if (caps.max_shader_model >= ShaderModel(5, 0))
+	if (caps.max_simultaneous_uavs > 0)
 	{
 		ElementFormat opaque_bg_format;
 		if (rf.RenderEngineInstance().DeviceCaps().rendertarget_format_support(EF_B10G11R11F, 1, 0))
@@ -642,8 +670,12 @@ void OrderIndependentTransparencyApp::OnResize(uint32_t width, uint32_t height)
 		opaque_bg_tex_ = rf.MakeTexture2D(width, height, 1, 1, opaque_bg_format, 1, 0, EAH_GPU_Read | EAH_GPU_Write, nullptr);
 		opaque_bg_fb_->Attach(FrameBuffer::ATT_Color0, rf.Make2DRenderView(*opaque_bg_tex_, 0, 1, 0));
 		opaque_bg_fb_->Attach(FrameBuffer::ATT_DepthStencil, rf.Make2DDepthStencilRenderView(width, height, ds_format, 1, 0));
-		frag_link_buf_->Resize(width * height * 4 * sizeof(float4));
-		start_offset_buf_->Resize(width * height * sizeof(uint32_t));
+		frag_link_buf_ = rf.MakeVertexBuffer(BU_Dynamic,
+			EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_GPU_Structured | EAH_Counter,
+			width * height * 4 * sizeof(float4), nullptr, EF_ABGR32F);
+		start_offset_buf_ = rf.MakeVertexBuffer(BU_Dynamic,
+			EAH_GPU_Read | EAH_GPU_Write | EAH_GPU_Unordered | EAH_Raw,
+			width * height * sizeof(uint32_t), nullptr, EF_R32UI);
 		frag_link_uav_ = rf.MakeGraphicsBufferUnorderedAccessView(*frag_link_buf_, EF_ABGR32F);
 		start_offset_uav_ = rf.MakeGraphicsBufferUnorderedAccessView(*start_offset_buf_, EF_R32UI);
 		linked_list_fb_->AttachUAV(0, frag_link_uav_);
@@ -752,6 +784,10 @@ uint32_t OrderIndependentTransparencyApp::DoUpdate(uint32_t pass)
 			checked_pointer_cast<PolygonObject>(polygon_)->FirstPass(false);
 
 			re.BindFrameBuffer(FrameBufferPtr());
+			if (OM_PerPixelLinkedLists == oit_mode_)
+			{
+				re.CurFrameBuffer()->Attached(FrameBuffer::ATT_DepthStencil)->ClearDepthStencil(1, 0);
+			}
 			checked_pointer_cast<PolygonObject>(polygon_)->RenderQuad();
 			return App3DFramework::URV_Finished;
 		}
